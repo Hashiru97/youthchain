@@ -1,0 +1,68 @@
+YouthChain: Sierra Leone’s AI + Blockchain Employment Passport
+1. Problem Statement
+
+Youth in Sierra Leone face high unemployment and underemployment. Many young people have skills—formal, informal, or self-taught—but lack verifiable proof that employers and government agencies can trust. Traditional CVs are easy to fake, and many skills aren’t captured at all. As a result, youth are excluded from real jobs, training programs, and opportunities.
+
+2. Solution: YouthChain
+
+YouthChain is a digital platform that creates a secure, blockchain-backed “employment passport” for young people.
+
+AI Matching Engine: Uses AI to recommend jobs, freelance gigs, or training opportunities based on skills, interests, and local demand.
+
+Blockchain Credentials: Every completed training, internship, or job is stored on blockchain as a tamper-proof credential, forming a digital work history.
+
+Youth Passport App: Youth have a personal digital wallet (mobile/web) showing verified skills and job matches.
+
+Employer/Agency Portal: Employers, NGOs, and government programs can instantly verify candidates without paperwork delays.
+
+3. Why It’s Different
+
+Not just a job board → It creates a trust layer with blockchain verification.
+
+Not just skills training → It connects youth to real jobs while capturing credentials.
+
+Not just blockchain hype → Combined with AI matching, it directly solves a human problem: getting youth into work.
+
+4. Impact (Aligned with Big Five Agenda)
+
+Youth Employment Scheme (YES!): Gives youth a direct, verifiable path into jobs.
+
+Public Service Transformation: Supports digital ID for employment and training.
+
+Feed Salone & Education: Farmers and students can be issued blockchain credentials for training and participation in programs.
+
+Scalability: Can expand into agriculture, health, and education sectors.
+
+5. Technology Stack (Prototype Plan)
+
+Frontend: Flutter app (mobile + web).
+
+AI: Recommendation engine using GPT/transformer models for job matching.
+
+Blockchain: Hyperledger or Ethereum testnet for credential issuance.
+
+Backend: Flask/Django API + PostgreSQL for data.
+
+Integration: Node-RED for quick dashboards and visualization.
+
+6. Roadmap for Hackathon
+
+Phase 1 – Bootcamp:
+
+Finalize MVP design and datasets (mock job postings + youth profiles).
+
+Build AI job-matching demo.
+
+Phase 2 – Hackathon:
+
+Demo a live Flutter app: register user → AI recommends a job → blockchain issues credential.
+
+Show government/NGO portal verifying credentials.
+
+Pitch the impact with live demo + mock success story.
+
+7. Pitch Script Snapshot
+
+“In Sierra Leone, youth are skilled but invisible. Employers don’t trust CVs, and opportunities slip away. YouthChain gives every young person a digital employment passport—AI finds the right job, blockchain proves their skills. No paper, no fakes, no lost chances. Just verified, trusted, youth employment. With YouthChain, Sierra Leone’s youth will no longer wait for jobs—they will carry proof of their readiness in their pocket.”
+
+This is the one-page concept note + pitch base you can use for the application and presentation.

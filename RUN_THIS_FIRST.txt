@@ -1,0 +1,15 @@
+1. Start blockchain:
+   cd blockchain
+   npx hardhat node
+
+2. Deploy contract:
+   npx hardhat run scripts/deploy.js --network localhost
+
+3. Start backend:
+   cd backend
+   pip install -r requirements.txt
+   python3 app.py
+
+4. Start Flutter app:
+   cd youthchain_app
+   flutter run

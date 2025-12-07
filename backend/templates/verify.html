@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Verify Credentials • YouthChain</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>🔗 Blockchain Credential Verification</h1>
+      <p class="subtitle">
+        Paste a credential hash to check if it exists in the YouthChain registry
+        and view its on-chain status.
+      </p>
+    </header>
+
+    <section class="card verify-card">
+      <form method="POST" class="form">
+        <label for="hash">Credential Hash</label>
+        <input
+          id="hash"
+          type="text"
+          name="hash"
+          placeholder="Paste credential hash (SHA-256)"
+          required
+        />
+        <button type="submit" class="btn secondary">Verify</button>
+      </form>
+
+      {% if result == "ok" and credential %}
+        <div class="result success">
+          <h3>✅ Credential Found</h3>
+          <p><strong>Title:</strong> {{ credential.title }}</p>
+          <p><strong>Issuer:</strong> {{ credential.issuer }}</p>
+          <p><strong>Year:</strong> {{ credential.year }}</p>
+          <p><strong>Hash:</strong>
+            <code class="mono">{{ credential.hash }}</code>
+          </p>
+
+          {% if credential.onchain_tx %}
+            <p class="badge badge-success">
+              ⛓ On-chain: Written to YouthChainRegistry (devnet)
+            </p>
+            <p class="muted">
+              Tx hash:
+              <span class="mono">
+                {{ credential.onchain_tx[:18] }}…{{ credential.onchain_tx[-6:] }}
+              </span>
+            </p>
+          {% else %}
+            <p class="badge badge-warn">
+              ⚠ Not yet confirmed on-chain (DB only)
+            </p>
+          {% endif %}
+        </div>
+      {% elif result == "not_found" %}
+        <div class="result error">
+          <h3>❌ No matching credential found</h3>
+          <p>
+            This hash is not in the YouthChain database. The document may be fake,
+            altered, or issued outside the system.
+          </p>
+        </div>
+      {% endif %}
+    </section>
+
+    <a href="{{ url_for('employer_dashboard') }}" class="link">
+      ⬅ Back to Employer Dashboard
+    </a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>YouthChain Employer Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>👔 Employer Dashboard</h1>
+      <p class="subtitle">
+        Post opportunities, review applications, and verify YouthChain credentials in one place.
+      </p>
+    </header>
+
+    <nav class="actions">
+      <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post New Job</a>
+      <a class="btn secondary" href="{{ url_for('verify') }}">🔍 Verify Credentials</a>
+    </nav>
+
+    <main>
+      <section class="card">
+        <div class="card-header">
+          <h2>📋 Current Job Listings</h2>
+          <p class="card-subtitle">
+            Jobs listed here are visible to youth on the YouthChain app. New applications will
+            appear in real time.
+          </p>
+        </div>
+
+        {% if jobs %}
+          <ul class="job-list">
+            {% for job in jobs %}
+              <li>
+                <article class="job-card">
+                  <header class="job-card-header">
+                    <h3>{{ job.title }}</h3>
+                  </header>
+
+                  <div class="job-card-body">
+                    <p><strong>📍 Location:</strong> {{ job.location }}</p>
+                    <p><strong>⏳ Duration:</strong> {{ job.duration }}</p>
+                    <p><strong>👥 Applicants:</strong> {{ job.applicant_count }}</p>
+
+                    {% if job.required_skills %}
+                      <p>
+                        <strong>🧩 Required Skills:</strong>
+                        <span class="skills-pill">
+                          {{ job.required_skills }}
+                        </span>
+                      </p>
+                    {% endif %}
+                  </div>
+
+                  <footer class="job-actions">
+                    <a
+                      href="{{ url_for('employer_applications', job_id=job.id) }}"
+                      class="btn small"
+                    >
+                      👀 View Applicants
+                    </a>
+                  </footer>
+                </article>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="empty-state">
+            <h3>No job listings yet</h3>
+            <p>
+              Start by posting your first opportunity. YouthChain will help surface
+              verified, skills-matched candidates.
+            </p>
+            <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post Your First Job</a>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="card subtle">
+        <h3>⚡ Live Updates</h3>
+        <p class="muted">
+          This dashboard auto-refreshes whenever a new job is posted or a candidate applies,
+          so you always see the latest data.
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io(location.origin, { transports: ['websocket'] });
+    socket.on('job_created', () => location.reload());
+    socket.on('application_created', () => location.reload());
+    socket.on('application_status_changed', () => location.reload());
+  </script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+/* ---------- Global ---------- */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #f4f9ff, #eef3fb);
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 40px auto;
+    padding: 20px;
+}
+
+/* ---------- Header ---------- */
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2.2rem;
+    background: linear-gradient(90deg, #2d89ef, #6a0dad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: bold;
+}
+
+.subtitle {
+    color: #555;
+    font-size: 1.1rem;
+    margin-top: 8px;
+}
+
+/* ---------- Cards ---------- */
+.card {
+    background: #fff;
+    padding: 25px;
+    border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    margin-bottom: 30px;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.btn.primary {
+    background: linear-gradient(90deg, #2d89ef, #1a73e8);
+    color: white;
+}
+
+.btn.secondary {
+    background: linear-gradient(90deg, #6a0dad, #8a2be2);
+    color: white;
+}
+
+.btn.small {
+    padding: 6px 12px;
+    font-size: 14px;
+}
+
+.btn:hover {
+    opacity: 0.95;
+    transform: scale(1.03);
+}
+
+/* ---------- Actions ---------- */
+.actions {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* ---------- Job Listings ---------- */
+.job-list {
+    list-style: none;
+    padding: 0;
+}
+
+.job-card {
+    padding: 18px;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e0e6f1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    transition: all 0.2s ease;
+}
+.job-card:hover {
+    border-color: #2d89ef;
+    box-shadow: 0 4px 12px rgba(45,137,239,0.15);
+}
+
+.job-card h3 {
+    margin: 0 0 6px;
+    color: #2d89ef;
+    font-size: 1.3rem;
+}
+.job-card p {
+    margin: 4px 0;
+    color: #444;
+}
+.job-card .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    margin-top: 6px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #eef4ff;
+    color: #2d89ef;
+}
+
+/* ---------- Forms ---------- */
+.form label {
+    font-weight: bold;
+    margin-top: 15px;
+    display: block;
+    color: #444;
+}
+
+.form input {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    transition: border-color 0.2s ease;
+}
+.form input:focus {
+    border-color: #2d89ef;
+    outline: none;
+}
+
+/* ---------- Results / Alerts ---------- */
+.result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    font-weight: bold;
+    text-align: center;
+    font-size: 15px;
+}
+
+.result.success {
+    background: #e8fce8;
+    color: #2e8b57;
+    border: 1px solid #2e8b57;
+}
+
+.result.error {
+    background: #ffe8e8;
+    color: #b22222;
+    border: 1px solid #b22222;
+}
+
+/* ---------- Links ---------- */
+.link {
+    display: inline-block;
+    margin-top: 15px;
+    text-decoration: none;
+    color: #2d89ef;
+}
+.link:hover {
+    text-decoration: underline;
+}
+.verify-card {
+    max-width: 500px;
+    margin: 50px auto;
+    padding: 25px;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.verify-card h2 {
+    color: #6a0dad;
+    margin-bottom: 20px;
+}
+.verify-card input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    margin-bottom: 20px;
+    font-family: monospace;
+    text-align: center;
+}
+.verify-btn:hover {
+    background: linear-gradient(90deg, #2d89ef, #6a0dad);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+     opacity: 0.9;
+}
+
+
+/* Applicants Table */
+.applicants-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.applicants-table th, .applicants-table td {
+    padding: 12px 15px;
+    text-align: left;
+}
+.applicants-table th {
+    background: linear-gradient(90deg, #2d89ef, #6a0dad);
+    color: white;
+    font-weight: bold;
+}
+.applicants-table tr:nth-child(even) {
+    background: #f9f9f9;
+}
+.status {
+    font-weight: bold;
+}
+.status.accepted { color: green; }
+.status.rejected { color: red; }
+.status.pending { color: orange; }
+.muted {
+    color: #aaa;
+    font-style: italic;
+}
+.highlight {
+    color: #2d89ef;
+}
+

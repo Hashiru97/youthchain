@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Applicants for {{ job.title }} • YouthChain</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #eef;
+      font-size: 12px;
+      color: #334;
+      display: inline-block;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>👥 Applicants for <span class="highlight">{{ job.title }}</span></h1>
+      <p class="subtitle">
+        Review candidate documents, make a decision, and YouthChain will sync the status.
+      </p>
+    </header>
+
+    <main>
+      {% if apps %}
+        <section class="card">
+          <div class="card-header">
+            <h2>Application List</h2>
+            <p class="card-subtitle">
+              Total applications: <strong>{{ apps|length }}</strong>
+            </p>
+          </div>
+
+          <table class="applicants-table">
+            <thead>
+              <tr>
+                <th>Applicant</th>
+                <th>CV</th>
+                <th>Supporting Doc</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for app in apps %}
+              <tr>
+                <td>
+                  <strong>{{ app.applicant_name }}</strong>
+                  <span class="pill">{{ app.applicant_email }}</span>
+                </td>
+
+                <td>
+                  {% if app.cv_file %}
+                    <a
+                      href="{{ url_for('download_application', filename=app.cv_file) }}"
+                      class="btn small"
+                    >
+                      Download CV
+                    </a>
+                  {% else %}
+                    <span class="muted">None</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if app.supporting_file %}
+                    <a
+                      href="{{ url_for('download_application', filename=app.supporting_file) }}"
+                      class="btn small"
+                    >
+                      Download
+                    </a>
+                  {% else %}
+                    <span class="muted">None</span>
+                  {% endif %}
+                </td>
+
+                <td class="status {{ app.status | lower }}">
+                  {{ app.status }}
+                </td>
+
+                <td>
+                  {% if app.status == "Pending" %}
+                    <form method="POST" style="display:inline-flex; gap:8px;">
+                      <input type="hidden" name="app_id" value="{{ app.id }}" />
+                      <button
+                        type="submit"
+                        name="action"
+                        value="accept"
+                        class="btn accept"
+                      >
+                        ✅ Accept
+                      </button>
+                      <button
+                        type="submit"
+                        name="action"
+                        value="reject"
+                        class="btn reject"
+                      >
+                        ❌ Reject
+                      </button>
+                    </form>
+                  {% else %}
+                    <span class="muted">Decision made</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% else %}
+        <section class="card">
+          <h2>No Applications Yet</h2>
+          <p>
+            Nobody has applied for this role yet. You’ll see new applicants in real time as they apply
+            through the YouthChain app.
+          </p>
+        </section>
+      {% endif %}
+
+      <section class="card subtle">
+        <p class="muted">
+          Tip: For accepted candidates, you can follow up manually via email for now –
+          later we can add automated onboarding workflows.
+        </p>
+      </section>
+
+      <a href="{{ url_for('employer_dashboard') }}" class="btn secondary">
+        ⬅ Back to Dashboard
+      </a>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io(location.origin, { transports: ['websocket'] });
+    socket.on('application_created', () => location.reload());
+    socket.on('application_status_changed', () => location.reload());
+  </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Post a Job • YouthChain</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>➕ Post a Job</h1>
+      <p class="subtitle">
+        Create a new opportunity and let YouthChain find verified, skills-matched youth for you.
+      </p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2 class="card-title">Job Details</h2>
+        <p class="card-subtitle">
+          Provide clear information so candidates can quickly understand if they’re a good fit.
+        </p>
+
+        <form method="POST" class="form">
+          <!-- Job title -->
+          <label for="title">Job Title</label>
+          <input
+            id="title"
+            type="text"
+            name="title"
+            placeholder="e.g., Junior Software Developer"
+            required
+          />
+
+          <!-- Location -->
+          <label for="location">Location</label>
+          <input
+            id="location"
+            type="text"
+            name="location"
+            placeholder="e.g., Freetown / Remote"
+            required
+          />
+
+          <!-- Duration -->
+          <label for="duration">Duration</label>
+          <input
+            id="duration"
+            type="text"
+            name="duration"
+            placeholder="e.g., 3 months internship / Full-time"
+            required
+          />
+
+          <!-- NEW: Required skills -->
+          <label for="required_skills">Required Skills (comma-separated)</label>
+          <input
+            id="required_skills"
+            type="text"
+            name="required_skills"
+            placeholder="e.g., python, flutter, communication"
+          />
+          <small class="helper-text">
+            These skills power YouthChain’s matching engine. Use simple tags like
+            <em>excel, customer support, hardware repair</em>.
+          </small>
+
+          <div class="form-footer">
+            <button type="submit" class="btn primary">🚀 Submit Job</button>
+            <a href="{{ url_for('employer_dashboard') }}" class="btn secondary outline">
+              ⬅ Cancel & Back to Dashboard
+            </a>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <span class="muted">
+        Tip: You can always edit or repost a job later if requirements change.
+      </span>
+    </footer>
+  </div>
+</body>
+</html>
