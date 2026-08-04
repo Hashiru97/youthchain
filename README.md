@@ -17,7 +17,7 @@ Built for the DSTI Big 5 Hackathon — this project demonstrates a real, deploya
 
 ### ✅ Youth Mobile App (Flutter)
 - Registration + OTP login  
-- AI-inspired job matching (skill score %)  
+- Skill-based job matching (overlap score %)  
 - Apply with CV & documents  
 - Live updates when job postings change  
 - Digital **Employment Passport** showing blockchain-verified credentials  

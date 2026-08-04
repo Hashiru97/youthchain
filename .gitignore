@@ -5,15 +5,23 @@ instance/
 
 # Flask uploads
 backend/uploads/
+backend/backups/
 
 # Node / Hardhat
 blockchain/node_modules/
+backend/node_modules/
+blockchain/artifacts/
+blockchain/cache/
 
 # Flutter
-flutter_app/build/
-flutter_app/.dart_tool/
-flutter_app/.idea/
-flutter_app/.fvm/
+# NOTE: these patterns previously said "flutter_app/", which doesn't match
+# this project's actual directory name (youthchain_app/) — a latent bug
+# that meant generated build artifacts were never actually excluded, only
+# accidentally never committed. Fixed to match the real directory.
+youthchain_app/build/
+youthchain_app/.dart_tool/
+youthchain_app/.idea/
+youthchain_app/.fvm/
 
 # System
 .env

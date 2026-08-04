@@ -1,0 +1,60 @@
+name: CI
+
+# Runs lint/tests on every push and PR (BL-13 / Phase 3 #12). Before this
+# existed, nothing verified changes before they reached `main` — which is
+# exactly how the two compile-breaking bugs fixed under BL-01 shipped to
+# the committed codebase undetected in the first place.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (Flask) — lint & tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests/ -v
+
+  blockchain:
+    name: Blockchain (Hardhat) — compile & contract tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: blockchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: blockchain/package-lock.json
+      - run: npm ci
+      - run: npx hardhat compile
+      - run: npx hardhat test
+
+  mobile:
+    name: Mobile (Flutter) — static analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: youthchain_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos
