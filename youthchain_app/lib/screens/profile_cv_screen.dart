@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+
+import '../services/api_client.dart';
 
 class ProfileCvScreen extends StatefulWidget {
   final int userId;
@@ -12,8 +13,6 @@ class ProfileCvScreen extends StatefulWidget {
 }
 
 class _ProfileCvScreenState extends State<ProfileCvScreen> {
-  static const _base = "http://127.0.0.1:5000";
-
   final _formKey = GlobalKey<FormState>();
 
   final _nameCtrl = TextEditingController();
@@ -24,7 +23,40 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
 
   bool _saving = false;
   bool _loadingCv = false;
+  bool _loadingProfile = true;
   String? _cvText;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingProfile();
+  }
+
+  Future<void> _loadExistingProfile() async {
+    try {
+      final res = await ApiClient.instance.get('/api/candidate/me');
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body);
+        final candidate = body is Map ? body['candidate'] : null;
+        if (candidate is Map) {
+          if (candidate['id'] != null) {
+            await ApiClient.instance.saveCandidateId((candidate['id'] as num).toInt());
+          }
+          _nameCtrl.text = (candidate['name'] ?? '').toString();
+          _emailCtrl.text = (candidate['email'] ?? '').toString();
+          _locationCtrl.text = (candidate['location'] ?? '').toString();
+          _skillsCtrl.text = (candidate['skills'] ?? '').toString();
+          _bioCtrl.text = (candidate['bio'] ?? '').toString();
+        }
+      }
+    } catch (_) {
+      // No existing profile yet, or a transient network error — the form
+      // just starts blank either way, same as before this screen existed.
+    } finally {
+      if (mounted) setState(() => _loadingProfile = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -41,21 +73,21 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
 
     setState(() => _saving = true);
     try {
-      final res = await http.post(
-        Uri.parse("$_base/api/candidate"),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
-          "user_id": widget.userId,
-          "name": _nameCtrl.text.trim(),
-          "email": _emailCtrl.text.trim(),
-          "location": _locationCtrl.text.trim(),
-          "skills": _skillsCtrl.text.trim(), // comma-separated
-          "bio": _bioCtrl.text.trim(),
-        }),
-      );
+      final res = await ApiClient.instance.postJson("/api/candidate", {
+        "name": _nameCtrl.text.trim(),
+        "email": _emailCtrl.text.trim(),
+        "location": _locationCtrl.text.trim(),
+        "skills": _skillsCtrl.text.trim(), // comma-separated
+        "bio": _bioCtrl.text.trim(),
+      });
 
       if (!mounted) return;
       if (res.statusCode == 200 || res.statusCode == 201) {
+        final body = json.decode(res.body);
+        if (body is Map && body['candidate_id'] != null) {
+          await ApiClient.instance.saveCandidateId((body['candidate_id'] as num).toInt());
+        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("✅ Profile saved & indexed for matching")),
         );
@@ -84,9 +116,18 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
       _cvText = null;
     });
     try {
-      final res = await http.get(
-        Uri.parse("$_base/api/generate_cv/${widget.userId}"),
-      );
+      final candidateId = await ApiClient.instance.resolveCandidateId();
+      if (candidateId == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Save your profile first so we can build a CV from it."),
+          ),
+        );
+        return;
+      }
+
+      final res = await ApiClient.instance.get('/api/generate_cv/$candidateId');
 
       if (!mounted) return;
 
@@ -123,7 +164,9 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
         backgroundColor: Colors.indigo[700],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _loadingProfile
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
@@ -243,7 +286,7 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        "AI-style CV Preview",
+                        "CV Preview",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

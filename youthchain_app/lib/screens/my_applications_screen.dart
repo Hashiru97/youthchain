@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+
+import '../services/api_client.dart';
 
 class MyApplicationsScreen extends StatefulWidget {
   final int userId;
@@ -16,8 +17,6 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
   List applications = [];
   bool isLoading = true;
 
-  static const _base = 'http://127.0.0.1:5000';
-
   @override
   void initState() {
     super.initState();
@@ -27,8 +26,8 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
   Future<void> fetchApplications() async {
     setState(() => isLoading = true);
     try {
-      final res = await http.get(
-        Uri.parse("$_base/my_applications/${widget.userId}"),
+      final res = await ApiClient.instance.get(
+        "/my_applications/${widget.userId}",
       );
       if (!mounted) return;
 
@@ -75,7 +74,13 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
   }
 
   Future<void> _openFile(String filename) async {
-    final uri = Uri.parse("$_base/application_file/$filename");
+    // Opened via an external app/browser, which can't carry our
+    // Authorization header — the token is passed as a query param instead
+    // (backend explicitly supports this for download routes only).
+    final token = await ApiClient.instance.getToken();
+    final uri = ApiClient.instance
+        .uri("/application_file/$filename")
+        .replace(queryParameters: {if (token != null) "token": token});
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(

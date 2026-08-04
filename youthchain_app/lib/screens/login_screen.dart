@@ -1,14 +1,8 @@
-// ignore_for_file: unused_import
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-// kept imports for future (e.g. Google login)
-import 'job_screen.dart';
-import 'registration_screen.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import '../services/api_client.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,8 +14,6 @@ class LoginScreen extends StatefulWidget {
 class LoginScreenState extends State<LoginScreen> {
   final phoneOrEmailController = TextEditingController();
   final passwordController = TextEditingController();
-
-  static const _base = "http://127.0.0.1:5000";
 
   bool _loading = false;
 
@@ -46,22 +38,27 @@ class LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
 
     try {
-      final res = await http.post(
-        Uri.parse("$_base/login"),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
+      final res = await ApiClient.instance.postJson(
+        "/login",
+        {
           "phone": phoneOrEmailController.text.trim(),
           "email": phoneOrEmailController.text.trim(),
           "password": passwordController.text,
-        }),
+        },
+        auth: false,
       );
 
       final data = _tryJson(res.body);
 
       if (!mounted) return;
 
-      if (res.statusCode == 200 && data?["user"] != null) {
+      if (res.statusCode == 200 && data?["user"] != null && data?["access_token"] != null) {
         final userId = data!["user"]["id"] as int;
+        await ApiClient.instance.saveSession(
+          token: data["access_token"] as String,
+          userId: userId,
+        );
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("✅ Login successful")));

@@ -2,15 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as sio;
 
+import '../services/api_client.dart';
 import 'my_applications_screen.dart';
 import 'passport_screen.dart';
 import 'profile_cv_screen.dart';
-
 
 class JobScreen extends StatefulWidget {
   final int userId;
@@ -23,15 +22,15 @@ class JobScreen extends StatefulWidget {
 }
 
 class JobScreenState extends State<JobScreen> {
-  static const _base = "http://127.0.0.1:5000";
-  static const _timeout = Duration(seconds: 30);
+  static const _base = ApiClient.baseUrl;
+  static const _timeout = ApiClient.timeout;
 
   List jobs = [];
   Set<int> appliedJobIds = {};
   bool isLoading = true;
   bool isUploading = false;
 
-  IO.Socket? _socket;
+  sio.Socket? _socket;
 
   @override
   void initState() {
@@ -66,9 +65,9 @@ class JobScreenState extends State<JobScreen> {
   // ---------------- Socket.IO (Realtime) ----------------
   void _connectSocket() {
     // IMPORTANT: Flask-SocketIO default path is "/socket.io" (no trailing slash)
-    _socket = IO.io(
+    _socket = sio.io(
       _base,
-      IO.OptionBuilder()
+      sio.OptionBuilder()
           .setPath('/socket.io')
           .setTransports(['websocket', 'polling'])
           .enableReconnection()
@@ -120,9 +119,14 @@ class JobScreenState extends State<JobScreen> {
 
   Future<void> fetchJobs() async {
     try {
-      final res = await http
-          .get(Uri.parse("$_base/api/match_jobs/${widget.userId}"))
-          .timeout(_timeout);
+      // Candidate.id is a separate primary key from User.id — resolve it
+      // rather than assuming they coincide (they only did by accident for
+      // the very first user, which is what the original code assumed).
+      final candidateId = await ApiClient.instance.resolveCandidateId();
+      final path = candidateId != null
+          ? "/api/match_jobs/$candidateId"
+          : "/jobs"; // no profile yet: fall back to the plain, unranked list
+      final res = await ApiClient.instance.get(path).timeout(_timeout);
 
       if (!mounted) return;
 
@@ -153,8 +157,8 @@ class JobScreenState extends State<JobScreen> {
 
   Future<void> fetchAppliedJobs() async {
     try {
-      final res = await http
-          .get(Uri.parse("$_base/my_applications/${widget.userId}"))
+      final res = await ApiClient.instance
+          .get("/my_applications/${widget.userId}")
           .timeout(_timeout);
       if (!mounted) return;
 
@@ -219,9 +223,9 @@ class JobScreenState extends State<JobScreen> {
               setState(() => isUploading = true);
 
               try {
-                final uri = Uri.parse("$_base/apply");
-                final req = http.MultipartRequest("POST", uri);
-                req.fields["user_id"] = widget.userId.toString();
+                // user_id is derived server-side from the auth token, not
+                // sent from the client (see backend /apply).
+                final req = await ApiClient.instance.multipartRequest("/apply");
                 req.fields["job_id"] = jobId.toString();
 
                 if (cvFile!.path.isNotEmpty) {
@@ -266,6 +270,7 @@ class JobScreenState extends State<JobScreen> {
 
                 if (resp.statusCode == 201) {
                   await fetchAppliedJobs();
+                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("✅ Application submitted")),
                   );
@@ -379,7 +384,8 @@ class JobScreenState extends State<JobScreen> {
     );
   }
 
-  void _logout() {
+  Future<void> _logout() async {
+    await ApiClient.instance.clearSession();
     widget.onLoggedOut?.call();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
@@ -433,7 +439,7 @@ class JobScreenState extends State<JobScreen> {
             onPressed: _logout,
           ),
         ],
-
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : jobs.isEmpty

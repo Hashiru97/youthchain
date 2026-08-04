@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+
+import '../services/api_client.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -11,8 +12,6 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class RegistrationScreenState extends State<RegistrationScreen> {
-  static const _base = "http://127.0.0.1:5000";
-
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
   final emailController = TextEditingController();
@@ -51,16 +50,23 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    if (passwordController.text.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⚠️ Password must be at least 8 characters")),
+      );
+      return;
+    }
+
     final email = emailController.text.trim();
 
     setState(() => _loading = true);
 
     try {
       // 1) Ask backend to generate + send OTP
-      final sendRes = await http.post(
-        Uri.parse("$_base/auth/otp/register/request"),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({"email": email}),
+      final sendRes = await ApiClient.instance.postJson(
+        "/auth/otp/register/request",
+        {"email": email},
+        auth: false,
       );
 
       if (sendRes.statusCode != 200) {
@@ -87,24 +93,29 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       }
 
       // 3) Call /register with otp_code
-      final res = await http.post(
-        Uri.parse("$_base/register"),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({
+      final res = await ApiClient.instance.postJson(
+        "/register",
+        {
           "name": nameController.text.trim(),
           "phone": phoneController.text.trim(),
           "email": email,
           "password": passwordController.text,
           "otp_code": otp,
-        }),
+        },
+        auth: false,
       );
 
       final data = _tryJson(res.body);
 
       if (!mounted) return;
 
-      if (res.statusCode == 201 && data?["user"] != null) {
+      if (res.statusCode == 201 && data?["user"] != null && data?["access_token"] != null) {
         final userId = data!["user"]["id"] as int;
+        await ApiClient.instance.saveSession(
+          token: data["access_token"] as String,
+          userId: userId,
+        );
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("✅ Registration successful")),
         );

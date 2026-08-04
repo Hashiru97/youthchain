@@ -2,9 +2,50 @@ import 'package:flutter/material.dart';
 import 'screens/registration_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/job_screen.dart';
+import 'services/api_client.dart';
 
 void main() {
   runApp(const YouthChainApp());
+}
+
+/// Resolves whether a valid session already exists (from a previous login)
+/// before deciding where the app should open. Previously the app always
+/// booted to RegistrationScreen and forced a fresh login every cold start —
+/// this is what actually makes ApiClient's persisted token useful.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: ApiClient.instance.hasSession(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.data == true) {
+          return FutureBuilder<int?>(
+            future: ApiClient.instance.getUserId(),
+            builder: (context, userIdSnapshot) {
+              final userId = userIdSnapshot.data;
+              if (userIdSnapshot.connectionState != ConnectionState.done) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (userId != null) {
+                return JobScreen(userId: userId);
+              }
+              return const RegistrationScreen();
+            },
+          );
+        }
+        return const RegistrationScreen();
+      },
+    );
+  }
 }
 
 class YouthChainApp extends StatelessWidget {
@@ -25,8 +66,8 @@ class YouthChainApp extends StatelessWidget {
         ),
       ),
 
-      // Start on registration
-      home: const RegistrationScreen(),
+      // Resolves an existing session before deciding registration vs. home.
+      home: const AuthGate(),
 
       // Simple named routes
       routes: {
