@@ -22,6 +22,7 @@
         </p>
 
         <form method="POST" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <!-- Job title -->
           <label for="title">Job Title</label>
           <input

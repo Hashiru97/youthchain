@@ -38,19 +38,29 @@
             <code class="mono">{{ credential.hash }}</code>
           </p>
 
-          {% if credential.onchain_tx %}
-            <p class="badge badge-success">
-              ⛓ On-chain: Written to YouthChainRegistry (devnet)
+          {% if onchain_status is not none %}
+            {% if onchain_status %}
+              <p class="badge badge-success">
+                ⛓ Live check: hash IS registered on YouthChainRegistry (checked just now, not just a database flag)
+              </p>
+            {% else %}
+              <p class="badge badge-error">
+                ⚠ Live check: this hash is NOT registered on-chain. The database has a record of it, but the
+                chain disagrees — treat this credential as unverified until that's resolved.
+              </p>
+            {% endif %}
+          {% else %}
+            <p class="badge badge-warn">
+              ⏳ Could not reach the blockchain to check live just now — showing database record only.
             </p>
+          {% endif %}
+
+          {% if credential.onchain_tx %}
             <p class="muted">
-              Tx hash:
+              Registration tx:
               <span class="mono">
                 {{ credential.onchain_tx[:18] }}…{{ credential.onchain_tx[-6:] }}
               </span>
-            </p>
-          {% else %}
-            <p class="badge badge-warn">
-              ⚠ Not yet confirmed on-chain (DB only)
             </p>
           {% endif %}
         </div>

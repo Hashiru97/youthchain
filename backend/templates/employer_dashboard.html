@@ -11,12 +11,17 @@
       <h1>👔 Employer Dashboard</h1>
       <p class="subtitle">
         Post opportunities, review applications, and verify YouthChain credentials in one place.
+        {% if employer %}Signed in as <strong>{{ employer.name }}</strong> ({{ employer.email }}).{% endif %}
       </p>
     </header>
 
     <nav class="actions">
       <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post New Job</a>
       <a class="btn secondary" href="{{ url_for('verify') }}">🔍 Verify Credentials</a>
+      <form method="POST" action="{{ url_for('employer_logout') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <button type="submit" class="btn secondary outline">🚪 Log Out</button>
+      </form>
     </nav>
 
     <main>

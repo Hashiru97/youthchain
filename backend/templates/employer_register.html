@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Create Employer Account • YouthChain</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>👔 Create Employer Account</h1>
+      <p class="subtitle">Register your organization to post jobs and review applicants on YouthChain.</p>
+    </header>
+
+    <main>
+      <section class="card">
+        {% if error %}
+          <div class="result error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+          <label for="name">Organization / Contact Name</label>
+          <input id="name" type="text" name="name" required />
+
+          <label for="email">Email</label>
+          <input id="email" type="email" name="email" required />
+
+          <label for="password">Password (min. 8 characters)</label>
+          <input id="password" type="password" name="password" minlength="8" required />
+
+          <div class="form-footer">
+            <button type="submit" class="btn primary">Create Account</button>
+            <a href="{{ url_for('employer_login') }}" class="btn secondary outline">
+              Already have an account? Log in
+            </a>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

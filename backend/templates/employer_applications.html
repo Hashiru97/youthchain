@@ -86,6 +86,7 @@
                 <td>
                   {% if app.status == "Pending" %}
                     <form method="POST" style="display:inline-flex; gap:8px;">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                       <input type="hidden" name="app_id" value="{{ app.id }}" />
                       <button
                         type="submit"

@@ -125,6 +125,26 @@ header h1 {
     background: #eef4ff;
     color: #2d89ef;
 }
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    margin-top: 6px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.badge-success {
+    background: #e6f7ec;
+    color: #1e7e34;
+}
+.badge-warn {
+    background: #fff8e1;
+    color: #8a6d00;
+}
+.badge-error {
+    background: #fdecea;
+    color: #b3261e;
+}
 
 /* ---------- Forms ---------- */
 .form label {
