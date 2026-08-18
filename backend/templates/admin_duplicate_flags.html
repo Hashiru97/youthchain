@@ -1,0 +1,43 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Possible Duplicate Accounts{% endblock %}
+{% block page_title %}Duplicate Accounts{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Fuzzy name/phone matches flagged at registration. Nothing here is ever blocked or merged automatically — every row needs a human decision.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Unresolved ({{ pairs|length }})</h2>
+    </div>
+    {% if pairs %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>New account</th><th>Possible match</th><th>Why flagged</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for flag, user, matched_user in pairs %}
+        <tr>
+          <td data-label="New account">{{ user.name }}<br /><span class="muted">{{ user.phone }} · {{ user.email }}</span></td>
+          <td data-label="Possible match">{{ matched_user.name }}<br /><span class="muted">{{ matched_user.phone }} · {{ matched_user.email }}</span></td>
+          <td data-label="Why flagged">{{ flag.reason }}</td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_resolve_duplicate_flag', flag_id=flag.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="btn small">Dismiss</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No unresolved duplicate flags.</p>
+    </div>
+    {% endif %}
+  </section>
+{% endblock %}

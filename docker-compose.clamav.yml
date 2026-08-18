@@ -1,0 +1,52 @@
+# Self-hosted ClamAV for real malware scanning on uploads (see
+# file_is_malware_free() in backend/app.py). Additive, same pattern as
+# docker-compose.vault.yml/docker-compose.observability.yml — only adds
+# the `clamav` service; run alongside the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.clamav.yml up -d
+#
+# Real gap this closes: uploaded CVs, certificates, and employer
+# verification documents were previously only checked that their content
+# matched the claimed extension (magic-byte sniffing) — never actually
+# scanned for malicious content, even though every one of those files is
+# routinely downloaded by a DIFFERENT user (an employer reviewing an
+# applicant's CV, an admin reviewing a verification document).
+#
+# The official clamav/clamav image ships with a pre-built virus database
+# baked in — no lengthy freshclam download on first boot, unlike some
+# other ClamAV images/setups. It does still refresh definitions
+# periodically once running (real, live threat data, not a frozen
+# snapshot from whenever the image was built).
+#
+# After bringing this up, point the backend at it (in backend/.env):
+#   CLAMD_HOST=clamav        (from inside the compose network)
+#   CLAMD_PORT=3310          (the default — only needed if you changed it)
+#
+# IMPORTANT — the honest boundary, same as this repo's other optional
+# integrations: file_is_malware_free() fails OPEN (uploads proceed
+# unscanned) if CLAMD_HOST is never set at all, exactly like every other
+# optional integration here (SMTP, Firebase, Twilio, Vault, Redis) — so a
+# from-scratch clone still works with zero setup. It fails CLOSED
+# (uploads are rejected) if CLAMD_HOST IS set but ClamAV can't actually be
+# reached at request time — deliberately the opposite default, since an
+# operator who explicitly turned scanning on almost certainly wants
+# uploads rejected when scanning can't be confirmed, not silently allowed
+# through unscanned.
+
+services:
+  clamav:
+    image: clamav/clamav:stable
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | timeout 3 nc -w 2 localhost 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  clamav-data:

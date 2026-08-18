@@ -1,0 +1,66 @@
+# Scheduled backups to a REAL external S3-compatible bucket (Backblaze B2,
+# Wasabi, AWS S3, or a properly-operated multi-node MinIO cluster you run
+# elsewhere) — the production counterpart to docker-compose.backup.yml,
+# whose own header is explicit that its bundled MinIO (fixed root
+# credentials, checked into that file) is dev/local-only.
+#
+# Real gap found and fixed alongside writing docs/deployment-runbook.md:
+# docker-compose.backup.yml's `backup-cron` service hardcodes
+# BACKUP_S3_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY in its own `environment:`
+# block, pointing at the bundled MinIO. Docker Compose's documented
+# precedence is `environment:` over `env_file:` for the same key, so
+# simply setting real values in backend/.env while still using
+# docker-compose.backup.yml would NOT have worked — the hardcoded MinIO
+# values would silently win. This file defines `backup-cron` fresh, with
+# no hardcoded S3 values at all, so whatever's actually in backend/.env
+# (BACKUP_S3_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY — see
+# backend/.env.example) is what backup.py actually uses.
+#
+# Usage (does not bundle minio/minio-init — there's nothing self-hosted
+# here to bring up):
+#   docker compose -f docker-compose.tls.yml -f docker-compose.backup-external.yml up -d
+#
+# See docs/deployment-runbook.md section 4.5b for the real-bucket setup
+# steps this pairs with.
+
+services:
+  backup-cron:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[backup-cron] Running scheduled backup at $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if python scripts/backup.py; then
+            sleep "${BACKUP_INTERVAL_SECONDS:-86400}"
+          else
+            # Same self-healing retry reasoning as docker-compose.backup.yml's
+            # identical block: a transient failure gets retried in minutes,
+            # not up to a full day later.
+            echo "[backup-cron] Backup failed, retrying in ${BACKUP_RETRY_SECONDS:-300}s instead of waiting the full interval"
+            sleep "${BACKUP_RETRY_SECONDS:-300}"
+          fi
+        done
+    env_file:
+      - ./backend/.env
+    environment:
+      # Must match the backend service's own DATABASE_URL override exactly
+      # — same reasoning as docker-compose.backup.yml's identical
+      # override: without this, backup-cron falls back to backend/.env's
+      # blank-by-default DATABASE_URL and silently backs up nothing real.
+      # BACKUP_S3_* deliberately NOT overridden here — see this file's own
+      # header. They come from backend/.env, real values only.
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+volumes:
+  # Same volume names as docker-compose.yml/docker-compose.tls.yml,
+  # deliberately not marked external — see docker-compose.backup.yml's
+  # identical comment for why.
+  uploads-data:
+  backups-data:

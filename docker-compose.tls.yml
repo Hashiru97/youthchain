@@ -1,0 +1,88 @@
+# TLS-terminated stack — a real, runnable starting point for the one
+# thing the engineering review repeatedly flags as outside this codebase's
+# power to provide on its own: a TLS certificate. This does NOT run
+# alongside docker-compose.yml — it's a self-contained alternative, not an
+# override file, so there's no ambiguity about merge order.
+#
+# Usage (on a real server with a domain already pointed at it via DNS):
+#   1. Edit Caddyfile below: replace "your-domain.example" with your real
+#      domain.
+#   2. Set FLASK_ENV=production in backend/.env (this is what makes app.py
+#      trust the proxy's headers via ProxyFix and enable Secure cookies —
+#      see the "Deployment topology" comment in app.py).
+#   3. docker compose -f docker-compose.tls.yml up -d
+#
+# Caddy requests and renews a Let's Encrypt certificate automatically —
+# there is no manual certbot step, no cron job to remember, and no
+# separately-managed cert files. This is a legitimate, widely-used
+# production pattern, not a toy: Caddy's automatic HTTPS is the same
+# machinery behind its own production deployments.
+#
+# What this does NOT do, stated explicitly: choose a domain for you,
+# provision DNS, or run on a machine without a public IP/domain pointed at
+# it (Let's Encrypt's HTTP-01 challenge needs to reach this host on port
+# 80). Those are real infrastructure decisions this file cannot make.
+#
+# Bundles the same Postgres service as docker-compose.yml, for the same
+# reason (docs/load-testing.md's measured 6.38% SQLite write-failure rate
+# under concurrent load) — this is the public-facing production stack, so
+# it matters here even more than in local/staging. To point at an external
+# managed Postgres instead, override DATABASE_URL on `backend` below.
+
+services:
+  postgres:
+    # Custom pg_cron-enabled image — see infra/postgres-cron/Dockerfile
+    # and docker-compose.yml's postgres service for why this can no
+    # longer be stock postgres:16-alpine.
+    build: ./infra/postgres-cron
+    command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
+    environment:
+      - POSTGRES_PASSWORD=youthchain
+      - POSTGRES_DB=youthchain
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    expose:
+      - "5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - ENABLE_JOB_SCANNER_POLLER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  uploads-data:
+  backups-data:
+  caddy-data:
+  caddy-config:

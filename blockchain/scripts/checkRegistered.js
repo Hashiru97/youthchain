@@ -1,7 +1,7 @@
-import hre from "hardhat";
+import { network } from "hardhat";
 import { resolveContractAddress, normalizeHash } from "./_shared.js";
 
-const { ethers } = hre;
+const { ethers } = await network.create();
 
 /**
  * Read-only counterpart to registerCredential.js: calls the contract's own

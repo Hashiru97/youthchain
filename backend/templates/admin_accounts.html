@@ -1,0 +1,64 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_search %}
+
+{% block title %}Admin Accounts{% endblock %}
+{% block page_title %}Manage Admins{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Deactivating an account revokes access immediately, even for an already-logged-in session.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    {% if admins|length > 8 %}
+    <div class="shell-table-search">
+      {{ icon_search() }}
+      <input type="search" data-table-filter="#admin-accounts-table" placeholder="Search by name or email…" aria-label="Search admin accounts" />
+    </div>
+    {% endif %}
+    <div class="table-scroll">
+    <table class="applicants-table" id="admin-accounts-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for admin in admins %}
+        <tr>
+          <td data-label="Name">
+            {{ admin.name }}
+            {% if admin.id == current_admin_id %}<span class="pill">you</span>{% endif %}
+          </td>
+          <td data-label="Email">{{ admin.email }}</td>
+          <td data-label="Role"><span class="admin-role-pill role-{{ admin.role }}">{{ admin.role }}</span></td>
+          <td class="status {{ 'accepted' if admin.active else 'rejected' }}">
+            {{ "Active" if admin.active else "Deactivated" }}
+          </td>
+          <td data-label="Action">
+            {% if admin.active and admin.id != current_admin_id %}
+              <form method="POST" action="{{ url_for('admin_deactivate_account', admin_id=admin.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" class="btn reject"
+                  data-confirm="Deactivate {{ admin.name }}'s admin account? They'll be logged out immediately and won't be able to sign back in.">Deactivate</button>
+              </form>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="card subtle">
+    <p class="muted">
+      New admin/verifier accounts are created via
+      <code class="mono">python scripts/create_admin.py --email you@org.org --name "Jane Doe" --role verifier</code>
+      — operator-run, never self-registered (see .env.example).
+    </p>
+  </section>
+{% endblock %}

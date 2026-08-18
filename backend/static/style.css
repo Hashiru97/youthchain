@@ -1,271 +1,881 @@
-/* ---------- Global ---------- */
+/* YouthChain web design system — mirrors the mobile app's palette
+   (green = jobs/primary, purple = credentials/employer, blue = applications/
+   messages) so the employer/admin web surfaces feel like the same product,
+   not a bolted-on afterthought. */
+
+:root {
+  --primary: #0f7a5c;
+  --primary-dark: #0b5d46;
+  --primary-light: #e3f5ee;
+  --secondary: #6d28d9;
+  --secondary-dark: #5320a8;
+  --secondary-light: #f1ebfc;
+  --tertiary: #1d63c9;
+  --tertiary-dark: #15499a;
+  --tertiary-light: #e9f1fc;
+
+  --surface: #ffffff;
+  --bg: #f6f8f9;
+  --outline: #e3e8e8;
+  --text-primary: #15211e;
+  --text-secondary: #5b6b67;
+  /* WCAG AA fix: #8b9895 measured ~2.99:1 against white (fails the 4.5:1
+     minimum for normal text, criterion 1.4.3). #657270 measures ~5.0:1 —
+     still visually "muted" relative to --text-secondary's 5.6:1, but
+     actually readable rather than merely decorative. */
+  --text-muted: #657270;
+
+  --success: #1e8e5a;
+  --success-bg: #e6f6ee;
+  /* WCAG AA fix: #b4740e on --warning-bg measured ~3.6:1 (fails 4.5:1) —
+     the .status.pending / badge-warn text this backs is normal-weight
+     12.5px, not "large text," so it needs the full ratio, not the 3:1
+     large-text exception. #8a5800 measures ~5.5:1 against --warning-bg. */
+  --warning: #8a5800;
+  --warning-bg: #fcf3e3;
+  --error: #c22a2a;
+  --error-bg: #fbeaea;
+
+  /* The "real fix" the dark-theme comment below flags as out of scope —
+     now in scope, since a user actually hit it. --secondary/--tertiary/
+     --warning/--error each do double duty as both a solid FILL (paired
+     with white text) and text-ON-a-pale-TINT (.btn.accept/.reject/.small,
+     .btn.outline:hover). In light mode one value satisfies both roles.
+     In dark mode it can't: the fill role needs the token to stay dark
+     enough for white text to pop, but the tint role's background is a
+     near-black tint of that same hue, so the same token reads as
+     low-contrast text-on-near-black. These four exist so the tint role
+     gets its own, measurably-AA text color in dark mode without
+     disturbing the fill role's already-working value. In light mode
+     each is a pure alias (zero visual change); --success needs no
+     override — #1e8e5a already clears 4.5:1 against dark-mode
+     --success-bg (~4.6:1, computed), the only one of the five that did. */
+  --secondary-on-tint: var(--secondary);
+  --tertiary-on-tint: var(--tertiary);
+  --warning-on-tint: var(--warning);
+  --error-on-tint: var(--error);
+  --success-on-tint: var(--success);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --shadow-sm: 0 2px 8px rgba(15, 33, 30, 0.06);
+  --shadow-md: 0 8px 24px rgba(15, 33, 30, 0.08);
+}
+
+/* ---------- Dark theme ----------
+   Every color anywhere in this file (and portal.css/employer.css/
+   admin.css/shell_common.css, which are layered on top of it) already
+   goes through one of these custom properties -- checked directly rather
+   than assumed: only 5 hardcoded hex values exist in any of those four
+   files, and all 5 are the admin sidebar's own intentionally-always-dark
+   palette (see admin.css), not a leak. That means dark mode is a token
+   swap, not a rewrite.
+
+   Two selectors carry the same values on purpose: the @media block
+   covers a user who has never touched the toggle (their OS preference
+   wins), and the [data-theme="dark"] block covers an explicit toggle
+   choice, which must win even when the OS prefers light. The
+   :not([data-theme="light"]) guard on the media query stops an explicit
+   "light" choice from being overridden by a dark OS preference.
+
+   --primary/--secondary/--tertiary/--success/--warning/--error each do
+   double duty in the existing rules that consume them: sometimes as
+   TEXT sitting on that color's own dark -light tint (e.g. .btn.small),
+   sometimes as a solid FILL with white text on top (e.g.
+   .portal-search-form button, .portal-brand-mark -- both persistent,
+   default-state UI, not just a hover embellishment). Those two roles
+   want opposite lightness: legible-as-text-on-near-black wants light,
+   legible-under-white wants dark. Computed real WCAG contrast ratios
+   (not eyeballed) for the values below against both a representative
+   -light tint AND white: no single hue/lightness clears 4.5:1 on both
+   at once against backgrounds this far apart -- the best achievable
+   balance for e.g. this file's green lands both roles around ~3.3-3.8:1.
+   Chose values on the fill-safe side of that balance (still >=4.5:1 in
+   several cases, like #dc2626 red against white at 4.83:1) since an
+   illegible white button label is a glaring, obviously-broken bug in a
+   way that a slightly-under-AA text-on-tint pairing is not -- a
+   documented, evidence-based trade-off, not an oversight.
+
+   UPDATE: the under-AA text-on-tint pairing stopped being theoretical --
+   a user reported .btn.accept/.reject/.small as unreadable in dark mode
+   (measured 3.1-3.5:1, both below the 4.5:1 minimum). Fixed via the
+   --*-on-tint tokens above (defined in :root, overridden below) rather
+   than changing --secondary/--tertiary/--warning/--error themselves,
+   which stay exactly as before for the fill role that already worked. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primary: #16a34a;
+    --primary-dark: #15803d;
+    --primary-light: #14291f;
+
+    --secondary: #7c3aed;
+    --secondary-dark: #6d28d9;
+    --secondary-light: #241c3d;
+
+    --tertiary: #2563eb;
+    --tertiary-dark: #1d4ed8;
+    --tertiary-light: #14203a;
+
+    --surface: #182420;
+    --bg: #0d1512;
+    --outline: #2a3733;
+    --text-primary: #eef3f1;
+    --text-secondary: #a8bab5;
+    --text-muted: #8a9d97;
+
+    --success: #16a34a;
+    --success-bg: #142a1c;
+    --warning: #b45309;
+    --warning-bg: #2e2008;
+    --error: #dc2626;
+    --error-bg: #341212;
+
+    /* Measured against this block's own -bg/surface values: each clears
+       4.5:1 (secondary 5.9:1, tertiary 6.4:1, warning 7.3:1, error 6.1:1). */
+    --secondary-on-tint: #a78bfa;
+    --tertiary-on-tint: #60a5fa;
+    --warning-on-tint: #ef9f27;
+    --error-on-tint: #f87171;
+
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --primary: #16a34a;
+  --primary-dark: #15803d;
+  --primary-light: #14291f;
+
+  --secondary: #7c3aed;
+  --secondary-dark: #6d28d9;
+  --secondary-light: #241c3d;
+
+  --tertiary: #2563eb;
+  --tertiary-dark: #1d4ed8;
+  --tertiary-light: #14203a;
+
+  --surface: #182420;
+  --bg: #0d1512;
+  --outline: #2a3733;
+  --text-primary: #eef3f1;
+  --text-secondary: #a8bab5;
+  --text-muted: #8a9d97;
+
+  --success: #16a34a;
+  --success-bg: #142a1c;
+  --warning: #b45309;
+  --warning-bg: #2e2008;
+  --error: #dc2626;
+  --error-bg: #341212;
+
+  --secondary-on-tint: #a78bfa;
+  --tertiary-on-tint: #60a5fa;
+  --warning-on-tint: #ef9f27;
+  --error-on-tint: #f87171;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: linear-gradient(135deg, #f4f9ff, #eef3fb);
-    color: #333;
-    line-height: 1.6;
+  background: var(--bg);
+  color: var(--text-primary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* ---------- Global ---------- */
+* {
+  box-sizing: border-box;
+}
+
+/* Real bug found via user testing on a real Android phone, invisible to
+   desktop devtools, curl, or any static check: Chrome for Android has a
+   "font boosting" / text-autosizer algorithm that inflates rendered
+   font size inside narrow flex/text containers beyond what the CSS
+   actually specified, WITHOUT recalculating the line-box height the
+   layout was computed for -- so the enlarged glyph's ascenders spill
+   above the line-box that sized the row around the original, smaller
+   font size. That's what was slicing the top off the first line of the
+   employer verification banner's text (and would affect any similarly
+   narrow multi-line paragraph, not just that one banner): the text
+   itself was rendering larger than its own container had planned for.
+   This disables that autosizing algorithm site-wide, since this
+   codebase already sets its own deliberate type scale (see _textTheme-
+   equivalent font-size rules throughout this file) and doesn't want the
+   browser silently overriding it.
+   https://developer.mozilla.org/en-US/docs/Web/CSS/text-size-adjust */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.55;
 }
 
 .container {
-    max-width: 1000px;
-    margin: 40px auto;
-    padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
 }
 
 /* ---------- Header ---------- */
-header {
-    text-align: center;
-    margin-bottom: 30px;
+.page-header {
+  text-align: center;
+  margin-bottom: 36px;
 }
 
-header h1 {
-    margin: 0;
-    font-size: 2.2rem;
-    background: linear-gradient(90deg, #2d89ef, #6a0dad);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: bold;
+.page-header h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+
+.page-header h1 .highlight {
+  color: var(--primary);
 }
 
 .subtitle {
-    color: #555;
-    font-size: 1.1rem;
-    margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-top: 10px;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.highlight {
+  color: var(--primary);
 }
 
 /* ---------- Cards ---------- */
 .card {
-    background: #fff;
-    padding: 25px;
-    border-radius: 14px;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-    margin-bottom: 30px;
-    transition: transform 0.2s ease, box-shadow 0.3s ease;
+  background: var(--surface);
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--outline);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
 }
-.card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+
+.card.subtle {
+  background: var(--bg);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+/* ---------- Responsive ----------
+   Real gap found via user feedback: this file had zero @media queries at
+   all, despite backing every standalone page (employer/admin auth pages,
+   verify.html, privacy_policy.html) that doesn't have its own dedicated
+   shell stylesheet. .container/.card/.page-header were tuned for desktop
+   only; on a narrow phone the fixed 28px card padding and 2rem heading
+   eat a disproportionate share of the viewport. */
+@media (max-width: 480px) {
+  .container {
+    padding: 24px 16px 56px;
+  }
+  .page-header {
+    margin-bottom: 24px;
+  }
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+  .card {
+    padding: 20px;
+  }
+}
+
+.card-header {
+  margin-bottom: 20px;
+}
+
+.card-header h2,
+.card-title {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.card-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
 }
 
 /* ---------- Buttons ---------- */
 .btn {
-    display: inline-block;
-    padding: 10px 18px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: bold;
-    transition: all 0.3s ease;
-    cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
 
 .btn.primary {
-    background: linear-gradient(90deg, #2d89ef, #1a73e8);
-    color: white;
+  background: var(--primary);
+  color: white;
+}
+.btn.primary:hover {
+  background: var(--primary-dark);
 }
 
 .btn.secondary {
-    background: linear-gradient(90deg, #6a0dad, #8a2be2);
-    color: white;
+  background: var(--secondary);
+  color: white;
+}
+.btn.secondary:hover {
+  background: var(--secondary-dark);
+}
+
+.btn.secondary.outline,
+.btn.primary.outline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--outline);
+}
+.btn.secondary.outline:hover,
+.btn.primary.outline:hover {
+  border-color: var(--secondary);
+  color: var(--secondary-on-tint);
+}
+
+.btn.accept {
+  background: var(--success-bg);
+  color: var(--success-on-tint);
+}
+.btn.accept:hover {
+  background: var(--success);
+  color: white;
+}
+
+.btn.reject {
+  background: var(--error-bg);
+  color: var(--error-on-tint);
+}
+.btn.reject:hover {
+  background: var(--error);
+  color: white;
 }
 
 .btn.small {
-    padding: 6px 12px;
-    font-size: 14px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 999px;
+  background: var(--tertiary-light);
+  color: var(--tertiary-on-tint);
+}
+.btn.small:hover {
+  background: var(--tertiary);
+  color: white;
 }
 
 .btn:hover {
-    opacity: 0.95;
-    transform: scale(1.03);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
 }
 
 /* ---------- Actions ---------- */
 .actions {
-    text-align: center;
-    margin-bottom: 30px;
+  text-align: center;
+  margin-bottom: 30px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 /* ---------- Job Listings ---------- */
 .job-list {
-    list-style: none;
-    padding: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
 }
 
 .job-card {
-    padding: 18px;
-    margin-bottom: 15px;
-    border-radius: 12px;
-    background: #fff;
-    border: 1px solid #e0e6f1;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-    transition: all 0.2s ease;
+  padding: 20px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .job-card:hover {
-    border-color: #2d89ef;
-    box-shadow: 0 4px 12px rgba(45,137,239,0.15);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
+.job-card-header h3,
 .job-card h3 {
-    margin: 0 0 6px;
-    color: #2d89ef;
-    font-size: 1.3rem;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 .job-card p {
-    margin: 4px 0;
-    color: #444;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.job-actions {
+  margin-top: 14px;
+}
+
+.skills-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.badge {
+  display: inline-block;
+  padding: 5px 12px;
+  margin-top: 6px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
 }
 .job-card .badge {
-    display: inline-block;
-    padding: 4px 10px;
-    margin-top: 6px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
-    background: #eef4ff;
-    color: #2d89ef;
-}
-.badge {
-    display: inline-block;
-    padding: 4px 10px;
-    margin-top: 6px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
+  background: var(--tertiary-light);
+  color: var(--tertiary);
 }
 .badge-success {
-    background: #e6f7ec;
-    color: #1e7e34;
+  background: var(--success-bg);
+  color: var(--success);
 }
 .badge-warn {
-    background: #fff8e1;
-    color: #8a6d00;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 .badge-error {
-    background: #fdecea;
-    color: #b3261e;
+  background: var(--error-bg);
+  color: var(--error);
+}
+.badge-gig {
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+}
+
+/* ---------- Empty state ---------- */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+.empty-state h3 {
+  color: var(--text-primary);
+  margin-bottom: 8px;
 }
 
 /* ---------- Forms ---------- */
 .form label {
-    font-weight: bold;
-    margin-top: 15px;
-    display: block;
-    color: #444;
+  font-weight: 700;
+  margin-top: 16px;
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.88rem;
 }
 
-.form input {
-    width: 100%;
-    padding: 10px;
-    margin-top: 6px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    transition: border-color 0.2s ease;
+/* Wraps an icon macro (e.g. icon_upload()) placed inline inside a .form
+   label. Real bug found and fixed: every other icon usage in this codebase
+   is scoped by a containing class (.portal-nav-link svg, .shell-password-toggle
+   svg, etc.) -- an icon dropped directly into a bare label had no such rule,
+   so the SVG fell back to filling the label's full block width (.form label
+   is display:block) instead of rendering as a small inline glyph. */
+.form-label-icon {
+  display: inline-flex;
+  vertical-align: -3px;
 }
-.form input:focus {
-    border-color: #2d89ef;
-    outline: none;
+
+.form-label-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.form input,
+.form textarea,
+.form select {
+  width: 100%;
+  padding: 11px 12px;
+  margin-top: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+  background: var(--bg);
+  font: inherit;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease;
+}
+.form input:focus,
+.form textarea:focus,
+.form select:focus {
+  border-color: var(--primary);
+  /* WCAG 2.4.7 (Focus Visible) fix: this previously removed the focus
+     outline entirely and relied on the 1px border-color change alone,
+     which is far too subtle a focus indicator for keyboard/low-vision
+     users. A real, clearly visible outline instead of none. */
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  background: var(--surface);
+}
+
+/* Applies the same real focus indicator to every interactive element
+   site-wide (buttons, links, chips) — not just form fields — since
+   2.4.7 applies to all focusable content, not only inputs. */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.helper-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.form-footer {
+  margin-top: 22px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* ---------- Results / Alerts ---------- */
 .result {
-    margin-top: 20px;
-    padding: 15px;
-    border-radius: 8px;
-    font-weight: bold;
-    text-align: center;
-    font-size: 15px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  text-align: left;
 }
 
 .result.success {
-    background: #e8fce8;
-    color: #2e8b57;
-    border: 1px solid #2e8b57;
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid rgba(30, 142, 90, 0.25);
+}
+.result.success h3 {
+  margin-top: 0;
 }
 
 .result.error {
-    background: #ffe8e8;
-    color: #b22222;
-    border: 1px solid #b22222;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid rgba(194, 42, 42, 0.25);
+}
+.result.error h3 {
+  margin-top: 0;
 }
 
 /* ---------- Links ---------- */
 .link {
-    display: inline-block;
-    margin-top: 15px;
-    text-decoration: none;
-    color: #2d89ef;
+  display: inline-block;
+  margin-top: 15px;
+  text-decoration: none;
+  color: var(--primary);
+  font-weight: 600;
 }
 .link:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
+
 .verify-card {
-    max-width: 500px;
-    margin: 50px auto;
-    padding: 25px;
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-    text-align: center;
+  max-width: 520px;
+  margin: 0 auto 30px;
+  text-align: center;
 }
 .verify-card h2 {
-    color: #6a0dad;
-    margin-bottom: 20px;
+  color: var(--secondary);
+  margin-bottom: 16px;
 }
 .verify-card input {
-    width: 100%;
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    margin-bottom: 20px;
-    font-family: monospace;
-    text-align: center;
+  font-family: monospace;
+  text-align: center;
 }
-.verify-btn:hover {
-    background: linear-gradient(90deg, #2d89ef, #6a0dad);
-    color: white;
-    padding: 12px 20px;
-    border-radius: 10px;
-    text-decoration: none;
-    font-weight: bold;
-    border: none;
-    cursor: pointer;
-     opacity: 0.9;
+.verify-card .btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
 }
 
+/* ---------- Applicants table ---------- */
+/* Real gap found via user feedback ("presented well across all different
+   screen shapes"): every data table across the employer/admin surfaces
+   (applicants, employer verifications, credentials, admin accounts,
+   reports, appeals, duplicate flags -- every one of them uses this same
+   .applicants-table class) rendered as a bare <table> with width:100%
+   and no horizontal-scroll container. A 6-column table has no room to
+   shrink into a 375px phone screen — it either overflowed the whole page
+   sideways or squished every column into overlapping, unreadable text.
+   .table-scroll wraps the <table> (see each template) so only the table
+   itself scrolls horizontally, with min-width keeping columns legible
+   instead of being crushed to fit. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+}
 
-/* Applicants Table */
+/* width:auto (not the base rule's width:100%) lets a wide table size
+   itself by its own content and overflow the wrapper -- which is what
+   actually triggers the scrollbar above; min-width:100% keeps a narrow
+   table (e.g. a plain 2-column status/count table) filling the full
+   card width instead of shrinking to its content, so this stays a no-op
+   for tables that never needed to scroll in the first place. */
+.table-scroll .applicants-table {
+  width: auto;
+  min-width: 100%;
+}
+
 .applicants-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--outline);
 }
-.applicants-table th, .applicants-table td {
-    padding: 12px 15px;
-    text-align: left;
+.applicants-table th,
+.applicants-table td {
+  padding: 13px 16px;
+  text-align: left;
+  font-size: 0.9rem;
 }
 .applicants-table th {
-    background: linear-gradient(90deg, #2d89ef, #6a0dad);
-    color: white;
-    font-weight: bold;
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.applicants-table tr:nth-child(even) {
-    background: #f9f9f9;
+.applicants-table tr:not(:last-child) td {
+  border-bottom: 1px solid var(--outline);
 }
-.status {
-    font-weight: bold;
-}
-.status.accepted { color: green; }
-.status.rejected { color: red; }
-.status.pending { color: orange; }
-.muted {
-    color: #aaa;
-    font-style: italic;
-}
-.highlight {
-    color: #2d89ef;
+.applicants-table tr:hover td {
+  background: var(--bg);
 }
 
+/* Real bug found via user testing on a real phone: the .table-scroll fix
+   above stops the whole PAGE from overflowing sideways, but on the
+   employer applications table specifically, the Accept/Reject buttons
+   live in the last of 6 columns — pushed off the visible screen edge,
+   reachable only by first scrolling the table itself horizontally. A
+   tap where the button visually should be hits nothing, which reads as
+   "the page is broken and not reacting," not "scroll right." Below
+   700px, every .applicants-table drops the horizontal-scrolling grid
+   entirely and becomes a stack of full-width row-cards instead — the
+   standard responsive-table pattern: same <table>/<tr>/<td> markup (so
+   data-table-filter's row-hiding keeps working unchanged), just
+   re-laid-out as blocks. Each cell's own data-label attribute supplies
+   the caption that the (now-hidden) column header used to provide. */
+@media (max-width: 700px) {
+  .table-scroll {
+    overflow-x: visible;
+  }
+  .table-scroll .applicants-table {
+    min-width: 0;
+  }
+  .applicants-table thead {
+    display: none;
+  }
+  .applicants-table,
+  .applicants-table tbody,
+  .applicants-table tr,
+  .applicants-table td {
+    display: block;
+    width: 100%;
+  }
+  .applicants-table tr {
+    margin-bottom: 12px;
+    border-radius: var(--radius-md);
+  }
+  .applicants-table tr:not(:last-child) td:last-child {
+    border-bottom: none;
+  }
+  .applicants-table tr:not(:last-child) {
+    border-bottom: 8px solid var(--bg);
+  }
+  /* .status cells keep their own pill display (set below) rather than
+     becoming a flex column -- a data-label caption would just duplicate
+     the pill's own status text sitting right next to it. */
+  .applicants-table td:not(.status) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .applicants-table td.status {
+    display: inline-block;
+    margin: 2px 0;
+  }
+  .applicants-table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .applicants-table .inline-actions {
+    width: 100%;
+  }
+  .applicants-table .inline-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.status {
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  display: inline-block;
+}
+
+.status svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  vertical-align: -2px;
+}
+.status.accepted {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.status.rejected {
+  color: var(--error);
+  background: var(--error-bg);
+}
+.status.pending {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--tertiary-light);
+  font-size: 12px;
+  color: var(--tertiary-dark);
+  display: inline-block;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.85em;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ---------- Messaging thread ---------- */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+.bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+}
+.bubble.employer {
+  align-self: flex-end;
+  background: var(--tertiary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.bubble.user {
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--text-primary);
+  border: 1px solid var(--outline);
+  border-bottom-left-radius: 4px;
+}
+.bubble .meta {
+  display: block;
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+
+/* ---------- Footer ---------- */
+.page-footer {
+  text-align: center;
+  margin-top: 20px;
+}
+
+/* ---------- Shared layout utilities ----------
+   Real gap found via a full OWASP Top 10 (A05) review: every one of these
+   used to be a one-off inline style="..." attribute, repeated verbatim
+   across several templates (admin and employer alike) — both real
+   duplication and, more importantly, incompatible with a strict CSP
+   script/style policy. Named for what they DO, not which page happens to
+   use them, so the same class serves every template that needs the same
+   layout regardless of section. */
+.inline-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+.narrow-card {
+  max-width: 480px;
+}
+.btn-full-center {
+  width: 100%;
+  justify-content: center;
+}
+.text-center {
+  text-align: center;
+}
+.inline-block {
+  display: inline;
+}
+.warning-box {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+}
+.warning-box-title {
+  margin: 0;
+  color: var(--warning);
+  font-weight: 700;
+}

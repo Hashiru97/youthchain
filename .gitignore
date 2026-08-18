@@ -29,3 +29,11 @@ youthchain_app/.fvm/
 *.db
 *.log
 .DS_Store
+
+# Firebase credentials -- real per-developer/per-environment secrets, never
+# committed. google-services.json identifies the app to Google's servers
+# (low-sensitivity but still environment-specific); the *-firebase-adminsdk-*
+# key is a real service-account private key with server-side send privileges.
+youthchain_app/android/app/google-services.json
+youthchain_app/ios/Runner/GoogleService-Info.plist
+*firebase-adminsdk*.json

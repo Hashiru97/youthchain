@@ -1,0 +1,147 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty, icon_search %}
+
+{% block title %}Employer Verifications{% endblock %}
+{% block page_title %}Employer Verifications{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Review uploaded business documents and individual/informal employer ID. Every decision is a human's — nothing here is auto-approved.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Pending review ({{ pending|length }})</h2>
+    </div>
+    {% if pending %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Track</th><th>Document</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for employer in pending %}
+        <tr>
+          <td data-label="Name">{{ employer.name }}</td>
+          <td data-label="Email">{{ employer.email }}</td>
+          <td data-label="Track">
+            <span class="admin-role-pill {{ 'role-verifier' if employer.verification_type == 'individual' else 'role-admin' }}">
+              {{ "Individual" if employer.verification_type == "individual" else "Business" }}
+            </span>
+          </td>
+          <td data-label="Document">
+            {% if employer.verification_document %}
+              <a href="{{ url_for('download_employer_verification_document', filename=employer.verification_document) }}" class="btn small">
+                View {{ "ID" if employer.verification_type == "individual" else "document" }}
+              </a>
+            {% else %}
+              <span class="muted">None</span>
+            {% endif %}
+          </td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_decide_employer_verification', employer_id=employer.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" name="decision" value="verified" class="btn accept">✅ Approve</button>
+              <button type="submit" name="decision" value="rejected" class="btn reject"
+                data-confirm="Reject {{ employer.name }}'s verification? They'll stay able to log in and post jobs — this only affects the trust badge youth see.">❌ Reject</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No employers awaiting review.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recently decided</h2>
+    </div>
+    {% if decided %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Name</th><th>Decision</th><th>When</th></tr></thead>
+      <tbody>
+        {% for employer in decided %}
+        <tr>
+          <td data-label="Name">{{ employer.name }}</td>
+          <td class="status {{ 'accepted' if employer.verification_status == 'verified' else 'rejected' }}">
+            {% if employer.verification_status == 'verified' %}
+              Verified {{ "Individual" if employer.verification_type == "individual" else "Business" }}
+            {% else %}
+              {{ employer.verification_status | capitalize }}
+            {% endif %}
+          </td>
+          <td data-label="When">{{ employer.verification_reviewed_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No decisions recorded yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>All employers ({{ all_employers|length }})</h2>
+      <p>Verification status is a trust badge shown to youth — it does not by itself restrict what an employer can do. Suspending an account is the real lever if one is behaving badly: it blocks login and revokes any already-open session immediately.</p>
+    </div>
+    {% if all_employers %}
+    <div class="shell-table-search">
+      {{ icon_search() }}
+      <input type="search" data-table-filter="#all-employers-table" placeholder="Search by name or email…" aria-label="Search all employers" />
+    </div>
+    <div class="table-scroll">
+    <table class="applicants-table" id="all-employers-table">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Signed up as</th><th>Verification</th><th>Account status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for employer in all_employers %}
+        <tr>
+          <td data-label="Name">{{ employer.name }}</td>
+          <td data-label="Email">{{ employer.email }}</td>
+          <td data-label="Signed up as">
+            <span class="admin-role-pill {{ 'role-verifier' if employer.account_type == 'individual' else 'role-admin' }}">
+              {{ "Individual" if employer.account_type == "individual" else "Business" }}
+            </span>
+          </td>
+          <td class="status {{ 'accepted' if employer.verification_status == 'verified' else ('rejected' if employer.verification_status == 'rejected' else 'pending') }}">
+            {% if employer.verification_status == 'verified' %}
+              Verified {{ "Individual" if employer.verification_type == "individual" else "Business" }}
+            {% else %}
+              {{ employer.verification_status | capitalize }}
+            {% endif %}
+          </td>
+          <td class="status {{ 'accepted' if employer.active else 'rejected' }}">
+            {{ "Active" if employer.active else "Suspended" }}
+          </td>
+          <td data-label="Action">
+            {% if employer.active %}
+              <form method="POST" action="{{ url_for('admin_suspend_employer', employer_id=employer.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" class="btn reject"
+                  data-confirm="Suspend {{ employer.name }}? This blocks their login and revokes any open session immediately.">Suspend</button>
+              </form>
+            {% else %}
+              <form method="POST" action="{{ url_for('admin_reinstate_employer', employer_id=employer.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" class="btn accept">Reinstate</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No employers registered yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

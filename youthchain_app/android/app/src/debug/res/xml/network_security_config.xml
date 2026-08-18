@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-build-only (see android/app/src/debug/, never merged into a
+  release build): permits plain HTTP, but only to the handful of
+  addresses a local backend is actually reachable at during device
+  testing (adb reverse tcp:5000 tcp:5000, or the Android emulator's
+  10.0.2.2 host alias), not a blanket cleartext allowance. The main
+  manifest (android/app/src/main/AndroidManifest.xml) carries no such
+  override, so a release build keeps Android's default-secure behavior:
+  cleartext blocked everywhere, matching docs/mobile-release.md's own
+  requirement that a real build point at a real https:// API_BASE_URL.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

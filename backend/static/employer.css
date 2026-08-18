@@ -1,0 +1,874 @@
+/* YouthChain employer portal shell — layered on top of style.css's shared
+   design tokens (colors, radius, shadow), loaded only by
+   templates/employer_shell.html. A top nav bar rather than admin.css's
+   sidebar: the employer portal has five destinations, not fifteen, and a
+   persistent sidebar would be heavier than this surface needs — but the
+   underlying problem it fixes is the same one the admin console fixed
+   first: every employer page used to be a disconnected, standalone form
+   with its own hand-rolled "back to dashboard" link and zero shared
+   navigation at all. */
+
+:root {
+  --employer-topbar-height: 64px;
+}
+
+body.employer-shell-body {
+  margin: 0;
+  background: var(--bg);
+}
+
+/* ---------- Top bar ---------- */
+/* Real bug found via user testing on a real phone, confirmed still
+   reproducing after a min-height fix (kept, see git history, but not
+   sufficient on its own): the topbar was `position: sticky` with
+   z-index: 40, and was visibly painting on top of the verification
+   banner directly below it -- "Your organization isn't verified" had
+   its top sliced off by the header itself. A sticky element establishes
+   its own stacking context; ANY overlap with normal-flow content below
+   it (from a sticky-position recalculation during scroll, a dynamic
+   mobile browser viewport resize as the URL bar shows/hides, or
+   anything else) paints the higher-z-index sticky bar on top, full
+   stop -- z-index order doesn't care why two boxes overlap, only that
+   they do. Without a live device + devtools to pin the exact
+   recalculation trigger, the reliable fix is removing the failure mode
+   entirely rather than continuing to chase it blind: a plain,
+   non-sticky header can never overlap the content that follows it, by
+   construction. Trades away "nav stays visible while scrolling" for
+   "verification status is never unreadable," which is the right side of
+   that trade for a page whose nav is one row of five links, not a
+   feature worth risking core content legibility over. */
+.employer-topbar {
+  min-height: var(--employer-topbar-height);
+  background: var(--surface);
+  border-bottom: 1px solid var(--outline);
+  /* Not sticky (see above), but still a positioning anchor: the mobile
+     nav dropdown below anchors to this box with position:absolute so it
+     tracks wherever the topbar actually is (scrolling with the page,
+     like everything else now) instead of a fixed viewport offset that
+     only made sense back when the topbar itself was pinned there. */
+  position: relative;
+}
+
+.employer-topbar-inner {
+  max-width: 1100px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.employer-brand-mark {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.employer-brand-mark img {
+  height: 26px;
+  width: auto;
+}
+
+.employer-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.employer-brand-title {
+  font-weight: 800;
+  font-size: 14.5px;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.employer-brand-subtitle {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.employer-menu-toggle {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.employer-menu-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-primary);
+}
+
+.employer-nav {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.employer-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.employer-nav-link svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.employer-nav-link:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.employer-nav-link.active {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.employer-nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
+}
+
+.employer-nav-spacer {
+  flex: 1;
+}
+
+.employer-nav-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.employer-nav-identity-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.employer-nav-identity-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employer-nav-logout-form {
+  flex-shrink: 0;
+}
+
+.employer-nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.employer-nav-logout:hover {
+  background: var(--error-bg);
+  color: var(--error-on-tint);
+}
+
+.employer-nav-logout svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.employer-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(21, 33, 30, 0.4);
+  z-index: 35;
+}
+
+@media (max-width: 860px) {
+  .employer-menu-toggle {
+    display: inline-flex;
+    /* Same fix as portal.css's equivalent: the theme toggle is now a
+       topbar-inner sibling with its own margin-left: auto, so a second
+       auto-margined sibling here would split the free space instead of
+       sitting snug next to the first. */
+    margin-left: 0;
+  }
+  .employer-nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--outline);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 10px;
+    max-height: 0;
+    overflow: hidden;
+    /* Real bug found via live device testing: max-height:0 + overflow:
+       hidden alone left a sliver of the active "Dashboard" link's own
+       padded, colored background (.employer-nav-link.active uses
+       --primary-light) still rendering on this device's Blink build --
+       positioned right at top:100% of the topbar, i.e. directly above
+       the verification banner, which is exactly the pale-green ghost
+       that kept appearing behind the banner's first line no matter what
+       changed inside the banner itself. visibility:hidden is a second,
+       independent guarantee that nothing here paints at all while
+       closed -- unlike max-height, it isn't a size constraint a child's
+       own minimum content size can quietly escape. */
+    visibility: hidden;
+    transition: max-height 0.2s ease, visibility 0.2s;
+    z-index: 40;
+  }
+  body.employer-nav-open .employer-nav {
+    max-height: 80vh;
+    overflow-y: auto;
+    visibility: visible;
+  }
+  body.employer-nav-open .employer-scrim {
+    display: block;
+  }
+  .employer-nav-link {
+    padding: 12px;
+  }
+  .employer-nav-spacer {
+    display: none;
+  }
+  .employer-nav-identity {
+    padding: 10px 12px 4px;
+  }
+}
+
+/* ---------- Verification banner ---------- */
+.employer-verify-banner {
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--outline);
+}
+
+/* align-items: flex-start, not center -- real bug found via live device
+   testing on TWO separate browsers sharing the same underlying Blink
+   rendering engine (Chrome and Samsung Internet), reproducing
+   identically on both: centering a flex row that mixes a tiny 20px icon
+   against a 4-line paragraph requires the engine to compute a vertical
+   offset from the paragraph's full reflowed height, and on this
+   device/font combination that computation was wrong -- the paragraph
+   rendered shifted upward, clipping its own first line above the row's
+   own padding box. flex-start removes the centering computation
+   entirely: every item aligns to the row's natural top edge, which is a
+   fixed, content-independent position no reflow-timing bug can offset.
+   A tiny top margin on the icon (below) compensates only for the
+   visual difference between the icon's own line-height and the
+   paragraph's first line, not for anything that could vary by device. */
+.employer-verify-banner-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.employer-verify-banner-inner svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  stroke: var(--warning-on-tint);
+  flex-shrink: 0;
+}
+
+.employer-verify-banner-inner p {
+  margin: 0;
+  flex: 1;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.employer-verify-banner-inner .btn {
+  margin-top: -2px;
+}
+
+.employer-verify-banner-inner strong {
+  color: var(--warning-on-tint);
+}
+
+/* ---------- Content column ---------- */
+.employer-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+@media (max-width: 620px) {
+  .employer-content {
+    padding: 22px 16px 60px;
+  }
+}
+
+/* ---------- First-time onboarding checklist (employer_dashboard.html) ----------
+   Real gap found via a full employer-portal UX review: a brand-new
+   employer landed on an empty dashboard with one line of generic copy
+   and no explanation of what verification buys them or what to do
+   first. Shown only while genuinely incomplete (see the template's own
+   condition) -- once every step is done, this stops rendering rather
+   than lingering as clutter. */
+.employer-onboarding {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  padding: 24px 26px;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.employer-onboarding h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.employer-onboarding > p {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.employer-onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.employer-onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+
+a.employer-onboarding-step:hover {
+  background: var(--primary-light);
+}
+
+.employer-onboarding-step.done {
+  background: var(--success-bg);
+}
+
+.employer-onboarding-step-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 2px solid var(--outline);
+  color: transparent;
+}
+
+.employer-onboarding-step.done .employer-onboarding-step-mark {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.employer-onboarding-step-mark svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 3;
+}
+
+.employer-onboarding-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.employer-onboarding-step-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.employer-onboarding-step.done .employer-onboarding-step-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.employer-onboarding-step-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.employer-onboarding-step-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.employer-onboarding-step-chevron svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+/* ---------- Messages inbox (employer_messages_inbox.html) ---------- */
+.employer-thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--outline);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.employer-thread-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+
+.employer-thread-row:hover {
+  background: var(--bg);
+}
+
+.employer-thread-row.unread {
+  background: var(--primary-light);
+}
+
+.employer-thread-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.employer-thread-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.employer-thread-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.employer-thread-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.employer-thread-row.unread .employer-thread-name {
+  font-weight: 800;
+}
+
+.employer-thread-job {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.employer-thread-preview {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.employer-thread-row.unread .employer-thread-preview {
+  color: var(--text-primary);
+}
+
+.employer-thread-meta {
+  flex-shrink: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.employer-thread-time {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ---------- Job listings grid (employer_dashboard.html) ----------
+   Real gap found via user feedback: this used to be style.css's generic
+   .job-list/.job-card -- a plain single-column stack of near-white cards
+   with no color of its own, on a page whose only color at all was the
+   top nav bar. This is the employer's actual daily-use surface (their
+   own live postings), so it gets its own grid + real color identity
+   instead of borrowing the plainest shared card style in the codebase. */
+.employer-job-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.employer-job-card {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.employer-job-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.employer-job-card-accent {
+  height: 5px;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+}
+
+.employer-job-card-body {
+  padding: 18px 20px 20px;
+}
+
+.employer-job-card-title {
+  margin: 0 0 12px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.employer-job-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.employer-job-card-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.employer-job-card-meta-row svg {
+  width: 15px;
+  height: 15px;
+  stroke: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.employer-applicant-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  background: var(--tertiary-light);
+  color: var(--tertiary-dark);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.employer-applicant-badge svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.employer-applicant-badge.is-zero {
+  background: var(--bg);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.employer-applicant-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--tertiary);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.employer-applicant-badge.is-zero .employer-applicant-badge-count {
+  background: var(--outline);
+  color: var(--text-secondary);
+}
+
+.employer-job-card-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.employer-skill-pill {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* Gig/hire-based job badge (Job.job_type) -- same --secondary hue as
+   .badge-gig (style.css), .portal-skill-pill-gig (portal.css), and the
+   mobile app's AppColors.secondary, so "gig work" reads as one consistent
+   color across every surface this platform has. */
+.employer-skill-pill-gig {
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+  /* Standalone, right after the card title, not inline among other pills
+     -- needs its own box/margin so it doesn't sit flush against the title. */
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.employer-job-card-footer .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ---------- Auth shell (login / register / appeal) ----------
+   Real gap found via user feedback: these three pages had no viewport
+   meta tag at all and no responsive layout of their own -- just
+   style.css's generic desktop-oriented .container/.card, which renders
+   correctly-but-tiny (mobile browsers assume a ~980px layout viewport
+   with no <meta viewport> tag and scale the whole page down to fit) on
+   a real phone. Mirrors admin.css's .admin-auth-shell pattern: a
+   viewport-height flex container that centers a fixed-max-width card,
+   which is what makes it correctly fill/scale a phone screen instead of
+   rendering shrunken. */
+.employer-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(15, 122, 92, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(29, 99, 201, 0.08), transparent 45%),
+    var(--bg);
+}
+
+.employer-auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 36px 32px;
+}
+
+@media (max-width: 480px) {
+  .employer-auth-card {
+    padding: 28px 22px;
+  }
+}
+
+.employer-auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.employer-auth-brand-mark {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.employer-auth-brand-mark img {
+  height: 42px;
+  width: auto;
+}
+
+.employer-auth-brand h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.employer-auth-brand p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+}
+
+/* ---------- Gig trust summary + complete/rate UI (employer_applications.html) ---------- */
+.employer-trust-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.employer-trust-summary strong {
+  color: var(--text-primary);
+}
+
+/* Applicant-review credential-trust summary (employer_applications.html)
+   -- a <details> disclosure so the default state stays a compact one-line
+   pill row (readable across a whole table of applicants) while the full
+   per-credential breakdown is one click away, with no JS needed. */
+.employer-credential-summary summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.employer-credential-summary summary::-webkit-details-marker {
+  display: none;
+}
+.employer-credential-summary .status {
+  white-space: nowrap;
+}
+/* The per-credential items are links to their own /verify/<id> page --
+   reset the browser's default link underline/visited-color so they read
+   as pills, not text links, matching every other .status usage in the
+   app; an outline on focus/hover is what signals they're interactive. */
+.employer-credential-list li a.status {
+  text-decoration: none;
+}
+.employer-credential-list li a.status:hover,
+.employer-credential-list li a.status:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+.employer-credential-list {
+  list-style: none;
+  margin: 8px 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.employer-credential-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.employer-credential-summary .link {
+  font-size: 12.5px;
+}
+
+.employer-rate-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.employer-rate-form select {
+  width: auto;
+  padding: 6px 8px;
+  margin-top: 0;
+  /* Same explicit-background fix as portal.css's equivalent mini-forms --
+     no ancestor .form class to inherit it from here. */
+  background: var(--bg);
+  color: var(--text-primary);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+}

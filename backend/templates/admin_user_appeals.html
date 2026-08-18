@@ -1,0 +1,72 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Youth Suspension Appeals{% endblock %}
+{% block page_title %}Youth Suspension Appeals{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Suspended youth accounts contesting the decision. Reinstating immediately restores their access on both the app and web portal.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Open ({{ open_appeals|length }})</h2>
+    </div>
+    {% if open_appeals %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Youth</th><th>Message</th><th>Submitted</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for appeal in open_appeals %}
+        {% set user = users.get(appeal.user_id) %}
+        <tr>
+          <td data-label="Youth">{{ user.name if user else "Unknown account" }}<br /><span class="muted">{{ user.email if user else "" }}</span></td>
+          <td data-label="Message">{{ appeal.message }}</td>
+          <td data-label="Submitted">{{ appeal.created_at }}</td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_resolve_user_appeal', appeal_id=appeal.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" name="decision" value="deny" class="btn small">Deny</button>
+              <button type="submit" name="decision" value="reinstate" class="btn accept">Reinstate Account</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No open appeals.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recently reviewed</h2>
+    </div>
+    {% if reviewed %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Youth</th><th>Decision</th><th>When</th></tr></thead>
+      <tbody>
+        {% for appeal in reviewed %}
+        {% set user = users.get(appeal.user_id) %}
+        <tr>
+          <td data-label="Youth">{{ user.name if user else "Unknown account" }}</td>
+          <td class="status {{ 'accepted' if appeal.status == 'reinstated' else 'rejected' }}">
+            {{ "Reinstated" if appeal.status == "reinstated" else "Denied" }}
+          </td>
+          <td data-label="When">{{ appeal.reviewed_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No appeals reviewed yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

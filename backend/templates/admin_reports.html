@@ -1,0 +1,83 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Employer Reports{% endblock %}
+{% block page_title %}Employer Reports{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Reports youth submit about a specific employer. Suspending directly from a report immediately revokes that employer's access.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Open ({{ open_reports|length }})</h2>
+    </div>
+    {% if open_reports %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Employer</th><th>Reported by</th><th>Category</th><th>Details</th><th>When</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for report in open_reports %}
+        {% set employer = employers.get(report.employer_id) %}
+        {% set reporter = reporters.get(report.reporter_user_id) %}
+        {% set report_count = open_report_counts.get(report.employer_id, 1) %}
+        <tr {% if report_count > 1 %}class="admin-row-flagged"{% endif %}>
+          <td data-label="Employer">
+            {{ employer.name if employer else "Unknown employer" }}
+            {% if report_count > 1 %}
+              <br /><span class="admin-role-pill role-admin">⚠ {{ report_count }} open reports</span>
+            {% endif %}
+          </td>
+          <td data-label="Reported by">{{ reporter.name if reporter else "Unknown user" }}<br /><span class="muted">{{ reporter.email if reporter else "" }}</span></td>
+          <td data-label="Category"><span class="admin-role-pill role-verifier">{{ report.category | replace("_", " ") | capitalize }}</span></td>
+          <td data-label="Details">{{ report.details or "—" }}</td>
+          <td data-label="When">{{ report.created_at }}</td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_resolve_report', report_id=report.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" name="decision" value="dismiss" class="btn small">Dismiss</button>
+              <button type="submit" name="decision" value="suspend" class="btn reject"
+                data-confirm="Suspend {{ employer.name if employer else 'this employer' }}? This blocks their login and revokes any open session immediately.">Suspend Employer</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No open reports.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recently reviewed</h2>
+    </div>
+    {% if reviewed %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Employer</th><th>Category</th><th>Decision</th><th>When</th></tr></thead>
+      <tbody>
+        {% for report in reviewed %}
+        {% set employer = employers.get(report.employer_id) %}
+        <tr>
+          <td data-label="Employer">{{ employer.name if employer else "Unknown employer" }}</td>
+          <td data-label="Category">{{ report.category | replace("_", " ") | capitalize }}</td>
+          <td class="status {{ 'rejected' if report.status == 'actioned' else 'accepted' }}">
+            {{ "Employer suspended" if report.status == "actioned" else "Dismissed" }}
+          </td>
+          <td data-label="When">{{ report.reviewed_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No reports reviewed yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

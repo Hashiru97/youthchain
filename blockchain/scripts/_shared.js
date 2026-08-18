@@ -39,3 +39,23 @@ export function normalizeHash(hash) {
     }
     return full;
 }
+
+/**
+ * Validates the ADDRESS env var used by accreditIssuer.js/revokeIssuer.js/
+ * listIssuers.js. Deliberately a plain regex check (20-byte hex), not
+ * ethers.isAddress()'s checksum validation -- this only needs to catch a
+ * malformed value before it reaches the contract call (which would revert
+ * anyway on a genuinely invalid address), not enforce EIP-55 casing on
+ * what's typically pasted straight from a wallet UI or block explorer.
+ */
+export function normalizeAddress(address) {
+    if (!address) {
+        console.error("❌ ERROR: ADDRESS environment variable not set");
+        process.exit(1);
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+        console.error(`❌ ERROR: ADDRESS is not a valid 20-byte hex address: ${address}`);
+        process.exit(1);
+    }
+    return address;
+}

@@ -1,44 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Create Employer Account • YouthChain</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
-  <div class="container">
-    <header class="page-header">
-      <h1>👔 Create Employer Account</h1>
-      <p class="subtitle">Register your organization to post jobs and review applicants on YouthChain.</p>
-    </header>
+{% extends "employer_auth_shell.html" %}
+{% from "_admin_icons.html" import icon_eye, icon_eye_off %}
 
-    <main>
-      <section class="card">
-        {% if error %}
-          <div class="result error">{{ error }}</div>
-        {% endif %}
+{% block title %}Create Account{% endblock %}
+{% block auth_title %}Create Employer Account{% endblock %}
+{% block auth_subtitle %}Post jobs and review applicants on YouthChain — as a registered business or as an individual hiring informally.{% endblock %}
 
-        <form method="POST" class="form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+{% block content %}
+  {% if error %}
+    <div class="result error" role="alert">{{ error }}</div>
+  {% endif %}
 
-          <label for="name">Organization / Contact Name</label>
-          <input id="name" type="text" name="name" required />
+  <form method="POST" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
-          <label for="email">Email</label>
-          <input id="email" type="email" name="email" required />
+    <label>I'm signing up as</label>
+    <div class="post-job-type-choice">
+      <label class="post-job-type-option">
+        <input type="radio" name="account_type" value="business" id="account_type_business" checked />
+        <span><strong>A registered business</strong> — hiring for formal roles, with a registration certificate or tax ID.</span>
+      </label>
+      <label class="post-job-type-option">
+        <input type="radio" name="account_type" value="individual" id="account_type_individual" />
+        <span><strong>An individual</strong> — I need someone for informal/gig work (a household helper, an okada rider, market help), no business to register.</span>
+      </label>
+    </div>
 
-          <label for="password">Password (min. 8 characters)</label>
-          <input id="password" type="password" name="password" minlength="8" required />
+    <label for="name" id="name_label">Name</label>
+    <input id="name" type="text" name="name" required autocomplete="organization" />
+    <span class="helper-text">Your business name, or your own name if you're hiring as an individual.</span>
 
-          <div class="form-footer">
-            <button type="submit" class="btn primary">Create Account</button>
-            <a href="{{ url_for('employer_login') }}" class="btn secondary outline">
-              Already have an account? Log in
-            </a>
-          </div>
-        </form>
-      </section>
-    </main>
-  </div>
-</body>
-</html>
+    <label for="email">Email</label>
+    <input id="email" type="email" name="email" required autocomplete="username" />
+
+    <label for="password">Password (min. 8 characters)</label>
+    <div class="shell-password-field">
+      <input id="password" type="password" name="password" minlength="8" required autocomplete="new-password" />
+      <button type="button" class="shell-password-toggle" data-toggle-password="#password" aria-label="Show password">
+        <span class="icon-eye">{{ icon_eye() }}</span>
+        <span class="icon-eye-off">{{ icon_eye_off() }}</span>
+      </button>
+    </div>
+
+    <label for="industry">Industry (optional)</label>
+    <select id="industry" name="industry">
+      <option value="">Prefer not to say</option>
+      {% for choice in industry_choices %}
+        <option value="{{ choice }}">{{ choice }}</option>
+      {% endfor %}
+    </select>
+    <span class="helper-text">Helps YouthChain surface your jobs to youth who've expressed interest in this sector.</span>
+
+    <div class="form-footer">
+      <button type="submit" class="btn primary">Create Account</button>
+      <a href="{{ url_for('employer_login') }}" class="btn secondary outline">
+        Already have an account? Log in
+      </a>
+    </div>
+  </form>
+{% endblock %}

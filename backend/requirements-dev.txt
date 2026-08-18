@@ -1,2 +1,10 @@
 -r requirements.txt
-pytest==8.2.2
+pytest==9.0.3
+# Real dependency-vulnerability scanning against the PyPI advisory
+# database (see .github/workflows/ci.yml's `pip-audit` step) — found and
+# closed 18 real CVEs across 7 packages in one pass when first run
+# (Flask-Cors CORS-bypass bugs, a python-socketio pickle RCE, several
+# Werkzeug/gunicorn issues). Run on every CI build now so a future
+# vulnerability in a pinned version is caught automatically instead of
+# needing another manual audit pass to notice it.
+pip-audit==2.10.1

@@ -1,8 +1,28 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
+import '../services/push_notification_service.dart';
+import '../theme/app_theme.dart';
+
+/// Three steps, not one combined form -- restructured to match the web
+/// portal's portal_register() flow (see app.py): choose a contact channel
+/// (email or SMS) and verify it BEFORE being asked to set a password,
+/// rather than typing a password that then just sits there while
+/// fetching/entering a code. Real gap found via user feedback:
+/// registration was email-only despite password login already accepting
+/// "phone or email" as the identifier.
+///
+/// Unlike the web portal, this app is a stateless JWT client with no
+/// server-side session to remember "this identifier was verified"
+/// between steps -- step 2 calls the dedicated
+/// /auth/otp/register/verify pre-check endpoint for early feedback (a
+/// wrong code surfaces immediately, not only after also typing a
+/// password), but the code itself is held in memory and re-sent with
+/// the final /register call, which is what actually consumes it.
+enum _RegStep { contact, code, details }
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -12,13 +32,30 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class RegistrationScreenState extends State<RegistrationScreen> {
-  final nameController = TextEditingController();
-  final phoneController = TextEditingController();
-  final emailController = TextEditingController();
+  _RegStep _step = _RegStep.contact;
+  String _channel = 'email'; // 'email' | 'sms'
+
+  final identifierController = TextEditingController();
+  final otpController = TextEditingController();
+  final firstNameController = TextEditingController();
+  final lastNameController = TextEditingController();
+  final otherController = TextEditingController();
+  final ncraIdController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
 
   bool _loading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _consentAccepted = false;
+  String? _error;
+
+  bool get _isEmail => _channel == 'email';
+
+  Future<void> _openPrivacyPolicy() async {
+    final uri = Uri.parse('${ApiClient.baseUrl}/privacy-policy');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   Map<String, dynamic>? _tryJson(String body) {
     try {
@@ -29,208 +66,146 @@ class RegistrationScreenState extends State<RegistrationScreen> {
     }
   }
 
-  Future<void> registerUser() async {
-    if ([
-      nameController,
-      phoneController,
-      emailController,
-      passwordController,
-      confirmPasswordController,
-    ].any((c) => c.text.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Please complete all fields")),
-      );
+  Future<void> _sendCode() async {
+    final identifier = identifierController.text.trim();
+    if (identifier.isEmpty) {
+      setState(() => _error = _isEmail ? 'Please enter your email address' : 'Please enter your phone number');
       return;
     }
 
-    if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Passwords do not match")),
-      );
-      return;
-    }
-
-    if (passwordController.text.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Password must be at least 8 characters")),
-      );
-      return;
-    }
-
-    final email = emailController.text.trim();
-
-    setState(() => _loading = true);
-
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      // 1) Ask backend to generate + send OTP
-      final sendRes = await ApiClient.instance.postJson(
-        "/auth/otp/register/request",
-        {"email": email},
-        auth: false,
-      );
-
-      if (sendRes.statusCode != 200) {
-        final data = _tryJson(sendRes.body);
-        final msg =
-            data?["error"] ?? "Failed to send OTP (${sendRes.statusCode})";
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(msg)));
-        setState(() => _loading = false);
-        return;
-      }
-
-      // 2) Prompt for OTP (can be read from email OR backend logs)
-      final otp = await _promptOtp(email);
-      if (otp == null || otp.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registration cancelled.")),
-        );
-        setState(() => _loading = false);
-        return;
-      }
-
-      // 3) Call /register with otp_code
       final res = await ApiClient.instance.postJson(
-        "/register",
-        {
-          "name": nameController.text.trim(),
-          "phone": phoneController.text.trim(),
-          "email": email,
-          "password": passwordController.text,
-          "otp_code": otp,
-        },
+        '/auth/otp/register/request',
+        {'channel': _channel, 'identifier': identifier},
         auth: false,
       );
-
       final data = _tryJson(res.body);
-
       if (!mounted) return;
-
-      if (res.statusCode == 201 && data?["user"] != null && data?["access_token"] != null) {
-        final userId = data!["user"]["id"] as int;
-        await ApiClient.instance.saveSession(
-          token: data["access_token"] as String,
-          userId: userId,
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Registration successful")),
-        );
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/home',
-          (_) => false,
-          arguments: {'userId': userId},
-        );
+      if (res.statusCode == 200) {
+        setState(() => _step = _RegStep.code);
       } else {
-        final msg =
-            data?["error"] ?? "❌ Registration failed (${res.statusCode})";
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(msg)));
+        setState(() => _error = data?['error'] ?? 'Failed to send code (${res.statusCode})');
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Network error during registration")),
-      );
+      setState(() => _error = 'Network error. Check your connection and try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<String?> _promptOtp(String email) async {
-    final ctrl = TextEditingController();
-    String? result;
+  Future<void> _verifyCode() async {
+    final code = otpController.text.trim();
+    if (code.length != 6) {
+      setState(() => _error = 'Enter the 6-digit code');
+      return;
+    }
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 48,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                "Enter OTP sent to $email",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  labelText: "6-digit code",
-                  counterText: "",
-                  prefixIcon: Icon(Icons.password),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        result = null;
-                        Navigator.of(ctx).pop();
-                      },
-                      child: const Text("Cancel"),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.verified),
-                      label: const Text("Verify"),
-                      onPressed: () {
-                        result = ctrl.text.trim();
-                        Navigator.of(ctx).pop();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await ApiClient.instance.postJson(
+        '/auth/otp/register/verify',
+        {
+          'channel': _channel,
+          'identifier': identifierController.text.trim(),
+          'code': code,
+        },
+        auth: false,
+      );
+      final data = _tryJson(res.body);
+      if (!mounted) return;
+      if (res.statusCode == 200 && data?['success'] == true) {
+        setState(() => _step = _RegStep.details);
+      } else {
+        setState(() => _error = data?['error'] ?? 'Invalid or expired code');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Network error. Check your connection and try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
-    return result;
+  Future<void> _createAccount() async {
+    if ([firstNameController, lastNameController, otherController, passwordController, confirmPasswordController]
+        .any((c) => c.text.trim().isEmpty)) {
+      setState(() => _error = 'Please complete all fields');
+      return;
+    }
+    if (passwordController.text != confirmPasswordController.text) {
+      setState(() => _error = 'Passwords do not match');
+      return;
+    }
+    if (passwordController.text.length < 8) {
+      setState(() => _error = 'Password must be at least 8 characters');
+      return;
+    }
+    if (!_consentAccepted) {
+      setState(() => _error = 'Please accept the privacy policy to continue');
+      return;
+    }
+
+    final identifier = identifierController.text.trim();
+    final email = _isEmail ? identifier : otherController.text.trim();
+    final phone = _isEmail ? otherController.text.trim() : identifier;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await ApiClient.instance.postJson(
+        '/register',
+        {
+          'first_name': firstNameController.text.trim(),
+          'last_name': lastNameController.text.trim(),
+          'phone': phone,
+          'email': email,
+          'ncra_id': ncraIdController.text.trim(),
+          'password': passwordController.text,
+          'otp_code': otpController.text.trim(),
+          'channel': _channel,
+          'consent': _consentAccepted,
+        },
+        auth: false,
+      );
+      final data = _tryJson(res.body);
+      if (!mounted) return;
+
+      if (res.statusCode == 201 && data?['user'] != null && data?['access_token'] != null) {
+        final userId = data!['user']['id'] as int;
+        await ApiClient.instance.saveSession(token: data['access_token'] as String, userId: userId);
+        PushNotificationService.registerToken();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful')));
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false, arguments: {'userId': userId});
+      } else {
+        setState(() => _error = data?['error'] ?? 'Registration failed (${res.statusCode})');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Network error during registration');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   void dispose() {
-    nameController.dispose();
-    phoneController.dispose();
-    emailController.dispose();
+    identifierController.dispose();
+    otpController.dispose();
+    firstNameController.dispose();
+    lastNameController.dispose();
+    otherController.dispose();
+    ncraIdController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
     super.dispose();
@@ -240,130 +215,368 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xff047857), Color(0xff0ea5e9)],
+            colors: [context.colors.primaryDark, context.colors.primary],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Card(
-              elevation: 10,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.xl,
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.emoji_people,
-                      size: 64,
-                      color: Colors.green[700],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "Create YouthChain Account",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: const Icon(
+                      Icons.emoji_people_rounded,
+                      color: Colors.white,
+                      size: 32,
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      "Match verified youth credentials to real jobs.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  const Text(
+                    "Create your account",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
                     ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: "Full Name",
-                        prefixIcon: Icon(Icons.person),
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Match verified skills to real jobs.",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: phoneController,
-                      decoration: const InputDecoration(
-                        labelText: "Phone / NCRA ID",
-                        prefixIcon: Icon(Icons.phone),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: emailController,
-                      decoration: const InputDecoration(
-                        labelText: "Email Address",
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: "Password",
-                        prefixIcon: Icon(Icons.lock),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: "Confirm Password",
-                        prefixIcon: Icon(Icons.lock_outline),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: _loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : ElevatedButton(
-                              onPressed: registerUser,
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text(
-                                "Register",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text("Already have an account? "),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(
-                              context,
-                            ).pushReplacementNamed('/login');
-                          },
-                          child: const Text("Login"),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("Create YouthChain Account", style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: AppSpacing.md),
+                        if (_error != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.sm),
+                            decoration: BoxDecoration(
+                              color: context.colors.errorBg,
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                              border: Border.all(color: context.colors.error.withValues(alpha: 0.25)),
+                            ),
+                            child: Text(
+                              _error!,
+                              style: TextStyle(color: context.colors.error, fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                        ],
+                        if (_step == _RegStep.contact) ..._buildContactStep(),
+                        if (_step == _RegStep.code) ..._buildCodeStep(),
+                        if (_step == _RegStep.details) ..._buildDetailsStep(),
+                        const SizedBox(height: AppSpacing.md),
+                        Center(
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                "Already have an account? ",
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () => Navigator.of(context).pushReplacementNamed('/login'),
+                                child: const Text("Login"),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildContactStep() {
+    return [
+      const Text('How should we send your verification code?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      const SizedBox(height: AppSpacing.sm),
+      Row(
+        children: [
+          Expanded(
+            child: _ChannelChoiceCard(
+              label: 'Email',
+              icon: Icons.email_outlined,
+              selected: _isEmail,
+              onTap: () => setState(() => _channel = 'email'),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _ChannelChoiceCard(
+              label: 'Phone (SMS)',
+              icon: Icons.sms_outlined,
+              selected: !_isEmail,
+              onTap: () => setState(() => _channel = 'sms'),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        key: ValueKey(_channel),
+        controller: identifierController,
+        keyboardType: _isEmail ? TextInputType.emailAddress : TextInputType.phone,
+        decoration: InputDecoration(
+          labelText: _isEmail ? 'Email Address' : 'Phone Number',
+          prefixIcon: Icon(_isEmail ? Icons.email_outlined : Icons.phone_outlined),
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        "We'll send a 6-digit code to verify it's really you.",
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      _primaryButton('Send verification code', _sendCode),
+    ];
+  }
+
+  List<Widget> _buildCodeStep() {
+    return [
+      Text(
+        'A 6-digit code was sent to ${identifierController.text.trim()}.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: otpController,
+        keyboardType: TextInputType.number,
+        maxLength: 6,
+        textAlign: TextAlign.center,
+        autofocus: true,
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 8),
+        decoration: const InputDecoration(labelText: 'Verification Code', counterText: ''),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      _primaryButton('Verify', _verifyCode),
+      const SizedBox(height: 4),
+      Center(
+        child: TextButton(
+          onPressed: _loading
+              ? null
+              : () => setState(() {
+                    _step = _RegStep.contact;
+                    _error = null;
+                    otpController.clear();
+                  }),
+          child: const Text('Use a different email/phone'),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildDetailsStep() {
+    final identifier = identifierController.text.trim();
+    return [
+      Text('✅ $identifier is verified.', style: Theme.of(context).textTheme.bodyMedium),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: firstNameController,
+        decoration: const InputDecoration(
+          labelText: 'First Name',
+          prefixIcon: Icon(Icons.person_outline_rounded),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: lastNameController,
+        decoration: const InputDecoration(
+          labelText: 'Last Name',
+          prefixIcon: Icon(Icons.person_outline_rounded),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: otherController,
+        keyboardType: _isEmail ? TextInputType.phone : TextInputType.emailAddress,
+        decoration: InputDecoration(
+          labelText: _isEmail ? 'Phone Number' : 'Email Address',
+          prefixIcon: Icon(_isEmail ? Icons.phone_outlined : Icons.email_outlined),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: ncraIdController,
+        decoration: const InputDecoration(
+          labelText: 'NCRA ID (optional)',
+          prefixIcon: Icon(Icons.badge_outlined),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: passwordController,
+        obscureText: _obscurePassword,
+        decoration: InputDecoration(
+          labelText: "Password",
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
+          suffixIcon: IconButton(
+            icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+          ),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      TextField(
+        controller: confirmPasswordController,
+        obscureText: _obscureConfirm,
+        decoration: InputDecoration(
+          labelText: "Confirm Password",
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
+          suffixIcon: IconButton(
+            icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+          ),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Checkbox(
+            value: _consentAccepted,
+            onChanged: (v) => setState(() => _consentAccepted = v ?? false),
+          ),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text("I agree to the ", style: Theme.of(context).textTheme.bodySmall),
+                GestureDetector(
+                  onTap: _openPrivacyPolicy,
+                  child: Text(
+                    "Privacy Policy",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.primary,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      _primaryButton('Create Account', _createAccount),
+    ];
+  }
+
+  Widget _primaryButton(String label, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: _loading ? null : onPressed,
+        child: _loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4, valueColor: AlwaysStoppedAnimation(Colors.white)),
+              )
+            : Text(label),
+      ),
+    );
+  }
+}
+
+class _ChannelChoiceCard extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ChannelChoiceCard({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Material (colored) + InkWell, not InkWell wrapping an opaque
+    // Container -- same ripple-visibility bug found and fixed in
+    // notifications_screen.dart: Material paints ink splashes BEHIND its
+    // child, so an opaque Container in between hides the ripple entirely.
+    return Material(
+      color: selected ? context.colors.primaryLight : context.colors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: selected ? context.colors.primary : context.colors.outline, width: selected ? 1.5 : 1),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 20, color: selected ? context.colors.primary : context.colors.textMuted),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? context.colors.primary : context.colors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ),

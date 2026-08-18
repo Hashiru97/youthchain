@@ -1,0 +1,258 @@
+/* Component styles shared by the admin console AND the employer portal
+   shells -- factored out when the employer portal got its own shell
+   alongside the existing admin one, rather than duplicating the same
+   handful of components under a second class-name prefix. Genuinely
+   shell-specific layout (the admin sidebar, the employer top nav, stat
+   cards, the attention panel) stays in admin.css / employer.css; only
+   the reusable pieces live here. */
+
+/* ---------- Card-style radio choice (post_job.html's job-type picker,
+   employer_register.html/employer_verification.html's account-type
+   picker, portal_register.html's OTP-channel picker) ----------
+   Moved here from employer.css: real bug found live -- portal_register.html
+   reused this class name (a reasonable reuse of an existing pattern) but
+   portal_shell.html never loads employer.css, so none of these rules
+   applied there. The radio input fell back to .form input's width:100%,
+   rendering as a giant stretched box instead of a normal small circle
+   next to its label. Now genuinely shared, not just employer-owned. */
+.post-job-type-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.post-job-type-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.post-job-type-option:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.post-job-type-option input[type="radio"] {
+  width: auto;
+  margin: 3px 0 0;
+}
+
+.post-job-type-option span {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* ---------- Nav badge (unread/pending count) ---------- */
+.shell-nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--error);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ---------- Table search (shell_common.js's data-table-filter) ---------- */
+.shell-table-search {
+  position: relative;
+  max-width: 320px;
+  margin-bottom: 12px;
+}
+
+.shell-table-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.shell-table-search input {
+  width: 100%;
+  padding: 9px 12px 9px 34px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.shell-table-search input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.shell-table-filter-empty td {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+  font-size: 13px;
+}
+
+/* ---------- Password visibility toggle ---------- */
+.shell-password-field {
+  position: relative;
+}
+
+.shell-password-field input {
+  padding-right: 42px;
+}
+
+.shell-password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.shell-password-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+.shell-password-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.shell-password-toggle .icon-eye-off,
+.shell-password-toggle.is-showing .icon-eye {
+  display: none;
+}
+
+.shell-password-toggle.is-showing .icon-eye-off {
+  display: flex;
+}
+
+/* ---------- Dark/light theme toggle (shell_common.js's data-theme-toggle) ----------
+   Same icon-swap shape as .shell-password-toggle above (two pre-rendered
+   icons, one hidden via CSS) -- except which icon is hidden isn't driven
+   by a JS-toggled class, it's driven directly by the SAME selectors
+   style.css uses to pick the color tokens themselves ([data-theme="dark"]
+   for an explicit choice, @media (prefers-color-scheme: dark) for "no
+   explicit choice yet, follow the OS"), so the icon always reflects the
+   theme actually on screen, including on first load before any click. */
+.shell-theme-toggle {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  /* Pushes itself to the far right in a plain flex row with no dedicated
+     spacer (the admin topbar) -- a no-op where a spacer element already
+     did that job (portal/employer nav), since there's no space left on
+     its left to claim by the time it's reached either way. */
+  margin-left: auto;
+}
+
+.shell-theme-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+.shell-theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.shell-theme-toggle .icon-moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shell-theme-toggle .icon-sun {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .shell-theme-toggle .icon-moon {
+    display: flex;
+  }
+}
+
+:root[data-theme="dark"] .shell-theme-toggle .icon-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] .shell-theme-toggle .icon-moon {
+  display: flex;
+}
+
+/* Fixed corner placement for the toggle on the two pre-login auth shells
+   (employer_auth_shell.html, admin_auth_shell.html), which center a
+   single card with no nav bar to put a toggle inside. */
+.auth-shell-theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  margin-left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Content-area section divider ---------- */
+.shell-section-divider {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  margin: 8px 0 16px;
+  border-bottom: 1px solid var(--outline);
+}
+
+/* ---------- Focus visibility (both shells) ----------
+   Real accessibility gap: buttons/links relied entirely on browser
+   defaults for keyboard-focus visibility, which several browsers render
+   faintly or not at all against a dark sidebar / colored buttons. */
+.admin-shell a:focus-visible,
+.admin-shell button:focus-visible,
+.admin-auth-shell a:focus-visible,
+.admin-auth-shell button:focus-visible,
+.admin-auth-shell input:focus-visible,
+.employer-shell-body a:focus-visible,
+.employer-shell-body button:focus-visible,
+.employer-auth-shell a:focus-visible,
+.employer-auth-shell button:focus-visible,
+.employer-auth-shell input:focus-visible,
+.portal-shell-body a:focus-visible,
+.portal-shell-body button:focus-visible {
+  outline: 2px solid var(--tertiary);
+  outline-offset: 2px;
+}

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
   <title>Verify Credentials • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -16,7 +20,15 @@
     </header>
 
     <section class="card verify-card">
-      <form method="POST" class="form">
+      {# Real bug found via live end-to-end testing: this template is
+         shared by /verify/<id> (GET-only, verify_by_id -- a shareable
+         link to one specific credential) and /employer/verify (GET+POST,
+         manual hash-paste, the `verify` endpoint below). Without an
+         explicit action, submitting this form on a /verify/<id> page
+         POSTs back to that same GET-only URL and 405s -- reproduced live,
+         not hypothetical. Always posting to `verify` fixes it on both
+         pages, since that route renders this exact same template. #}
+      <form method="POST" action="{{ url_for('verify') }}" class="form">
         <label for="hash">Credential Hash</label>
         <input
           id="hash"
@@ -29,7 +41,7 @@
       </form>
 
       {% if result == "ok" and credential %}
-        <div class="result success">
+        <div class="result success" role="status">
           <h3>✅ Credential Found</h3>
           <p><strong>Title:</strong> {{ credential.title }}</p>
           <p><strong>Issuer:</strong> {{ credential.issuer }}</p>
@@ -38,15 +50,21 @@
             <code class="mono">{{ credential.hash }}</code>
           </p>
 
-          {% if onchain_status is not none %}
+          {% if credential.revoked_at %}
+            <p class="badge badge-error">
+              🚫 REVOKED by a YouthChain administrator on {{ credential.revoked_at.strftime('%Y-%m-%d') }}.
+              This credential should no longer be trusted.
+            </p>
+          {% elif onchain_status is not none %}
             {% if onchain_status %}
               <p class="badge badge-success">
-                ⛓ Live check: hash IS registered on YouthChainRegistry (checked just now, not just a database flag)
+                ⛓ Live check: hash IS registered and valid on YouthChainRegistry (checked just now, not just a database flag)
               </p>
             {% else %}
               <p class="badge badge-error">
-                ⚠ Live check: this hash is NOT registered on-chain. The database has a record of it, but the
-                chain disagrees — treat this credential as unverified until that's resolved.
+                ⚠ Live check: this hash is NOT currently valid on-chain — either it was never registered, or it
+                was registered and has since been revoked. The database has a record of it, but the chain
+                disagrees — treat this credential as unverified until that's resolved.
               </p>
             {% endif %}
           {% else %}
@@ -63,9 +81,17 @@
               </span>
             </p>
           {% endif %}
+          {% if credential.revoke_onchain_tx %}
+            <p class="muted">
+              Revocation tx:
+              <span class="mono">
+                {{ credential.revoke_onchain_tx[:18] }}…{{ credential.revoke_onchain_tx[-6:] }}
+              </span>
+            </p>
+          {% endif %}
         </div>
       {% elif result == "not_found" %}
-        <div class="result error">
+        <div class="result error" role="alert">
           <h3>❌ No matching credential found</h3>
           <p>
             This hash is not in the YouthChain database. The document may be fake,

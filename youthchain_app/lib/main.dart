@@ -1,10 +1,38 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'screens/registration_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/job_screen.dart';
+import 'screens/forgot_password_screen.dart';
+import 'screens/home_shell.dart';
 import 'services/api_client.dart';
+import 'services/push_notification_service.dart';
+import 'services/theme_controller.dart';
+import 'theme/app_theme.dart';
 
-void main() {
+/// Lets ApiClient (a plain service class with no BuildContext of its own)
+/// trigger navigation when a session expires -- see
+/// ApiClient.onSessionExpired's own docstring for why this exists.
+final navigatorKey = GlobalKey<NavigatorState>();
+
+void main() async {
+  // Must resolve before the first frame -- otherwise the app briefly
+  // paints ThemeController's ThemeMode.system default and then jumps to
+  // the persisted choice a frame later, the exact flash-of-wrong-theme
+  // the web portal's theme_init.js exists to prevent.
+  WidgetsFlutterBinding.ensureInitialized();
+  await ThemeController.load();
+  await Firebase.initializeApp();
+
+  ApiClient.onSessionExpired = () {
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(
+          initialMessage: 'Your session has expired. Please log in again.',
+        ),
+      ),
+      (route) => false,
+    );
+  };
   runApp(const YouthChainApp());
 }
 
@@ -36,7 +64,14 @@ class AuthGate extends StatelessWidget {
                 );
               }
               if (userId != null) {
-                return JobScreen(userId: userId);
+                // Fire-and-forget: a device that was already logged in
+                // before this app update, or whose FCM token rotated while
+                // the app was closed, needs re-registering too -- not just
+                // the fresh-login path in login_screen.dart/
+                // registration_screen.dart. Must never block reaching the
+                // job list over a permission prompt or a slow network.
+                PushNotificationService.registerToken();
+                return HomeShell(userId: userId);
               }
               return const RegistrationScreen();
             },
@@ -53,41 +88,46 @@ class YouthChainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'YouthChain',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xff047857),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff047857)),
-        scaffoldBackgroundColor: const Color(0xfff1f5f9),
-        appBarTheme: const AppBarTheme(elevation: 0, centerTitle: true),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      ),
+    // Rebuilds the whole app on a theme change -- a rare, user-initiated,
+    // whole-screen event, so a full-tree rebuild here is the right trade
+    // (simple and correct) rather than threading theme state through
+    // every individual screen's own state management.
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.mode,
+      builder: (context, themeMode, _) {
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          title: 'YouthChain',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: themeMode,
 
-      // Resolves an existing session before deciding registration vs. home.
-      home: const AuthGate(),
+          // Resolves an existing session before deciding registration vs. home.
+          home: const AuthGate(),
 
-      // Simple named routes
-      routes: {
-        '/login': (_) => const LoginScreen(),
-        '/register': (_) => const RegistrationScreen(),
-      },
+          // Simple named routes
+          routes: {
+            '/login': (_) => const LoginScreen(),
+            '/register': (_) => const RegistrationScreen(),
+            '/forgot-password': (_) => const ForgotPasswordScreen(),
+          },
 
-      // Robust dynamic route for JobScreen
-      onGenerateRoute: (settings) {
-        if (settings.name == '/home') {
-          final args = settings.arguments;
-          if (args is Map<String, dynamic> && args['userId'] != null) {
-            final int userId = args['userId'] as int;
-            return MaterialPageRoute(builder: (_) => JobScreen(userId: userId));
-          }
+          // Robust dynamic route for JobScreen
+          onGenerateRoute: (settings) {
+            if (settings.name == '/home') {
+              final args = settings.arguments;
+              if (args is Map<String, dynamic> && args['userId'] != null) {
+                final int userId = args['userId'] as int;
+                return MaterialPageRoute(builder: (_) => HomeShell(userId: userId));
+              }
 
-          // If arguments are missing/bad, fall back to login instead of crashing
-          return MaterialPageRoute(builder: (_) => const LoginScreen());
-        }
-        return null;
+              // If arguments are missing/bad, fall back to login instead of crashing
+              return MaterialPageRoute(builder: (_) => const LoginScreen());
+            }
+            return null;
+          },
+        );
       },
     );
   }

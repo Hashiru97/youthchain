@@ -1,4 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Real gap found while preparing to test on a physically connected
+         device: this manifest (the one that applies to a release build,
+         unlike debug/profile's own copies below) never declared INTERNET
+         at all. debug/profile each carry their own copy (Flutter's stock
+         template, added so hot reload/breakpoints work), which is why
+         this never surfaced in `flutter run`, but a real release build
+         (see docs/mobile-release.md) would ship with zero network
+         permission: every API call (login, jobs,
+         apply, everything) would fail outright with no signal at build
+         time that anything was wrong. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required at runtime on Android 13+ (API 33+) before a notification
+         will actually show anything. Requested via firebase_messaging in
+         PushNotificationService, lib/services. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="youthchain_app"
         android:name="${applicationName}"

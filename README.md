@@ -1,143 +1,189 @@
-# 🌍 YouthChain  
+# 🌍 YouthChain
 ### **Verified Skills. Real Opportunities.**
 
-YouthChain is a blockchain-backed employment ecosystem designed to **empower youth**, **increase employer trust**, and **eliminate credential fraud** through a unified digital identity and verifiable credential system.
+YouthChain is digital employment infrastructure for Sierra Leone (and, over time, the wider region): a unified digital identity and verifiable-credential platform aimed at the problems that actually block youth employment — fake credentials, employer mistrust, skill verification, and portable employment history. It combines a Flask API, a Flutter mobile app, an employer web portal, an admin console, and an Ethereum-compatible smart contract for credential integrity.
 
-Built for the DSTI Big 5 Hackathon — this project demonstrates a real, deployable platform combining:
-
-- Secure API backend (Flask + SQLAlchemy)  
-- Real-time job matching (Socket.IO + Skill Matching Engine)  
-- Blockchain credential verification (Hardhat + Solidity)  
-- Mobile App (Flutter) for youth employment access  
-- Employer Web Dashboard for job posting & verification  
+It started as an entry for the DSTI Big 5 Hackathon. It is no longer scoped like one — the sections below describe what actually exists today: real authentication and authorization, rate limiting, RBAC, content-validated file uploads, employer verification and abuse reporting, containerized deployment with a load-tested Postgres backend, automated backups, and CI that runs the full test suite against both supported database engines on every change.
 
 ---
 
-# 🚀 Features
+## 🚀 Features
 
-### ✅ Youth Mobile App (Flutter)
-- Registration + OTP login  
-- Skill-based job matching (overlap score %)  
-- Apply with CV & documents  
-- Live updates when job postings change  
-- Digital **Employment Passport** showing blockchain-verified credentials  
+### Youth Mobile App (Flutter)
+- Registration with email-OTP verification, JWT-based login
+- Skill- and industry-tailored job matching (transparent, explainable scoring — no unverified AI/ML claims)
+- Apply with CV and supporting documents (content-validated uploads, not just extension checks)
+- In-app messaging with employers (read receipts, attachments), report-abuse action on any employer
+- Push (Firebase) and SMS (Twilio) notifications where configured, in-app notifications always on
+- Digital **Employment Passport** showing blockchain-verified credentials
+- Real widget test coverage, including the report/industry-matching flows
 
-### ✅ Employer Dashboard (Flask Templates)
-- Post jobs  
-- View applicants  
-- Verify credentials instantly  
-- Real-time updates through WebSockets  
+### Employer Web Portal (Flask templates, session auth)
+- Post jobs, review applicants, message candidates
+- Employer verification workflow (document upload → admin review)
+- Industry self-classification, feeding the mobile app's job-matching bonus
+- Suspension + a real, in-product appeal path if an employer believes a suspension was a mistake
 
-### ✅ Blockchain Credential Registry
-- Credentials hashed using SHA-256  
-- Hash stored on Ethereum (Hardhat local network)  
-- Fraud-proof verification by comparing hash with stored credential  
-- Integrated into backend `/issue_credential`  
+### Admin Console
+- Employer verification queue, duplicate-applicant detection queue
+- Employer abuse-report queue (aggregated and sorted by repeat-offender count, not just chronological)
+- Suspension-appeal review queue
+- Named operator accounts with role-based access (`admin` vs read-only `verifier`) and TOTP 2FA
+- Analytics dashboard (usage events, no fabricated metrics)
 
----
-
-# 🏛 System Architecture
-
-              +---------------------+
-              |   Flutter Mobile    |
-              |     Application     |
-              +----------+----------+
-                         |
-                         | REST / WebSocket
-                         v
-  +------------------------------------------------+
-  |                    Flask API                   |
-  |  Auth, Jobs, Applications, Passport, Issuance  |
-  +----------------------+-------------------------+
-                         |
-                         | SQLAlchemy ORM
-                         v
-                +------------------+
-                |   SQLite DB      |
-                +------------------+
-                         |
-                         | SHA-256 hash
-                         v
-+---------------------------------------------------------------+
-| Blockchain (Hardhat EVM) |
-| CredentialRegistry.sol — stores credential hash + issuer |
-+---------------------------------------------------------------+
+### Blockchain Credential Registry
+- Credentials hashed and the hash registered on-chain via a Solidity contract with real access control (not an open write)
+- Backend shells out to the Hardhat CLI to write/verify on-chain state; degrades gracefully (a credential still issues, just without on-chain verification) if the chain is unreachable — this is a deliberate, tested fallback, not a silent failure
+- Contract tests under `blockchain/test/`, independent of the backend's Python suite
 
 ---
 
-# 📦 Project Structure
+## 🏛 System Architecture
 
-youthchain_project/
-├── backend/
-├── youthchain_app/ (Flutter)
-├── blockchain/ (Hardhat)
-├── README.md
-└── RUN_THIS_FIRST.txt        
+```
+                +----------------------+
+                |   Flutter Mobile /   |
+                |   Employer Web /     |
+                |   Admin Console      |
+                +-----------+----------+
+                            |
+                            |  REST / WebSocket (JWT or session auth)
+                            v
+      +----------------------------------------------+
+      |                  Flask API                    |
+      |  Auth · Jobs · Applications · Messaging ·      |
+      |  Reports · Passport · Credential Issuance      |
+      +------------------+------------------+----------+
+                          |                  |
+              SQLAlchemy ORM        subprocess: npx hardhat
+                          |                  |
+                          v                  v
+              +----------------------+   +---------------------------+
+              |     PostgreSQL       |   |   Hardhat / Ethereum EVM   |
+              | (SQLite fallback for |   |  CredentialRegistry.sol —  |
+              |     local dev)       |   |  stores credential hash    |
+              +----------------------+   +---------------------------+
+```
 
-# 🧪 Quickstart for Judges
-
-Follow these steps EXACTLY to run the system locally.
+Redis (optional but required for a multi-instance deployment) backs shared rate limiting across replicas — see `docker-compose.scale.yml`.
 
 ---
 
-## **1️⃣ Start the Blockchain (Hardhat)**
+## 📦 Project Structure
+
+```
+youthchain/
+├── backend/              Flask API, SQLAlchemy models, Alembic migrations, tests
+├── youthchain_app/       Flutter mobile app
+├── blockchain/           Hardhat project — CredentialRegistry.sol, deploy/register/check scripts, contract tests
+├── docs/                 disaster-recovery.md, load-testing.md, monitoring.md, secrets-management.md
+├── loadtest/             k6 scripts backing docs/load-testing.md's measured numbers
+├── observability/        Prometheus/Grafana/Loki config (docker-compose.observability.yml)
+├── loadbalancer/         nginx config for docker-compose.scale.yml
+├── docker-compose.yml            Local/staging stack — bundled Postgres, single backend instance
+├── docker-compose.tls.yml        Self-contained production stack with Caddy auto-HTTPS
+├── docker-compose.scale.yml      Horizontal scaling: 3 backend replicas + nginx + Postgres + Redis
+├── docker-compose.backup.yml     Additive: scheduled backups + self-hosted MinIO off-site sync
+├── docker-compose.vault.yml      Additive: self-hosted HashiCorp Vault for secrets
+├── docker-compose.observability.yml   Additive: Prometheus + Grafana + Loki
+└── CLAUDE.md              Engineering operating instructions for this repo
+```
+
+---
+
+## 🧪 Quickstart
+
+### Option A — Docker Compose (recommended)
+
+Brings up the backend with a bundled, health-checked Postgres instance and applies all migrations automatically. This is the closest thing to "production topology" you can run with one command.
 
 ```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env: at minimum set JWT_SECRET_KEY to a real random value.
+docker compose up -d --build
+curl http://127.0.0.1:5000/healthz
+```
+
+The blockchain node isn't included here (it's local dev/test tooling, not a production service this platform runs itself — see `docker-compose.yml`'s own header comment). Credential issuance still works without it; it just won't write on-chain. To exercise the full on-chain path locally, run the blockchain node separately (Option B, step 1) alongside the container stack.
+
+### Option B — Run each piece directly
+
+**1. Blockchain**
+```bash
 cd blockchain
-npx hardhat node 
-
-Keep this terminal open.
-
-Now deploy the smart contract:
-
+npm install
+npx hardhat node          # keep this terminal open
+```
+In a second terminal:
+```bash
+cd blockchain
 npx hardhat run scripts/deploy.js --network localhost
+```
+This writes `blockchain/deployed.json`, which `registerCredential.js`/`checkRegistered.js` read automatically — no address to copy/paste anywhere.
 
-You will see:
-YouthChainRegistry deployed to: 0x5FbDB...
-
-Start the Backend (Flask)
+**2. Backend**
+```bash
 cd backend
+python -m venv venv && source venv/bin/activate   # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
-python3 app.py
+cp .env.example .env   # set JWT_SECRET_KEY; leave DATABASE_URL blank for a zero-config local SQLite file
+python app.py
+```
+Runs on `http://127.0.0.1:5000`. Registration requires an email OTP by default (`ENFORCE_EMAIL_OTP_REG=1`); without real SMTP configured, the code is logged to the console instead of emailed — see `.env.example`. Request one via `POST /auth/otp/register/request`, then include `otp_code` in your `POST /register` call.
 
-Backend runs on:
-
-http://127.0.0.1:5000
-
-Start the Flutter App
+**3. Mobile app**
+```bash
 cd youthchain_app
 flutter pub get
-flutter run -d chrome
+flutter run
+```
+The API base URL is `ApiClient.baseUrl` (`lib/services/api_client.dart`), not a separate config file.
 
-Environment Configuration
+---
 
-Create backend/.env using this template:
-FLASK_ENV=development
-SECRET_KEY=supersecretkey123
+## ⚙️ Environment Configuration
 
-# Email (optional for OTP)
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_EMAIL=your_email@gmail.com
-SMTP_PASSWORD=your_app_password
+Every backend environment variable — what it does, its default/fallback behavior, and which are required vs. optional — is documented inline in [`backend/.env.example`](backend/.env.example). Copy it to `backend/.env` and start there rather than guessing at values; it's kept current as the source of truth, not duplicated here where it would drift.
 
-# Blockchain RPC
-RPC_URL=http://127.0.0.1:8545
-CONTRACT_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
+Blockchain-side signer configuration (`ISSUER_PRIVATE_KEY`, optional `CONTRACT_ADDRESS`, `OWNER_ADDRESS`) is documented the same way in [`blockchain/.env.example`](blockchain/.env.example) — nothing needs to be set there for local development against the Hardhat node.
 
-Flutter app config (lib/config.dart)
-class Config {
-  static const apiBase = "http://127.0.0.1:5000";
-}
+---
 
-Issue a credential:
-curl -X POST http://127.0.0.1:5000/issue_credential \
-  -F "user_id=1" \
-  -F "title=ENGI 316 Certificate" \
-  -F "issuer=Cyprus International University" \
-  -F "file=@/path/to/file.pdf"
-  
-  Then register it on-chain:
-  cd blockchain
-HASH=<paste_hash_here> \
-npx hardhat run scripts/registerCredential.js --network localhost
+## ✅ Testing
+
+```bash
+# Backend — 149 tests, runs against SQLite by default
+cd backend && python -m pytest tests/ -v
+
+# Backend against a real local Postgres instead (matches CI's second matrix leg):
+DATABASE_URL=postgresql://user:pass@localhost:5432/db python -m pytest tests/ -v
+
+# Blockchain contract tests
+cd blockchain && npx hardhat test
+
+# Mobile widget tests
+cd youthchain_app && flutter test
+```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all three on every push/PR, plus a real Redis service for the backend job, a Postgres matrix leg alongside the SQLite one, and a Docker build-and-`/healthz`-check job — the same database engine production actually runs on is verified on every change, not just tested manually.
+
+---
+
+## 🚢 Deployment & Operations
+
+- **Local/staging**: `docker-compose.yml` — bundled Postgres, single backend instance.
+- **Public-facing with TLS**: `docker-compose.tls.yml` — adds Caddy for automatic Let's Encrypt HTTPS.
+- **Horizontal scaling**: `docker-compose.scale.yml` — 3 backend replicas behind nginx, Postgres, Redis-backed shared rate limiting. Real, measured numbers (not estimated) in [`docs/load-testing.md`](docs/load-testing.md).
+- **Backups**: `docker-compose.backup.yml` (additive) — scheduled `pg_dump`/SQLite snapshots with optional S3-compatible off-site sync. Verified end-to-end in [`docs/disaster-recovery.md`](docs/disaster-recovery.md).
+- **Secrets**: `docker-compose.vault.yml` (additive) — self-hosted HashiCorp Vault integration. See [`docs/secrets-management.md`](docs/secrets-management.md).
+- **Observability**: `docker-compose.observability.yml` (additive) — Prometheus + Grafana + Loki. See [`docs/monitoring.md`](docs/monitoring.md) for wiring `/healthz` to real external alerting.
+
+Compose files marked "additive" run alongside `docker-compose.yml` (`docker compose -f docker-compose.yml -f docker-compose.X.yml up -d`); `docker-compose.tls.yml` and `docker-compose.scale.yml` are self-contained alternatives, not overlays.
+
+---
+
+## 🔒 Security Posture (honest summary, not a claim of completeness)
+
+JWT auth for the mobile app, session auth for the employer/admin web portals, both re-checked for account-active status on every request (immediate revocation on suspension, not just at next login). Role-based admin access with TOTP 2FA. Redis-backed rate limiting (OTP, uploads, reports) with an in-memory fallback for single-instance/local use. Content-validated (magic-byte, not extension-only) file uploads with per-user unique filenames. CSRF protection on all session-authenticated forms. See `CLAUDE.md` for the standing engineering discipline this repo is held to, and the codebase's own inline comments (searchable for `BL-`/`S-` prefixes) for the specific finding behind each of these.
+
+This is not a claim that every gap is closed — treat any specific security question as worth verifying against the current code, not this summary.

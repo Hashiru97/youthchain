@@ -1,0 +1,113 @@
+# Automated scheduled backups + self-hosted off-site sync (MinIO). Additive
+# — run alongside docker-compose.yml, which already defines `backend` (this
+# file adds `backup-cron` and `minio` only, same pattern as
+# docker-compose.observability.yml).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d
+#
+# `backup-cron` reuses the exact same backend image (already has pg_dump/
+# psql/boto3 — see backend/Dockerfile) rather than a separate cron image,
+# and runs backend/scripts/backup.py on a real interval via a shell loop —
+# simple, and correct: no separate cron daemon to keep in sync with the
+# app's own dependencies.
+#
+# MinIO here is real, self-hosted, S3-API-compatible object storage — not
+# a mock. Dev-mode caveat, stated as plainly as docker-compose.vault.yml's:
+# single-node, fixed root credentials checked into this file. A real
+# deployment points BACKUP_S3_* (see backend/.env.example) at a real
+# managed bucket (or a properly operated, multi-node MinIO cluster)
+# instead — provisioning that is an infrastructure decision, not something
+# this compose file can responsibly make for you.
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=youthchain-backup
+      - MINIO_ROOT_PASSWORD=youthchain-backup-dev
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: creates the backup bucket if it doesn't already exist, then
+  # exits. backup-cron waits for this to succeed before its first backup
+  # attempt.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 youthchain-backup youthchain-backup-dev &&
+        mc mb --ignore-existing local/youthchain-backups
+      "
+
+  backup-cron:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[backup-cron] Running scheduled backup at $$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if python scripts/backup.py; then
+            sleep "${BACKUP_INTERVAL_SECONDS:-86400}"
+          else
+            # Real gap found and fixed alongside exposing backup health as
+            # a real metric (see youthchain_backup_* gauges in app.py): a
+            # failure used to wait out the FULL interval before retrying —
+            # for the default daily schedule, up to 24h of a broken
+            # backup pipeline before even trying again. A transient
+            # failure (Postgres briefly unreachable, a network blip on
+            # the S3 upload) now gets retried much sooner; a persistent
+            # failure now shows up in youthchain_backup_last_attempt_success
+            # well before a day has passed, for whoever's watching Grafana.
+            echo "[backup-cron] Backup failed, retrying in ${BACKUP_RETRY_SECONDS:-300}s instead of waiting the full interval"
+            sleep "${BACKUP_RETRY_SECONDS:-300}"
+          fi
+        done
+    env_file:
+      - ./backend/.env
+    environment:
+      # Must match docker-compose.yml's `backend` service's own DATABASE_URL
+      # override exactly — real gap found and fixed alongside the
+      # Postgres-by-default change: without this, backup-cron would fall
+      # back to whatever backend/.env's (blank-by-default) DATABASE_URL
+      # says, see scripts/backup.py treat that as "no Postgres configured",
+      # and silently back up a stale/nonexistent SQLite file instead of the
+      # real data backend is actually writing to.
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - BACKUP_S3_ENDPOINT=http://minio:9000
+      - BACKUP_S3_BUCKET=youthchain-backups
+      - BACKUP_S3_ACCESS_KEY=youthchain-backup
+      - BACKUP_S3_SECRET_KEY=youthchain-backup-dev
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  # Same volume names as docker-compose.yml, deliberately not marked
+  # external — when both files are passed together (as this is designed
+  # to be run), Compose merges top-level `volumes:` sections by name into
+  # one project, so this correctly refers to the exact same volumes
+  # `backend` already writes to, without assuming a specific Compose
+  # project name (an `external: true` + hardcoded name would have broken
+  # the moment this repo lived in a differently-named directory).
+  uploads-data:
+  backups-data:

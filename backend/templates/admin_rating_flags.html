@@ -1,0 +1,86 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Rating Disputes{% endblock %}
+{% block page_title %}Rating Disputes{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Gig-work ratings either side flagged as unfair. Hiding a rating removes it from the worker/employer's trust score immediately but keeps the record for audit.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Open ({{ open_flags|length }})</h2>
+    </div>
+    {% if open_flags %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Rating</th><th>Flagged by</th><th>Reason</th><th>When</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for flag in open_flags %}
+        {% set rating = ratings.get(flag.rating_id) %}
+        {% set worker = users.get(rating.user_id) if rating else None %}
+        {% set employer = employers.get(rating.employer_id) if rating else None %}
+        <tr>
+          <td data-label="Rating">
+            {% if rating %}
+              {{ rating.score }}/5 &middot; {{ rating.direction | replace("_", " ") }}
+              <br /><span class="muted">{{ job_by_application_id.get(rating.application_id, "Unknown job") }}</span>
+              <br /><span class="muted">{{ worker.name if worker else "Unknown worker" }} &middot; {{ employer.name if employer else "Unknown employer" }}</span>
+              {% if rating.comment %}<br /><span class="muted">&ldquo;{{ rating.comment }}&rdquo;</span>{% endif %}
+            {% else %}
+              <span class="muted">Rating no longer exists</span>
+            {% endif %}
+          </td>
+          <td data-label="Flagged by">{{ flag.flagged_by_role | capitalize }}</td>
+          <td data-label="Reason">{{ flag.reason }}</td>
+          <td data-label="When">{{ flag.created_at }}</td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_resolve_rating_flag', flag_id=flag.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" name="decision" value="dismiss" class="btn small">Dismiss</button>
+              <button type="submit" name="decision" value="hide" class="btn reject"
+                data-confirm="Hide this rating? It will be excluded from the trust score immediately.">Hide Rating</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No open rating disputes.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recently reviewed</h2>
+    </div>
+    {% if reviewed %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Rating</th><th>Flagged by</th><th>Decision</th><th>When</th></tr></thead>
+      <tbody>
+        {% for flag in reviewed %}
+        {% set rating = ratings.get(flag.rating_id) %}
+        <tr>
+          <td data-label="Rating">{{ (rating.score ~ "/5") if rating else "—" }}</td>
+          <td data-label="Flagged by">{{ flag.flagged_by_role | capitalize }}</td>
+          <td class="status {{ 'rejected' if flag.status == 'actioned' else 'accepted' }}">
+            {{ "Rating hidden" if flag.status == "actioned" else "Dismissed" }}
+          </td>
+          <td data-label="When">{{ flag.reviewed_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No rating disputes reviewed yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

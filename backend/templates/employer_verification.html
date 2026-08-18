@@ -1,0 +1,90 @@
+{% extends "employer_shell.html" %}
+
+{% block title %}Verification{% endblock %}
+
+{% block content %}
+  <div class="admin-section-header" style="margin-bottom: 20px;">
+    <h2>✅ Employer Verification</h2>
+    <p>
+      Registered business? Upload a business document (registration certificate, tax ID, or
+      similar). Hiring informally — a household needing a cleaner, someone needing an okada
+      rider — with no business to register? Upload a personal ID instead (national ID, voter's
+      card, or driver's license). Either way an admin reviews it and youth see a real trust
+      badge, not just a generic "Verified" label for both.
+    </p>
+  </div>
+
+  <section class="card">
+    <p>
+      Status:
+      <span class="status {{ 'accepted' if employer.verification_status == 'verified' else ('rejected' if employer.verification_status == 'rejected' else 'pending') }}">
+        {% if employer.verification_status == 'verified' %}
+          Verified {{ "Business" if employer.verification_type == "business" else "Individual" }}
+        {% else %}
+          {{ employer.verification_status | capitalize }}
+        {% endif %}
+      </span>
+    </p>
+
+    {% if employer.verification_status == 'rejected' %}
+      <p class="muted">
+        Your previous submission wasn't approved. You can upload a new document below.
+      </p>
+    {% elif employer.verification_status == 'pending' %}
+      <p class="muted">Your {{ "personal ID" if employer.verification_type == "individual" else "document" }} is awaiting admin review.</p>
+    {% elif employer.verification_status == 'verified' %}
+      <p class="muted">
+        {% if employer.verification_type == "individual" %}
+          You're verified as an individual employer. Thank you — youth see this as a distinct,
+          honest badge, not the same one shown to registered businesses.
+        {% else %}
+          Your organization is verified. Thank you.
+        {% endif %}
+      </p>
+    {% endif %}
+
+    {% if employer.verification_document %}
+      <p>
+        <a href="{{ url_for('download_employer_verification_document', filename=employer.verification_document) }}" class="link">
+          📎 View your uploaded document
+        </a>
+      </p>
+    {% endif %}
+
+    {% if error %}
+      <div class="result error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    {% if employer.verification_status != 'verified' %}
+    <form method="POST" class="form" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <label>What are you verifying as?</label>
+      <div class="post-job-type-choice">
+        <label class="post-job-type-option">
+          <input type="radio" name="verification_type" value="business" id="verification_type_business" {{ "checked" if employer.account_type != "individual" }} />
+          <span><strong>Registered business</strong> — I have a business registration certificate or tax ID.</span>
+        </label>
+        <label class="post-job-type-option">
+          <input type="radio" name="verification_type" value="individual" id="verification_type_individual" {{ "checked" if employer.account_type == "individual" }} />
+          <span><strong>Individual / informal employer</strong> — I'm hiring directly, not as a registered business.</span>
+        </label>
+      </div>
+
+      <label for="document" id="document_label">Business document</label>
+      <input id="document" type="file" name="document" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" required />
+      <small class="helper-text" id="document_help">
+        Business registration certificate, tax ID, or similar.
+      </small>
+
+      <div class="form-footer">
+        <button type="submit" class="btn primary">Submit for review</button>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='employer_verification.js', v=asset_version('employer_verification.js')) }}"></script>
+{% endblock %}

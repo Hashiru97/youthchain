@@ -1,0 +1,83 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_shield_check, icon_map_pin, icon_clock, icon_upload, icon_star %}
+
+{% block title %}{{ job.title }}{% endblock %}
+
+{% block content %}
+  <a href="{{ url_for('portal_dashboard') }}" class="btn secondary outline" style="margin-top: 24px;">⬅ Back to jobs</a>
+
+  <div class="portal-job-detail-header">
+    <h1>{{ job.title }}</h1>
+    {% if employer %}
+    <div class="portal-job-card-employer" style="margin-bottom: 4px;">
+      {{ employer.name }}
+      {% if employer.verification_status == 'verified' %}
+        <span class="verified-badge" title="Verified {{ 'Individual' if employer.verification_type == 'individual' else 'Business' }}">{{ icon_shield_check() }}</span>
+      {% endif %}
+    </div>
+    {% if employer_trust and employer_trust.rating_count %}
+    <div class="portal-job-card-employer-rating" style="margin-bottom: 10px;">
+      {{ icon_star() }} {{ employer_trust.avg_rating }} · {{ employer_trust.rating_count }} rating{{ "s" if employer_trust.rating_count != 1 }} from past workers
+    </div>
+    {% endif %}
+    {% endif %}
+    <div class="portal-job-detail-meta">
+      <span>{{ icon_map_pin() }} {{ job.location }}</span>
+      <span>{{ icon_clock() }} {{ job.duration }}</span>
+      {% if job.job_type == "gig" %}
+        <span class="portal-skill-pill portal-skill-pill-gig">🤝 Gig / hire-based{{ (" — " ~ job.category) if job.category }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if job.job_type == "gig" %}
+  <div class="badge badge-gig" role="note">
+    🤝 No CV needed for this gig — trust here comes from completed gigs and ratings instead.
+  </div>
+  {% endif %}
+
+  {% if job.required_skills %}
+  <div class="portal-job-card-skills" style="margin: 10px 0 20px;">
+    {% for s in job.required_skills.split(',') %}
+      {% if s.strip() %}<span class="portal-skill-pill">{{ s.strip() }}</span>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="card">
+    <h2 class="card-title">Apply for this role</h2>
+
+    {% if error %}
+      <div class="result error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    {% if already_applied %}
+      <div class="result success" role="status">✅ You've already applied for this job. Track its status on <a href="{{ url_for('portal_applications') }}">My Applications</a>.</div>
+    {% elif not current_portal_user %}
+      <p class="muted">You'll need an account to apply.</p>
+      <div class="form-footer">
+        <a href="{{ url_for('portal_login', next=request.path) }}" class="btn primary">Log in to apply</a>
+        <a href="{{ url_for('portal_register') }}" class="btn secondary outline">Create an account</a>
+      </div>
+    {% else %}
+      <form method="POST" action="{{ url_for('portal_apply', job_id=job.id) }}" class="form portal-apply-panel" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        {% if job.job_type == "gig" %}
+        <label for="cv"><span class="form-label-icon">{{ icon_upload() }}</span> Proof of past work (optional)</label>
+        <input id="cv" type="file" name="cv" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
+        {% else %}
+        <label for="cv"><span class="form-label-icon">{{ icon_upload() }}</span> Your CV (required)</label>
+        <input id="cv" type="file" name="cv" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" required />
+        {% endif %}
+
+        <label for="supporting">Supporting document (optional)</label>
+        <input id="supporting" type="file" name="supporting" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
+
+        <div class="form-footer">
+          <button type="submit" class="btn primary">Submit Application</button>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}

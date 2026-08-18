@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>{% block title %}Admin{% endblock %} • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <!-- Real regression, found and fixed after a user report: this file
+       previously had no theme_init.js, so an admin's explicit dark-mode
+       choice (set by the toggle below) never persisted past the current
+       page view -- every navigation silently fell back to whatever
+       @media (prefers-color-scheme) resolved to. A prior fix mistakenly
+       treated that as "admin has no real dark-mode support" and deleted
+       the toggle entirely instead -- wrong diagnosis: zero hardcoded
+       colors exist anywhere in admin.css or any admin template (checked
+       directly), so the shared light/dark tokens already render this
+       whole page correctly. The actual, narrow fix is this one script
+       tag, exactly matching portal_shell.html/employer_shell.html's own
+       <head>, not removing the feature. -->
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v=asset_version('admin.css')) }}" />
+</head>
+<body class="admin-shell-body">
+  {% from "_admin_icons.html" import icon_dashboard, icon_shield_check, icon_duplicate, icon_users, icon_lock, icon_logout, icon_menu, icon_flag, icon_appeal, icon_award, icon_sun, icon_moon, icon_search, icon_briefcase %}
+  <div class="admin-shell">
+    <div class="admin-scrim" id="admin-nav-scrim"></div>
+
+    <aside class="admin-sidebar">
+      <div class="admin-brand">
+        <div class="admin-brand-mark">
+          <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
+        </div>
+        <div class="admin-brand-text">
+          <span class="admin-brand-title">YouthChain</span>
+          <span class="admin-brand-subtitle">Admin Console</span>
+        </div>
+      </div>
+
+      <nav class="admin-nav" aria-label="Admin navigation">
+        <a href="{{ url_for('admin_analytics') }}" class="admin-nav-link {{ 'active' if active_page == 'analytics' }}">
+          {{ icon_dashboard() }} Dashboard
+        </a>
+        {% if is_admin_role %}
+        <div class="admin-nav-section-label">Trust &amp; Safety</div>
+        <a href="{{ url_for('admin_employer_verifications') }}" class="admin-nav-link {{ 'active' if active_page == 'employer_verifications' }}">
+          {{ icon_shield_check() }} Employer Verifications
+          {% if admin_pending.employer_verifications %}<span class="shell-nav-badge">{{ admin_pending.employer_verifications }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_duplicate_flags') }}" class="admin-nav-link {{ 'active' if active_page == 'duplicate_flags' }}">
+          {{ icon_duplicate() }} Duplicate Accounts
+          {% if admin_pending.duplicate_flags %}<span class="shell-nav-badge">{{ admin_pending.duplicate_flags }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_reports') }}" class="admin-nav-link {{ 'active' if active_page == 'reports' }}">
+          {{ icon_flag() }} Employer Reports
+          {% if admin_pending.reports %}<span class="shell-nav-badge">{{ admin_pending.reports }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_listing_reports') }}" class="admin-nav-link {{ 'active' if active_page == 'listing_reports' }}">
+          {{ icon_flag() }} Listing Reports
+          {% if admin_pending.listing_reports %}<span class="shell-nav-badge">{{ admin_pending.listing_reports }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_appeals') }}" class="admin-nav-link {{ 'active' if active_page == 'appeals' }}">
+          {{ icon_appeal() }} Employer Appeals
+          {% if admin_pending.appeals %}<span class="shell-nav-badge">{{ admin_pending.appeals }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_rating_flags') }}" class="admin-nav-link {{ 'active' if active_page == 'rating_flags' }}">
+          {{ icon_flag() }} Rating Disputes
+          {% if admin_pending.rating_flags %}<span class="shell-nav-badge">{{ admin_pending.rating_flags }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin_credentials') }}" class="admin-nav-link {{ 'active' if active_page == 'credentials' }}">
+          {{ icon_award() }} Credentials
+        </a>
+        <a href="{{ url_for('admin_users') }}" class="admin-nav-link {{ 'active' if active_page == 'users' }}">
+          {{ icon_users() }} Youth Accounts
+        </a>
+        <a href="{{ url_for('admin_user_appeals') }}" class="admin-nav-link {{ 'active' if active_page == 'user_appeals' }}">
+          {{ icon_appeal() }} Youth Appeals
+          {% if admin_pending.user_appeals %}<span class="shell-nav-badge">{{ admin_pending.user_appeals }}</span>{% endif %}
+        </a>
+        <div class="admin-nav-section-label">Administration</div>
+        <a href="{{ url_for('admin_accounts') }}" class="admin-nav-link {{ 'active' if active_page == 'accounts' }}">
+          {{ icon_users() }} Manage Admins
+        </a>
+        <a href="{{ url_for('admin_issuers') }}" class="admin-nav-link {{ 'active' if active_page == 'issuers' }}">
+          {{ icon_lock() }} Blockchain Issuers
+        </a>
+        <div class="admin-nav-section-label">Job Scanner</div>
+        <a href="{{ url_for('admin_scanner') }}" class="admin-nav-link {{ 'active' if active_page == 'scanner' }}">
+          {{ icon_search() }} Scan Sources
+        </a>
+        <a href="{{ url_for('admin_scanner_companies') }}" class="admin-nav-link {{ 'active' if active_page == 'scanner_companies' }}">
+          {{ icon_briefcase() }} Scraped Companies
+          {% if admin_pending.unverified_companies %}<span class="shell-nav-badge">{{ admin_pending.unverified_companies }}</span>{% endif %}
+        </a>
+        {% endif %}
+        <a href="{{ url_for('admin_2fa_setup') }}" class="admin-nav-link {{ 'active' if active_page == '2fa' }}">
+          {{ icon_lock() }} 2FA Settings
+        </a>
+      </nav>
+
+      <div class="admin-sidebar-footer">
+        {% if current_admin %}
+        <div class="admin-identity">
+          <div class="admin-identity-avatar">{{ current_admin.name[:1]|upper }}</div>
+          <div class="admin-identity-text">
+            <div class="admin-identity-name">{{ current_admin.name }}</div>
+            <div class="admin-identity-role">{{ current_admin.role }}</div>
+          </div>
+        </div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin_logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="admin-logout-btn">{{ icon_logout() }} Log out</button>
+        </form>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <header class="admin-topbar">
+        <button type="button" class="admin-menu-toggle" id="admin-nav-toggle" aria-label="Toggle navigation menu">
+          {{ icon_menu() }}
+        </button>
+        <div>
+          <h1>{% block page_title %}{% endblock %}</h1>
+          {% block page_subtitle %}{% endblock %}
+        </div>
+        <button type="button" class="shell-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
+          <span class="icon-sun">{{ icon_sun() }}</span>
+          <span class="icon-moon">{{ icon_moon() }}</span>
+        </button>
+      </header>
+      <main class="admin-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
+  <script src="{{ url_for('static', filename='admin_shell.js', v=asset_version('admin_shell.js')) }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

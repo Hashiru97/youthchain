@@ -1,0 +1,682 @@
+/* YouthChain admin console — a dedicated shell layered on top of
+   style.css's shared design tokens (colors, radius, shadow), loaded only
+   by templates/admin_shell.html and templates/admin_auth_shell.html.
+   Deliberately a separate file rather than additions to style.css: the
+   employer/youth-facing pages (employer_dashboard.html, job listings,
+   the mobile app's web-reachable pages) keep their current centered,
+   single-column look untouched — this file only ever applies inside
+   .admin-shell / .admin-auth-shell, so it can't leak into them. */
+
+:root {
+  --admin-sidebar-bg: #0b1f1a;
+  --admin-sidebar-bg-hover: #12332a;
+  --admin-sidebar-bg-active: #14392f;
+  --admin-sidebar-border: rgba(255, 255, 255, 0.08);
+  --admin-sidebar-text: #a9bdb6;
+  --admin-sidebar-text-active: #ffffff;
+  --admin-sidebar-width: 264px;
+  --admin-topbar-height: 68px;
+}
+
+/* ---------- Shell layout ---------- */
+body.admin-shell-body {
+  margin: 0;
+  background: var(--bg);
+}
+
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  width: var(--admin-sidebar-width);
+  flex-shrink: 0;
+  background: var(--admin-sidebar-bg);
+  color: var(--admin-sidebar-text);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  transition: transform 0.2s ease;
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid var(--admin-sidebar-border);
+}
+
+.admin-brand-mark {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-brand-mark img {
+  height: 28px;
+  width: auto;
+}
+
+.admin-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.admin-brand-title {
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+
+.admin-brand-subtitle {
+  color: var(--admin-sidebar-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.admin-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-nav-section-label {
+  padding: 14px 10px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(169, 189, 182, 0.6);
+}
+
+.admin-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--admin-sidebar-text);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.admin-nav-link svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
+.admin-nav-link:hover {
+  background: var(--admin-sidebar-bg-hover);
+  color: var(--admin-sidebar-text-active);
+}
+
+.admin-nav-link.active {
+  background: var(--admin-sidebar-bg-active);
+  color: var(--admin-sidebar-text-active);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.admin-sidebar-footer {
+  padding: 14px;
+  border-top: 1px solid var(--admin-sidebar-border);
+}
+
+.admin-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 12px;
+}
+
+.admin-identity-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--admin-sidebar-bg-active);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.admin-identity-text {
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.admin-identity-name {
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-identity-role {
+  font-size: 11px;
+  color: var(--admin-sidebar-text);
+  text-transform: capitalize;
+}
+
+.admin-logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--admin-sidebar-text-active);
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.admin-logout-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.admin-logout-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+/* ---------- Main column ---------- */
+.admin-main {
+  flex: 1;
+  margin-left: var(--admin-sidebar-width);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* min-height, not height: same real bug just found and fixed on the
+   employer shell's topbar (see employer.css's own comment on
+   .employer-topbar) -- a sticky, z-indexed bar with a hard-capped height
+   paints its overflow on top of the content below it rather than
+   growing to fit, the moment its content needs a few more pixels than
+   the assumed value on a real device. Same structural pattern here, so
+   fixed proactively rather than waiting for a separate report. */
+.admin-topbar {
+  min-height: var(--admin-topbar-height);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--outline);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 28px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.admin-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.admin-menu-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-primary);
+}
+
+.admin-topbar h1 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.admin-topbar-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 28px 32px 64px;
+  max-width: 1180px;
+  width: 100%;
+}
+
+.admin-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 31, 26, 0.45);
+  z-index: 35;
+}
+
+@media (max-width: 900px) {
+  .admin-sidebar {
+    transform: translateX(-100%);
+    width: min(var(--admin-sidebar-width), 84vw);
+  }
+  body.admin-nav-open .admin-sidebar {
+    transform: translateX(0);
+  }
+  body.admin-nav-open .admin-scrim {
+    display: block;
+  }
+  .admin-main {
+    margin-left: 0;
+  }
+  .admin-menu-toggle {
+    display: inline-flex;
+  }
+  .admin-content {
+    padding: 20px 16px 48px;
+  }
+  .admin-topbar {
+    padding: 0 16px;
+  }
+}
+
+/* ---------- Stat card grid (admin_analytics.html) ---------- */
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.admin-stat-card {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-stat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-stat-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.admin-stat-icon.tone-primary {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+.admin-stat-icon.tone-secondary {
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+}
+.admin-stat-icon.tone-tertiary {
+  background: var(--tertiary-light);
+  color: var(--tertiary-dark);
+}
+.admin-stat-icon.tone-success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.admin-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.admin-stat-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---------- Section headers within admin content ---------- */
+.admin-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.admin-section-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.admin-section-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- Refined data table (scoped to admin content only) ---------- */
+.admin-content .applicants-table th {
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--outline);
+}
+
+.admin-content .applicants-table {
+  box-shadow: none;
+}
+
+/* ---------- Role pill ---------- */
+.admin-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.admin-role-pill.role-admin {
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+}
+.admin-role-pill.role-verifier {
+  background: var(--tertiary-light);
+  color: var(--tertiary-dark);
+}
+
+/* ---------- Empty queue state ---------- */
+.admin-empty-queue {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-muted);
+}
+.admin-empty-queue svg {
+  width: 40px;
+  height: 40px;
+  stroke: var(--outline);
+  margin-bottom: 10px;
+}
+
+/* ---------- Auth shell (login / 2FA verify) ---------- */
+.admin-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(15, 122, 92, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(109, 40, 217, 0.08), transparent 45%),
+    var(--bg);
+}
+
+.admin-auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 36px 32px;
+}
+
+.admin-auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.admin-auth-brand-mark {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.admin-auth-brand-mark img {
+  height: 42px;
+  width: auto;
+}
+
+.admin-auth-brand h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.admin-auth-brand p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 300px;
+}
+
+/* ---------- Admin-only utilities ----------
+   Real gap found via a full OWASP Top 10 (A05) review — see style.css's
+   own "Shared layout utilities" comment for the full reasoning. These are
+   admin-console-specific (a QR enrollment image, a TOTP code display, the
+   analytics dashboard's chart layout, a flagged-report row highlight),
+   which is why they live here rather than in style.css alongside the ones
+   used by more than one section. */
+.admin-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.admin-icon-inline-success {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  color: var(--success);
+}
+.admin-icon-inline-success svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+/* Neutral small inline icon (e.g. a timestamp's clock glyph) -- same
+   sizing as admin-icon-inline-success but without forcing a color, so it
+   inherits the muted table-cell text color around it. Every inline SVG
+   in this codebase needs an explicit sizing rule like this one; there is
+   no generic `svg { width; height; }` fallback (found the hard way --
+   icon_clock() used bare in admin_scanner.html rendered at the browser's
+   unconstrained default SVG size, ~300px, blowing up the whole table
+   row, only visible by actually opening the rendered page, not from any
+   automated test asserting on HTML text content alone). */
+.admin-icon-inline {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+}
+.admin-icon-inline svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+.admin-qr-image {
+  display: block;
+  margin: 16px auto;
+  width: 200px;
+  height: 200px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+}
+.admin-mt-lg {
+  margin-top: 24px;
+}
+.admin-totp-code-display {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  letter-spacing: 4px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+.admin-chart-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.admin-chart-col {
+  flex: 1;
+  min-width: 140px;
+}
+.admin-row-flagged {
+  background: var(--error-bg);
+}
+
+/* ---------- Needs Attention panel (admin_analytics.html) ----------
+   Real gap found in a full admin-console review: the dashboard was pure
+   read-only reporting, disconnected from the five actionable queues
+   elsewhere in the console -- an admin had no way to tell, from the
+   landing page, whether anything needed them at all. Admin-role only
+   (see is_admin_role in app.py); a verifier can't act on any of these,
+   so showing them here would just be noise. */
+.admin-attention-panel {
+  margin-bottom: 28px;
+}
+
+.admin-attention-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.admin-attention-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.admin-attention-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.admin-attention-card.has-pending {
+  border-color: rgba(194, 42, 42, 0.28);
+}
+
+.admin-attention-count {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.admin-attention-card.has-pending .admin-attention-count {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.admin-attention-count svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.admin-attention-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.admin-attention-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.admin-attention-allclear {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--success-bg);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  color: var(--success);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.admin-attention-allclear svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+/* Table search, password-visibility toggle, section dividers, and
+   focus-visible rules now live in shell_common.css (shared with the
+   employer portal shell) -- see that file. */

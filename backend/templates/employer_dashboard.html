@@ -1,103 +1,121 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>YouthChain Employer Dashboard</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
-  <div class="container">
-    <header class="page-header">
-      <h1>👔 Employer Dashboard</h1>
-      <p class="subtitle">
-        Post opportunities, review applications, and verify YouthChain credentials in one place.
-        {% if employer %}Signed in as <strong>{{ employer.name }}</strong> ({{ employer.email }}).{% endif %}
-      </p>
-    </header>
+{% extends "employer_shell.html" %}
+{% from "_admin_icons.html" import icon_check, icon_chevron_right, icon_map_pin, icon_clock, icon_users_count, icon_star %}
 
-    <nav class="actions">
-      <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post New Job</a>
-      <a class="btn secondary" href="{{ url_for('verify') }}">🔍 Verify Credentials</a>
-      <form method="POST" action="{{ url_for('employer_logout') }}" style="display:inline;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <button type="submit" class="btn secondary outline">🚪 Log Out</button>
-      </form>
-    </nav>
+{% block title %}Dashboard{% endblock %}
 
-    <main>
-      <section class="card">
-        <div class="card-header">
-          <h2>📋 Current Job Listings</h2>
-          <p class="card-subtitle">
-            Jobs listed here are visible to youth on the YouthChain app. New applications will
-            appear in real time.
-          </p>
-        </div>
+{% block content %}
+  {% set is_verified = employer.verification_status == 'verified' %}
+  {% set has_jobs = jobs|length > 0 %}
 
-        {% if jobs %}
-          <ul class="job-list">
-            {% for job in jobs %}
-              <li>
-                <article class="job-card">
-                  <header class="job-card-header">
-                    <h3>{{ job.title }}</h3>
-                  </header>
+  {% if trust and trust.rating_count %}
+  <section class="card" style="background: var(--secondary); color: white; display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+    {{ icon_star() }}
+    <span>Workers rate you <strong>{{ trust.avg_rating }}/5</strong> on average, from {{ trust.rating_count }} completed gig{{ "s" if trust.rating_count != 1 }}. Youth browsing gig jobs see this too.</span>
+  </section>
+  {% endif %}
 
-                  <div class="job-card-body">
-                    <p><strong>📍 Location:</strong> {{ job.location }}</p>
-                    <p><strong>⏳ Duration:</strong> {{ job.duration }}</p>
-                    <p><strong>👥 Applicants:</strong> {{ job.applicant_count }}</p>
+  {% if not is_verified or not has_jobs %}
+  <section class="employer-onboarding">
+    <h2>Welcome to YouthChain, {{ employer.name }} 👋</h2>
+    <p>Two quick steps and you're ready to reach verified, skills-matched youth.</p>
+    <div class="employer-onboarding-steps">
+      {% set is_individual = employer.account_type == "individual" %}
+      <a href="{{ url_for('employer_verification') }}" class="employer-onboarding-step {{ 'done' if is_verified }}">
+        <span class="employer-onboarding-step-mark">{{ icon_check() }}</span>
+        <span class="employer-onboarding-step-text">
+          <span class="employer-onboarding-step-title">{{ "Verify your identity" if is_individual else "Verify your organization" }}</span>
+          <span class="employer-onboarding-step-sub">
+            {% if is_verified %}Verified — youth see a trust badge on your jobs.
+            {% elif employer.verification_status == 'pending' %}Submitted — an admin is reviewing your {{ "ID" if is_individual else "document" }}.
+            {% elif is_individual %}Upload a national ID, voter's card, or driver's license so youth know you're real. Takes about 2 minutes.
+            {% else %}Upload a business document so youth know you're real. Takes about 2 minutes.{% endif %}
+          </span>
+        </span>
+        <span class="employer-onboarding-step-chevron">{{ icon_chevron_right() }}</span>
+      </a>
+      <a href="{{ url_for('post_job') }}" class="employer-onboarding-step {{ 'done' if has_jobs }}">
+        <span class="employer-onboarding-step-mark">{{ icon_check() }}</span>
+        <span class="employer-onboarding-step-text">
+          <span class="employer-onboarding-step-title">Post your first job</span>
+          <span class="employer-onboarding-step-sub">
+            {% if has_jobs %}{{ jobs|length }} job{{ "s" if jobs|length != 1 }} posted.
+            {% else %}Describe the role and required skills — YouthChain surfaces it to matching youth.{% endif %}
+          </span>
+        </span>
+        <span class="employer-onboarding-step-chevron">{{ icon_chevron_right() }}</span>
+      </a>
+    </div>
+  </section>
+  {% endif %}
 
-                    {% if job.required_skills %}
-                      <p>
-                        <strong>🧩 Required Skills:</strong>
-                        <span class="skills-pill">
-                          {{ job.required_skills }}
-                        </span>
-                      </p>
-                    {% endif %}
-                  </div>
-
-                  <footer class="job-actions">
-                    <a
-                      href="{{ url_for('employer_applications', job_id=job.id) }}"
-                      class="btn small"
-                    >
-                      👀 View Applicants
-                    </a>
-                  </footer>
-                </article>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <div class="empty-state">
-            <h3>No job listings yet</h3>
-            <p>
-              Start by posting your first opportunity. YouthChain will help surface
-              verified, skills-matched candidates.
-            </p>
-            <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post Your First Job</a>
-          </div>
-        {% endif %}
-      </section>
-
-      <section class="card subtle">
-        <h3>⚡ Live Updates</h3>
-        <p class="muted">
-          This dashboard auto-refreshes whenever a new job is posted or a candidate applies,
-          so you always see the latest data.
-        </p>
-      </section>
-    </main>
+  <div class="admin-section-header" style="margin-bottom: 16px;">
+    <h2>Your job listings</h2>
+    <p>Visible to youth on the YouthChain app. New applications appear here in real time.</p>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-    const socket = io(location.origin, { transports: ['websocket'] });
-    socket.on('job_created', () => location.reload());
-    socket.on('application_created', () => location.reload());
-    socket.on('application_status_changed', () => location.reload());
-  </script>
-</body>
-</html>
+  {% if jobs %}
+    <ul class="employer-job-grid">
+      {% for job in jobs %}
+        <li>
+          <article class="employer-job-card">
+            <div class="employer-job-card-accent"></div>
+            <div class="employer-job-card-body">
+              <h3 class="employer-job-card-title">{{ job.title }}</h3>
+              {% if job.job_type == "gig" %}
+                <span class="employer-skill-pill employer-skill-pill-gig">🤝 Gig / hire-based{{ (" — " ~ job.category) if job.category }}</span>
+              {% endif %}
+
+              <div class="employer-job-card-meta">
+                <div class="employer-job-card-meta-row">{{ icon_map_pin() }} {{ job.location }}</div>
+                <div class="employer-job-card-meta-row">{{ icon_clock() }} {{ job.duration }}</div>
+                <div class="employer-job-card-meta-row">
+                  <span class="employer-applicant-badge {{ 'is-zero' if job.applicant_count == 0 }}">
+                    {{ icon_users_count() }}
+                    <span class="employer-applicant-badge-count">{{ job.applicant_count }}</span>
+                    {{ "applicant" if job.applicant_count == 1 else "applicants" }}
+                  </span>
+                </div>
+              </div>
+
+              {% if job.required_skills %}
+                <div class="employer-job-card-skills">
+                  {% for skill in job.required_skills.split(',')[:5] %}
+                    {% if skill.strip() %}<span class="employer-skill-pill">{{ skill.strip() }}</span>{% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+
+              <div class="employer-job-card-footer">
+                <a href="{{ url_for('employer_applications', job_id=job.id) }}" class="btn small">
+                  👀 View Applicants
+                </a>
+              </div>
+            </div>
+          </article>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <h3>No job listings yet</h3>
+      <p>
+        Start by posting your first opportunity. YouthChain will help surface
+        verified, skills-matched candidates.
+      </p>
+      <a class="btn primary" href="{{ url_for('post_job') }}">➕ Post Your First Job</a>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <!-- Real gap found via a full OWASP Top 10 (A05/A08) review: this
+       loaded the Socket.IO client from a third-party CDN (cdn.socket.io)
+       with no Subresource Integrity pin -- both a supply-chain risk (the
+       CDN, or a MITM on the way to it, could serve a tampered file with
+       no browser-side check) and inconsistent with this codebase's own
+       established self-hosted-only discipline. Vendored locally at
+       static/socket.io.min.js (the exact same v4.7.2 build, verified by
+       its own preserved header comment) and served same-origin. -->
+  <script src="{{ url_for('static', filename='socket.io.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='employer_dashboard_live.js') }}"></script>
+{% endblock %}

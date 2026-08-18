@@ -1,0 +1,64 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_award, icon_shield_check, icon_upload %}
+
+{% block title %}My Passport{% endblock %}
+
+{% block content %}
+  <header class="page-header" style="padding-top: 28px;">
+    <h1>🎖️ My Digital Passport</h1>
+    <p class="subtitle">Your verifiable, on-chain-anchored record of skills and credentials — share it with any employer.</p>
+  </header>
+
+  {% if error %}
+    <div class="result error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if credentials %}
+    <div class="portal-credential-grid">
+      {% for cred in credentials %}
+        <div class="portal-credential-card">
+          <div class="portal-credential-card-title">{{ icon_award() }} {{ cred.title }}</div>
+          <div class="portal-credential-card-sub">{{ cred.issuer }} · {{ cred.year }}</div>
+          <div class="portal-credential-card-hash">{{ cred.hash }}</div>
+          {% if cred.revoked_at %}
+            <span class="status rejected">Revoked</span>
+          {% elif cred.onchain_tx %}
+            <span class="status accepted">{{ icon_shield_check() }} On-chain verified</span>
+          {% else %}
+            <span class="status pending">On-chain write pending</span>
+          {% endif %}
+          <div style="margin-top: 10px;">
+            <a href="{{ url_for('verify_by_id', cred_id=cred.id) }}" class="link" target="_blank" rel="noopener">Public verification link ↗</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>No credentials yet</h3>
+      <p>Upload a certificate, diploma, or training record below to add it to your passport.</p>
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <h2 class="card-title">Add a credential</h2>
+    <p class="card-subtitle">Upload a document — YouthChain hashes it and anchors that hash on-chain, so anyone can verify it hasn't been altered.</p>
+
+    <form method="POST" class="form" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <label for="title">Credential Title</label>
+      <input id="title" type="text" name="title" placeholder="e.g., Certificate in Web Development" required />
+
+      <label for="issuer">Issuing Organization</label>
+      <input id="issuer" type="text" name="issuer" placeholder="e.g., Limkokwing University" required />
+
+      <label for="file"><span class="form-label-icon">{{ icon_upload() }}</span> Document</label>
+      <input id="file" type="file" name="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" required />
+
+      <div class="form-footer">
+        <button type="submit" class="btn primary">Issue Credential</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

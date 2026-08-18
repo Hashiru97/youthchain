@@ -1,0 +1,51 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_eye, icon_eye_off %}
+
+{% block title %}Log In{% endblock %}
+
+{% block content %}
+  <div class="portal-auth-wrap">
+    <header class="page-header" style="padding-top: 32px;">
+      <h1>👋 Welcome back</h1>
+      <p class="subtitle">Log in to apply for jobs and manage your applications.</p>
+    </header>
+
+    <section class="card">
+      {% if reset_success %}
+        <div class="result success" role="status">Your password was changed. Log in with your new password below.</div>
+      {% endif %}
+      {% if error %}
+        <div class="result error" role="alert">
+          {{ error }}
+          {% if suspended %}
+            <br /><a href="{{ url_for('portal_appeal') }}">Submit an appeal</a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <form method="POST" class="form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+        <label for="identifier">Phone or Email</label>
+        <input id="identifier" type="text" name="identifier" required autocomplete="username" />
+
+        <label for="password">Password</label>
+        <div class="shell-password-field">
+          <input id="password" type="password" name="password" required autocomplete="current-password" />
+          <button type="button" class="shell-password-toggle" data-toggle-password="#password" aria-label="Show password">
+            <span class="icon-eye">{{ icon_eye() }}</span>
+            <span class="icon-eye-off">{{ icon_eye_off() }}</span>
+          </button>
+        </div>
+        <p class="muted" style="margin-top: -8px;"><a href="{{ url_for('portal_forgot_password') }}">Forgot password?</a></p>
+
+        <div class="form-footer">
+          <button type="submit" class="btn primary">Log In</button>
+          <a href="{{ url_for('portal_register') }}" class="btn secondary outline">
+            Create an account
+          </a>
+        </div>
+      </form>
+    </section>
+  </div>
+{% endblock %}

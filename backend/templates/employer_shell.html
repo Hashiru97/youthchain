@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>{% block title %}Employer{% endblock %} • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='employer.css', v=asset_version('employer.css')) }}" />
+</head>
+<body class="employer-shell-body">
+  {% from "_admin_icons.html" import icon_dashboard, icon_briefcase, icon_document, icon_shield_check, icon_logout, icon_menu, icon_sun, icon_moon %}
+  <div class="employer-scrim" id="employer-nav-scrim"></div>
+  <header class="employer-topbar">
+    <div class="employer-topbar-inner">
+      <a href="{{ url_for('employer_dashboard') }}" class="employer-brand">
+        <span class="employer-brand-mark"><img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" /></span>
+        <span class="employer-brand-text">
+          <span class="employer-brand-title">YouthChain</span>
+          <span class="employer-brand-subtitle">For Employers</span>
+        </span>
+      </a>
+
+      <button type="button" class="shell-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
+        <span class="icon-sun">{{ icon_sun() }}</span>
+        <span class="icon-moon">{{ icon_moon() }}</span>
+      </button>
+
+      <button type="button" class="employer-menu-toggle" id="employer-nav-toggle" aria-label="Toggle navigation menu">
+        {{ icon_menu() }}
+      </button>
+
+      <nav class="employer-nav" aria-label="Employer navigation">
+        <a href="{{ url_for('employer_dashboard') }}" class="employer-nav-link {{ 'active' if active_page == 'dashboard' }}">
+          {{ icon_dashboard() }} Dashboard
+        </a>
+        <a href="{{ url_for('post_job') }}" class="employer-nav-link {{ 'active' if active_page == 'post_job' }}">
+          {{ icon_briefcase() }} Post a Job
+        </a>
+        <a href="{{ url_for('employer_messages_inbox') }}" class="employer-nav-link {{ 'active' if active_page == 'messages' }}">
+          {{ icon_document() }} Messages
+          {% if employer_unread_messages %}<span class="shell-nav-badge">{{ employer_unread_messages }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('employer_verification') }}" class="employer-nav-link {{ 'active' if active_page == 'verification' }}">
+          {{ icon_shield_check() }} Verification
+          {% if current_employer and current_employer.verification_status != 'verified' %}<span class="employer-nav-dot" aria-hidden="true"></span>{% endif %}
+        </a>
+        <a href="{{ url_for('verify') }}" class="employer-nav-link" target="_blank" rel="noopener">
+          {{ icon_document() }} Verify a Credential
+        </a>
+
+        <div class="employer-nav-spacer"></div>
+
+        {% if current_employer %}
+        <div class="employer-nav-identity">
+          <span class="employer-nav-identity-avatar">{{ current_employer.name[:1]|upper }}</span>
+          <span class="employer-nav-identity-name">{{ current_employer.name }}</span>
+        </div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('employer_logout') }}" class="employer-nav-logout-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="employer-nav-logout">{{ icon_logout() }} <span>Log out</span></button>
+        </form>
+      </nav>
+    </div>
+  </header>
+
+  {% if current_employer and current_employer.verification_status != 'verified' and active_page != 'verification' %}
+  <div class="employer-verify-banner">
+    <div class="employer-verify-banner-inner">
+      {{ icon_shield_check() }}
+      <p>
+        <strong>{{ "You're not verified yet." if current_employer.account_type == "individual" else "Your organization isn't verified yet." }}</strong>
+        Verification adds a trust badge youth see on your job posts — it takes a couple of minutes.
+      </p>
+      <a href="{{ url_for('employer_verification') }}" class="btn small">
+        {{ "Continue verification" if current_employer.verification_status == 'rejected' else "Verify now" }}
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <main class="employer-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
+  <script src="{{ url_for('static', filename='employer_shell.js', v=asset_version('employer_shell.js')) }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

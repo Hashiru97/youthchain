@@ -1,0 +1,119 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_eye, icon_eye_off %}
+
+{% block title %}Create Account{% endblock %}
+
+{% block content %}
+  <div class="portal-auth-wrap">
+    <header class="page-header" style="padding-top: 32px;">
+      <h1>🚀 Create your account</h1>
+      <p class="subtitle">Match verified skills to real jobs across Sierra Leone.</p>
+    </header>
+
+    <section class="card">
+      {% if error %}
+        <div class="result error" role="alert">{{ error }}</div>
+      {% endif %}
+
+      {% if step == 'contact' %}
+        <form method="POST" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="step" value="contact" />
+
+          <label>How should we send your verification code?</label>
+          <div class="post-job-type-choice">
+            <label class="post-job-type-option">
+              <input type="radio" name="channel" value="email" id="channel_email" data-otp-channel-radio {{ "checked" if channel != "sms" }} />
+              <span><strong>Email</strong></span>
+            </label>
+            <label class="post-job-type-option">
+              <input type="radio" name="channel" value="sms" id="channel_sms" data-otp-channel-radio {{ "checked" if channel == "sms" }} />
+              <span><strong>Phone (SMS)</strong></span>
+            </label>
+          </div>
+
+          <label for="identifier" id="identifier_label">{{ "Phone Number" if channel == "sms" else "Email Address" }}</label>
+          <input
+            id="identifier" name="identifier" required data-otp-identifier-field
+            type="{{ "tel" if channel == "sms" else "email" }}"
+            autocomplete="{{ "tel" if channel == "sms" else "email" }}"
+            placeholder="{{ "e.g. 076123456" if channel == "sms" else "you@example.com" }}"
+          />
+          <small class="helper-text">We'll send a 6-digit code to verify it's really you.</small>
+
+          <div class="form-footer">
+            <button type="submit" class="btn primary">Send verification code</button>
+          </div>
+        </form>
+      {% elif step == 'code' %}
+        <p class="portal-otp-note">{{ "📱" if channel == "sms" else "📧" }} A 6-digit code was sent to <strong>{{ identifier }}</strong>.</p>
+
+        <form method="POST" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="step" value="code" />
+
+          <label for="otp_code">Verification Code</label>
+          <input id="otp_code" type="text" name="otp_code" inputmode="numeric" maxlength="6" autofocus required />
+
+          <div class="form-footer">
+            <button type="submit" class="btn primary">Verify</button>
+          </div>
+        </form>
+
+        <form method="POST" class="form" style="margin-top: 4px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="step" value="contact" />
+          <input type="hidden" name="channel" value="{{ channel }}" />
+          <button type="submit" class="btn secondary outline small">Use a different email/phone</button>
+        </form>
+      {% else %}
+        <p class="portal-otp-note">✅ <strong>{{ identifier }}</strong> is verified.</p>
+
+        <form method="POST" class="form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="step" value="details" />
+
+          <label for="first_name">First Name</label>
+          <input id="first_name" type="text" name="first_name" value="{{ first_name or '' }}" required autocomplete="given-name" />
+
+          <label for="last_name">Last Name</label>
+          <input id="last_name" type="text" name="last_name" value="{{ last_name or '' }}" required autocomplete="family-name" />
+
+          <label for="other">{{ "Phone Number" if channel == "email" else "Email Address" }}</label>
+          <input
+            id="other" name="other" value="{{ other or '' }}" required
+            type="{{ "email" if channel == "sms" else "tel" }}"
+            autocomplete="{{ "email" if channel == "sms" else "tel" }}"
+          />
+
+          <label for="ncra_id">NCRA ID <span class="muted">(optional)</span></label>
+          <input id="ncra_id" type="text" name="ncra_id" value="{{ ncra_id or '' }}" autocomplete="off" />
+
+          <label for="password">Password</label>
+          <div class="shell-password-field">
+            <input id="password" type="password" name="password" required minlength="8" autocomplete="new-password" />
+            <button type="button" class="shell-password-toggle" data-toggle-password="#password" aria-label="Show password">
+              <span class="icon-eye">{{ icon_eye() }}</span>
+              <span class="icon-eye-off">{{ icon_eye_off() }}</span>
+            </button>
+          </div>
+
+          <div class="consent-row">
+            <label for="consent" class="consent-label">
+              <input id="consent" type="checkbox" name="consent" />
+              I agree to the <a href="{{ url_for('privacy_policy') }}" target="_blank" rel="noopener">Privacy Policy</a>
+            </label>
+          </div>
+
+          <div class="form-footer">
+            <button type="submit" class="btn primary">Create Account</button>
+          </div>
+        </form>
+      {% endif %}
+
+      <p class="muted" style="margin-top: 16px;">
+        Already have an account? <a href="{{ url_for('portal_login') }}">Log in</a>
+      </p>
+    </section>
+  </div>
+{% endblock %}

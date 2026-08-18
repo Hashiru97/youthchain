@@ -1,0 +1,63 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_search, icon_inbox_empty %}
+
+{% block title %}Youth Accounts{% endblock %}
+{% block page_title %}Youth Accounts{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Every youth (worker) account on the platform. Suspending an account is the real lever for a compromised login or abusive behavior — it blocks both the app and the web portal, and signs out every device already logged in, immediately.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Accounts ({{ users|length }}{{ "+" if users|length == 200 }})</h2>
+    </div>
+
+    <form method="GET" class="shell-table-search">
+      {{ icon_search() }}
+      <input type="search" name="q" value="{{ query }}" placeholder="Search by name, email, or phone…" aria-label="Search youth accounts" />
+    </form>
+
+    {% if users %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Phone</th><th>Active sessions</th><th>Account status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td data-label="Name">{{ user.name }}</td>
+          <td data-label="Email">{{ user.email }}</td>
+          <td data-label="Phone">{{ user.phone }}</td>
+          <td data-label="Active sessions">{{ session_counts.get(user.id, 0) }}</td>
+          <td class="status {{ 'accepted' if user.active else 'rejected' }}">
+            {{ "Active" if user.active else "Suspended" }}
+          </td>
+          <td data-label="Action">
+            {% if user.active %}
+              <form method="POST" action="{{ url_for('admin_suspend_user', user_id=user.id) }}" class="inline-actions">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="q" value="{{ query }}" />
+                <button type="submit" class="btn reject"
+                  data-confirm="Suspend {{ user.name }}'s account? This blocks the app and web portal immediately and signs out every device they're currently logged in on.">Suspend</button>
+              </form>
+            {% else %}
+              <form method="POST" action="{{ url_for('admin_reinstate_user', user_id=user.id) }}" class="inline-actions">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="q" value="{{ query }}" />
+                <button type="submit" class="btn accept">Reinstate</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>{{ "No accounts match that search." if query else "No youth accounts yet." }}</p>
+    </div>
+    {% endif %}
+  </section>
+{% endblock %}

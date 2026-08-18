@@ -1,0 +1,95 @@
+# Local/staging container stack (Phase 3 #13 — containerization was
+# previously entirely absent). Defaults to a bundled Postgres service, not
+# SQLite: docs/load-testing.md measured a real 6.38% request failure rate
+# under 30 concurrent writers on SQLite (its documented single-writer lock,
+# not a theoretical concern) versus 0% on Postgres at identical load, so
+# SQLite should not be what a real deployment runs on by default — only
+# what zero-config local iteration outside Docker falls back to (see
+# app.py's own `os.getenv("DATABASE_URL") or "sqlite:///youthchain.db"`).
+#
+# To point at an external managed Postgres instead of the bundled
+# container (the real production path — a single-node container with no
+# managed backups/HA of its own is a fine default for local/staging, not
+# for a national-scale launch): remove/override the DATABASE_URL line on
+# the `backend` service below and set it in backend/.env instead — no code
+# or image change needed, the driver (psycopg2-binary) is already in
+# requirements.txt.
+#
+# NOT included here: the Hardhat blockchain node. That's dev/test tooling
+# for a local chain, not a production service this platform would run
+# itself — a real deployment targets a public testnet/mainnet RPC endpoint
+# (see the engineering review's S-11/S-12 findings on signer-key handling
+# before that happens). The backend image DOES still need Node.js and the
+# blockchain/ project itself bundled in, though — app.py's
+# _run_hardhat_script() shells out to the Hardhat CLI (registerCredential.js
+# / checkRegistered.js / checkValid.js / revokeCredential.js) to actually
+# talk to whichever network HARDHAT_NETWORK points at, local or real. A
+# real, previously-undiscovered gap found via a full-codebase review: the
+# backend's own Dockerfile only ever installed Python, and (before this)
+# this file's `build: ./backend` scoped the build context to backend/
+# alone, so blockchain/ (a sibling directory) could never be COPYed in —
+# every credential issuance/verification/revocation would have silently
+# failed inside the built image regardless of which network it targeted.
+#
+# This file has no TLS termination — it's for local/dev use or for sitting
+# behind a load balancer that already terminates TLS elsewhere. For a
+# self-contained stack that provisions its own certificate (Let's Encrypt
+# via Caddy), use docker-compose.tls.yml instead — see that file's own
+# header for setup steps. See docs/monitoring.md for wiring /healthz to a
+# real uptime/alerting service once this is deployed somewhere reachable.
+# For horizontal scaling (multiple backend replicas behind nginx), see
+# docker-compose.scale.yml instead — this file stays single-instance.
+
+services:
+  postgres:
+    # Custom image, not stock postgres:16-alpine — adds the pg_cron
+    # extension the job scanner's scheduling migration requires (see
+    # infra/postgres-cron/Dockerfile for why this couldn't stay -alpine).
+    # command: sets shared_preload_libraries, which pg_cron requires at
+    # server start, not something a later `CREATE EXTENSION` can retrofit.
+    build: ./infra/postgres-cron
+    command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
+    environment:
+      - POSTGRES_PASSWORD=youthchain
+      - POSTGRES_DB=youthchain
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      # Repo root, not ./backend -- the image needs blockchain/ (a sibling
+      # of backend/) copied in too; see the header comment above.
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Overrides any DATABASE_URL in backend/.env on purpose, so this
+      # stack is correct out of the box with zero setup — see the header
+      # comment above for pointing at a real external Postgres instead.
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      # Job scanner's poller (see app.py's "Job scanner poller" section) —
+      # safe to enable unconditionally: it just never claims anything
+      # until real job_source rows exist and FIRECRAWL_API_KEY/
+      # ANTHROPIC_API_KEY are configured in backend/.env.
+      - ENABLE_JOB_SCANNER_POLLER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  uploads-data:
+  backups-data:

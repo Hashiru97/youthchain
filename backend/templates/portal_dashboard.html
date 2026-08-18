@@ -1,0 +1,92 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_shield_check, icon_map_pin, icon_clock, icon_smartphone, icon_star %}
+
+{% block title %}Find Jobs{% endblock %}
+
+{% block content %}
+  <section class="portal-hero">
+    <h1>Find real, verified opportunities</h1>
+    <p>Search opportunities across Sierra Leone — no account needed to browse.</p>
+    <form method="GET" action="{{ url_for('portal_dashboard') }}" class="portal-search-form">
+      <input type="text" name="q" value="{{ q }}" placeholder="Job title or keyword…" aria-label="Search jobs" />
+      <input type="text" name="location" value="{{ location }}" placeholder="Location…" aria-label="Location" />
+      <input type="text" name="skill" value="{{ skill }}" placeholder="Skill…" aria-label="Skill" />
+      <select name="job_type" aria-label="Job type">
+        <option value="" {{ "selected" if not job_type }}>All job types</option>
+        <option value="formal" {{ "selected" if job_type == "formal" }}>Formal (CV required)</option>
+        <option value="gig" {{ "selected" if job_type == "gig" }}>Gig / hire-based (no CV)</option>
+      </select>
+      <button type="submit">Search</button>
+    </form>
+  </section>
+
+  {% if not current_portal_user %}
+  <a href="{{ url_for('get_app') }}" class="portal-app-banner">
+    <span class="portal-app-banner-icon">{{ icon_smartphone() }}</span>
+    <span class="portal-app-banner-text">
+      <strong>Get the YouthChain app for the full experience</strong>
+      <span>Real-time application updates, direct messaging with employers, push notifications, and an offline-ready profile — all built for your phone.</span>
+    </span>
+  </a>
+  {% endif %}
+
+  {% if jobs %}
+    <div class="portal-job-grid">
+      {% for job in jobs %}
+        <a href="{{ url_for('portal_job_detail', job_id=job.id) }}" class="portal-job-card">
+          <h3 class="portal-job-card-title">{{ job.title }}</h3>
+          {% if job.job_type == "gig" %}
+          <span class="portal-skill-pill portal-skill-pill-gig">🤝 Gig / hire-based</span>
+          {% endif %}
+          {% set employer = employers_by_id.get(job.employer_id) %}
+          {% set trust = employer_trust_by_id.get(job.employer_id) if employer else None %}
+          {% if employer %}
+          <div class="portal-job-card-employer">
+            {{ employer.name }}
+            {% if employer.verification_status == 'verified' %}
+              <span class="verified-badge" title="Verified {{ 'Individual' if employer.verification_type == 'individual' else 'Business' }}">{{ icon_shield_check() }}</span>
+            {% endif %}
+          </div>
+          {% if trust and trust.rating_count %}
+          <div class="portal-job-card-employer-rating">
+            {{ icon_star() }} {{ trust.avg_rating }} · {{ trust.rating_count }} rating{{ "s" if trust.rating_count != 1 }} from past workers
+          </div>
+          {% endif %}
+          {% endif %}
+          <div class="portal-job-card-meta">
+            <span>{{ icon_map_pin() }} {{ job.location }}</span>
+            <span>{{ icon_clock() }} {{ job.duration }}</span>
+          </div>
+          {% if job.required_skills %}
+          <div class="portal-job-card-skills">
+            {% for s in job.required_skills.split(',')[:4] %}
+              {% if s.strip() %}<span class="portal-skill-pill">{{ s.strip() }}</span>{% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if job.id in applied_job_ids %}
+          <div class="portal-job-card-footer">
+            <span class="portal-applied-chip">✓ Applied</span>
+          </div>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+
+    {% if has_prev or has_next %}
+    <nav class="portal-pagination" aria-label="Job results pages">
+      {% if has_prev %}
+        <a href="{{ url_for('portal_dashboard', q=q, location=location, skill=skill, job_type=job_type, offset=prev_offset) }}" class="btn secondary outline">⬅ Previous</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="{{ url_for('portal_dashboard', q=q, location=location, skill=skill, job_type=job_type, offset=next_offset) }}" class="btn secondary outline">Next ➡</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <h3>No jobs match your search</h3>
+      <p>Try a broader search, or check back soon — new opportunities are posted regularly.</p>
+    </div>
+  {% endif %}
+{% endblock %}

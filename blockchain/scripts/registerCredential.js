@@ -1,7 +1,8 @@
-import hre from "hardhat";
+import { network } from "hardhat";
 import { resolveContractAddress, normalizeHash } from "./_shared.js";
 
-const { ethers, network } = hre;
+const connection = await network.create();
+const { ethers } = connection;
 
 async function resolveIssuer() {
     if (process.env.ISSUER_PRIVATE_KEY) {
@@ -12,10 +13,10 @@ async function resolveIssuer() {
     // public test account. Using it on any real network would mean every
     // credential is "issued" by a key anyone in the world already has
     // (S-12). Fail loudly instead of silently doing that.
-    if (network.name !== "localhost" && network.name !== "hardhat") {
+    if (connection.networkName !== "localhost" && connection.networkName !== "hardhatMainnet") {
         console.error(
-            `❌ ERROR: ISSUER_PRIVATE_KEY must be set when running against network "${network.name}". ` +
-                "Falling back to the default Hardhat signer is only safe on localhost/hardhat."
+            `❌ ERROR: ISSUER_PRIVATE_KEY must be set when running against network "${connection.networkName}". ` +
+                "Falling back to the default Hardhat signer is only safe on localhost/hardhatMainnet."
         );
         process.exit(1);
     }

@@ -1,0 +1,195 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_users_count, icon_briefcase, icon_document, icon_award, icon_shield_check, icon_duplicate, icon_flag, icon_appeal, icon_star %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Aggregate platform usage — no per-user personal data is shown on this page.</p>{% endblock %}
+
+{% block content %}
+  {% if is_admin_role %}
+  <section class="admin-attention-panel">
+    <div class="admin-section-header">
+      <h2>Needs your attention</h2>
+      <p>Real-time counts from every queue you can act on — click any card to go straight there.</p>
+    </div>
+    <div class="admin-attention-grid">
+      <a href="{{ url_for('admin_employer_verifications') }}" class="admin-attention-card {{ 'has-pending' if admin_pending.employer_verifications }}">
+        <div class="admin-attention-count">{{ icon_shield_check() if not admin_pending.employer_verifications else admin_pending.employer_verifications }}</div>
+        <div>
+          <div class="admin-attention-label">Employer Verifications</div>
+          <div class="admin-attention-sub">{{ "awaiting review" if admin_pending.employer_verifications else "all caught up" }}</div>
+        </div>
+      </a>
+      <a href="{{ url_for('admin_reports') }}" class="admin-attention-card {{ 'has-pending' if admin_pending.reports }}">
+        <div class="admin-attention-count">{{ icon_flag() if not admin_pending.reports else admin_pending.reports }}</div>
+        <div>
+          <div class="admin-attention-label">Employer Reports</div>
+          <div class="admin-attention-sub">{{ "open" if admin_pending.reports else "all caught up" }}</div>
+        </div>
+      </a>
+      <a href="{{ url_for('admin_appeals') }}" class="admin-attention-card {{ 'has-pending' if admin_pending.appeals }}">
+        <div class="admin-attention-count">{{ icon_appeal() if not admin_pending.appeals else admin_pending.appeals }}</div>
+        <div>
+          <div class="admin-attention-label">Suspension Appeals</div>
+          <div class="admin-attention-sub">{{ "open" if admin_pending.appeals else "all caught up" }}</div>
+        </div>
+      </a>
+      <a href="{{ url_for('admin_duplicate_flags') }}" class="admin-attention-card {{ 'has-pending' if admin_pending.duplicate_flags }}">
+        <div class="admin-attention-count">{{ icon_duplicate() if not admin_pending.duplicate_flags else admin_pending.duplicate_flags }}</div>
+        <div>
+          <div class="admin-attention-label">Duplicate Accounts</div>
+          <div class="admin-attention-sub">{{ "unresolved" if admin_pending.duplicate_flags else "all caught up" }}</div>
+        </div>
+      </a>
+      <a href="{{ url_for('admin_rating_flags') }}" class="admin-attention-card {{ 'has-pending' if admin_pending.rating_flags }}">
+        <div class="admin-attention-count">{{ icon_star() if not admin_pending.rating_flags else admin_pending.rating_flags }}</div>
+        <div>
+          <div class="admin-attention-label">Rating Disputes</div>
+          <div class="admin-attention-sub">{{ "open" if admin_pending.rating_flags else "all caught up" }}</div>
+        </div>
+      </a>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="shell-section-divider">Platform analytics</div>
+
+  <div class="admin-stat-grid">
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-primary">{{ icon_users_count() }}</div>
+      <div class="admin-stat-value">{{ total_users }}</div>
+      <div class="admin-stat-label">Registered youth</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-secondary">{{ icon_briefcase() }}</div>
+      <div class="admin-stat-value">{{ total_employers }}</div>
+      <div class="admin-stat-label">Registered employers</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-tertiary">{{ icon_briefcase() }}</div>
+      <div class="admin-stat-value">{{ total_jobs }}</div>
+      <div class="admin-stat-label">Jobs posted</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-tertiary">{{ icon_document() }}</div>
+      <div class="admin-stat-value">{{ total_applications }}</div>
+      <div class="admin-stat-label">Applications submitted</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-success">{{ icon_award() }}</div>
+      <div class="admin-stat-value">{{ total_credentials }}</div>
+      <div class="admin-stat-label">Credentials issued</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-success">{{ icon_award() }}</div>
+      <div class="admin-stat-value">{{ onchain_credentials }} / {{ total_credentials }}</div>
+      <div class="admin-stat-label">Confirmed on-chain</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-primary">{{ icon_document() }}</div>
+      <div class="admin-stat-value">{{ events_last_7_days }}</div>
+      <div class="admin-stat-label">Events, last 7 days</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-secondary">{{ icon_briefcase() }}</div>
+      <div class="admin-stat-value">{{ total_gig_jobs }} / {{ total_jobs }}</div>
+      <div class="admin-stat-label">Gig / hire-based jobs</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-success">{{ icon_award() }}</div>
+      <div class="admin-stat-value">{{ total_completed_gigs }}</div>
+      <div class="admin-stat-label">Gigs completed</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-secondary">{{ icon_star() }}</div>
+      <div class="admin-stat-value">{{ avg_worker_rating if avg_worker_rating is not none else "—" }}</div>
+      <div class="admin-stat-label">Avg. worker rating ({{ total_worker_ratings }} rating{{ "s" if total_worker_ratings != 1 }})</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-secondary">{{ icon_star() }}</div>
+      <div class="admin-stat-value">{{ avg_employer_rating if avg_employer_rating is not none else "—" }}</div>
+      <div class="admin-stat-label">Avg. employer rating ({{ total_employer_ratings }} rating{{ "s" if total_employer_ratings != 1 }})</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-tertiary">{{ icon_users_count() }}</div>
+      <div class="admin-stat-value">{{ individual_employer_accounts }} / {{ total_employers }}</div>
+      <div class="admin-stat-label">Individual employer accounts</div>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Application Funnel</h2>
+    </div>
+    {% if status_counts %}
+    <div class="admin-chart-row">
+      {% for status, svg in funnel_chart_svgs %}
+        <div class="admin-chart-col">{{ svg | safe }}</div>
+      {% endfor %}
+    </div>
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Status</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for status, count in status_counts.items() %}
+        <tr>
+          <td class="status {{ status | lower }}">{{ status }}</td>
+          <td data-label="Count">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No applications yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Events — last 14 days</h2>
+      <p>Daily platform activity (all event types combined). A zero day is real signal, not missing data.</p>
+    </div>
+    {{ events_timeseries_svg | safe }}
+  </section>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Jobs Posted per Employer</h2>
+    </div>
+    {% if jobs_per_employer %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Employer</th><th>Jobs Posted</th></tr></thead>
+      <tbody>
+        {% for name, count in jobs_per_employer.items() %}
+        <tr><td data-label="Employer">{{ name }}</td><td data-label="Jobs Posted">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No employer-owned job postings yet (seeded/legacy jobs aren't attributed to an employer).</p>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Raw Event Counts</h2>
+    </div>
+    {% if event_counts %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Event</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for event_type, count in event_counts.items() %}
+        <tr><td data-label="Event"><code class="mono">{{ event_type }}</code></td><td data-label="Count">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No events logged yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

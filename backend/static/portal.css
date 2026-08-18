@@ -1,0 +1,899 @@
+/* YouthChain youth web portal — Phase 3 #9 ("what's on the app, on the
+   web too"). Layered on style.css's shared design tokens, same top-nav
+   pattern as employer.css, loaded only by templates/portal_shell.html.
+   Deliberately public-first: the job feed and job detail pages render
+   for anonymous visitors (no login wall on browsing, only on applying),
+   so this is as much a marketing surface as a logged-in tool — the hero
+   search and job-card grid below lean editorial in a way admin.css/
+   employer.css don't need to. */
+
+:root {
+  --portal-topbar-height: 64px;
+}
+
+body.portal-shell-body {
+  margin: 0;
+  background: var(--bg);
+}
+
+/* ---------- Top bar ---------- */
+/* min-height, not height -- same real bug found and fixed on the
+   employer/admin shells' own topbars (see employer.css's
+   .employer-topbar comment for the full reasoning): a sticky, z-indexed
+   bar with a hard-capped height paints its overflow on top of the
+   content below it instead of growing to fit. */
+.portal-topbar {
+  min-height: var(--portal-topbar-height);
+  background: var(--surface);
+  border-bottom: 1px solid var(--outline);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.portal-topbar-inner {
+  max-width: 1180px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portal-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.portal-brand-mark {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.portal-brand-mark img {
+  height: 26px;
+  width: auto;
+}
+
+.portal-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.portal-brand-title {
+  font-weight: 800;
+  font-size: 14.5px;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.portal-brand-subtitle {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.portal-menu-toggle {
+  display: none;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.portal-menu-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-primary);
+}
+
+.portal-nav {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.portal-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.portal-nav-link svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.portal-nav-link:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.portal-nav-link.active {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.portal-nav-spacer {
+  flex: 1;
+}
+
+/* "Get the app" -- deliberately styled as a CTA pill, not a plain nav
+   link: this IS the product's monetization/engagement funnel (Phase 3's
+   own framing -- web gets someone in the door, the app is where "more
+   features to get a job easily" live), so it needs to visually compete
+   with Sign up/Log in, not blend into the rest of the nav. */
+.portal-nav-app-cta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-right: 4px;
+  transition: background 0.12s ease;
+}
+
+.portal-nav-app-cta:hover {
+  background: var(--secondary);
+  color: white;
+}
+
+.portal-nav-app-cta svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.portal-nav-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.portal-nav-identity-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.portal-nav-identity-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-nav-logout-form {
+  flex-shrink: 0;
+}
+
+.portal-nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.portal-nav-logout:hover {
+  background: var(--error-bg);
+  color: var(--error-on-tint);
+}
+
+.portal-nav-logout svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.portal-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(21, 33, 30, 0.4);
+  z-index: 35;
+}
+
+@media (max-width: 900px) {
+  .portal-menu-toggle {
+    display: inline-flex;
+    /* The theme toggle (now a topbar-inner sibling, not inside .portal-nav
+       -- see portal_shell.html -- so it stays visible without opening the
+       nav) already claims the row's free space via its own margin-left:
+       auto. A second auto-margined sibling here would split that space
+       between the two instead of just sitting snug next to the first. */
+    margin-left: 0;
+  }
+  .portal-nav {
+    position: fixed;
+    top: var(--portal-topbar-height);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--outline);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 10px;
+    max-height: 0;
+    overflow: hidden;
+    /* visibility:hidden alongside max-height:0 -- same real bug found
+       and fixed on the employer shell's equivalent mobile nav (see
+       employer.css's own comment): max-height:0 + overflow:hidden alone
+       can leave a padded, colored active-link child still rendering a
+       sliver on some Blink builds. visibility is an independent
+       guarantee, not just a size constraint. */
+    visibility: hidden;
+    transition: max-height 0.2s ease, visibility 0.2s;
+    z-index: 40;
+  }
+  body.portal-nav-open .portal-nav {
+    max-height: 80vh;
+    overflow-y: auto;
+    visibility: visible;
+  }
+  body.portal-nav-open .portal-scrim {
+    display: block;
+  }
+  .portal-nav-link,
+  .portal-nav-app-cta {
+    padding: 12px;
+  }
+  .portal-nav-spacer {
+    display: none;
+  }
+  .portal-nav-identity {
+    padding: 10px 12px 4px;
+  }
+}
+
+/* ---------- Content column ---------- */
+.portal-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+}
+
+@media (max-width: 620px) {
+  .portal-content {
+    padding: 0 16px 48px;
+  }
+}
+
+/* ---------- Footer ---------- */
+.portal-footer {
+  border-top: 1px solid var(--outline);
+  margin-top: 40px;
+}
+
+.portal-footer-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.portal-footer-inner a {
+  color: var(--text-muted);
+}
+
+/* ---------- Hero + search (portal_dashboard.html) ---------- */
+.portal-hero {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  margin: 28px 0 24px;
+  color: white;
+}
+
+.portal-hero h1 {
+  margin: 0 0 6px;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.portal-hero p {
+  margin: 0 0 20px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+}
+
+.portal-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* Real bug found live in dark mode: this was hardcoded "white" instead
+     of var(--surface), so the search card stayed a bright white slab
+     even against the dark page, while the browser's own native dark
+     form-control styling (see color-scheme: light dark on <meta>) made
+     the inputs INSIDE it render dark -- a jarring dark-pills-in-a-white-
+     card mismatch, not a themed card. */
+  background: var(--surface);
+  padding: 8px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.portal-search-form input,
+.portal-search-form select {
+  border: none;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text-primary);
+  /* Explicit rather than left to the browser's own native form-control
+     theming (see color-scheme: light dark) -- same bug class as the
+     white-background fix just above this rule: without this, the
+     surrounding card is themed but the fields inside it aren't,
+     necessarily, consistently. */
+  background: var(--bg);
+  flex: 1 1 160px;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.portal-search-form input:focus-visible,
+.portal-search-form select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.portal-search-form button {
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.portal-search-form button:hover {
+  background: var(--primary-dark);
+}
+
+@media (max-width: 620px) {
+  .portal-hero {
+    padding: 28px 20px;
+  }
+  .portal-search-form {
+    flex-direction: column;
+  }
+  /* Real bug found live on a phone browser: flex-basis governs the main
+     axis, which becomes height once flex-direction switches to column --
+     the base rule's "flex: 1 1 160px" (written for a row layout, meaning
+     "160px wide") was silently being read as "160px tall, then grow to
+     fill" here, producing huge empty gaps between each field instead of
+     normal single-line inputs stacked closely together. */
+  .portal-search-form input,
+  .portal-search-form select {
+    flex: none;
+    width: 100%;
+  }
+}
+
+/* ---------- Job feed grid ---------- */
+.portal-job-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.portal-job-card {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.portal-job-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.portal-job-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.portal-job-card-employer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.portal-job-card-employer .verified-badge {
+  color: var(--primary);
+  display: inline-flex;
+}
+
+.portal-job-card-employer .verified-badge svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+}
+
+/* Earned trust from past gig workers (see _employer_trust_summary in
+   app.py) -- the same "trust from a real track record" signal a CV-less
+   worker gets, shown here for the employer too. Uses the shared
+   --secondary hue, same as every other rating display on this platform. */
+.portal-job-card-employer-rating {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--secondary-dark);
+  margin-top: 2px;
+}
+
+.portal-job-card-employer-rating svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+}
+
+.portal-job-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.portal-job-card-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.portal-job-card-meta svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.portal-job-card-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.portal-skill-pill {
+  background: var(--tertiary-light);
+  color: var(--tertiary-dark);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.portal-skill-pill svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  vertical-align: -1px;
+}
+
+/* Gig/hire-based job badge (Job.job_type) -- reuses the shared purple
+   --secondary hue, same as .badge-gig in style.css and the mobile app's
+   AppColors.secondary, so "gig work" reads as one consistent color across
+   every surface (web portal, employer console, mobile app). */
+.portal-skill-pill-gig {
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
+  /* This variant also appears standalone right after a card/detail title
+     (portal_dashboard.html, portal_job_detail.html) rather than only
+     inline among other pills inside a flex+gap row -- display+margin
+     here so it reads correctly in both places instead of sitting flush
+     against the title above it. */
+  display: inline-block;
+  margin: 4px 0;
+}
+
+.portal-job-card-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.portal-applied-chip {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--success);
+  background: var(--success-bg);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.portal-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 32px;
+}
+
+/* ---------- Job detail (portal_job_detail.html) ---------- */
+.portal-job-detail-header {
+  padding: 28px 0 8px;
+}
+
+.portal-job-detail-header h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.portal-job-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.portal-job-detail-meta span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.portal-job-detail-meta svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.portal-apply-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.portal-apply-panel .helper-text {
+  margin-top: -4px;
+}
+
+/* ---------- App-download banner (used across several portal pages) ---------- */
+.portal-app-banner {
+  display: flex;
+  /* flex-start, not center -- defensive consistency fix, same category
+     of bug found and fixed on the employer verify banner (see
+     employer.css's own comment): centering a fixed-size icon against
+     multi-line text in a flex row asks the engine to compute an offset
+     from the text's full reflowed height, which is exactly the
+     computation that was wrong on a real device. */
+  align-items: flex-start;
+  gap: 16px;
+  background: var(--secondary-light);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin: 24px 0;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.12s ease;
+}
+
+.portal-app-banner:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.portal-app-banner-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--secondary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.portal-app-banner-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+}
+
+.portal-app-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.portal-app-banner-text strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.portal-app-banner-text span {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+  .portal-app-banner {
+    flex-direction: column;
+    /* Stacked column layout centers on the (now horizontal) cross axis
+       -- unrelated to the row-mode vertical-centering risk above, safe
+       to keep. */
+    align-items: center;
+    text-align: center;
+  }
+}
+
+/* ---------- Applications list (portal_applications.html) ---------- */
+.portal-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--outline);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.portal-app-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+}
+
+.portal-app-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.portal-app-row-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portal-app-row-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.portal-app-row-message-teaser {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.portal-app-row-message-teaser svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+}
+
+/* Gig-work rating UI (see Job.job_type / Rating in app.py) -- sits on its
+   own line below a Completed gig application's main row, not squeezed
+   into the single-line flex row above (which .portal-app-row's flex-wrap
+   now allows). */
+.portal-app-row-rating {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--outline);
+}
+
+.portal-app-row-rate,
+.portal-app-row-dispute {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.portal-app-row-rate select,
+.portal-app-row-rate input,
+.portal-app-row-dispute input {
+  padding: 6px 8px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: inherit;
+  /* Same explicit-background fix as .portal-search-form's inputs --
+     these have no ancestor .form class to inherit it from. */
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.portal-app-row-dispute input {
+  min-width: 180px;
+}
+
+/* ---------- Passport / credentials (portal_passport.html) ---------- */
+.portal-credential-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.portal-credential-card {
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-md);
+  padding: 18px;
+}
+
+.portal-credential-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+/* Real gap found via the same audit that caught .form-label-icon (style.css)
+   -- an icon macro used inline next to text here too, with no svg sizing
+   rule anywhere in its ancestry (get_app.html, portal_passport.html,
+   portal_work_history.html all hit this). */
+.portal-credential-card-title svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  vertical-align: -3px;
+}
+
+.portal-credential-card-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.portal-credential-card-hash {
+  font-family: monospace;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  word-break: break-all;
+  background: var(--bg);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+
+/* ---------- Auth pages (portal_login.html / portal_register.html) ---------- */
+.portal-auth-wrap {
+  max-width: 420px;
+  margin: 48px auto;
+}
+
+.portal-auth-wrap .card {
+  margin: 0;
+}
+
+.portal-otp-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: -4px 0 4px;
+}
+
+.consent-row {
+  margin-top: 14px;
+}
+
+/* .form label (style.css) sets display:block/margin-top:16px at higher
+   specificity (class+type) than a plain .consent-label class selector
+   would -- label.consent-label matches that specificity so this actually
+   wins. */
+.form label.consent-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* Overrides style.css's .form input rule (width:100%, padding:11px 12px)
+   which is written for text-like inputs and would otherwise stretch this
+   checkbox into a full-width bar -- the first checkbox in any .form
+   anywhere in this codebase, so that collision had no prior fix to
+   follow. */
+.consent-label input[type="checkbox"] {
+  width: 15px !important;
+  height: 15px;
+  padding: 0 !important;
+  margin: 2px 0 0 !important;
+  flex-shrink: 0;
+}
+
+.consent-label a {
+  color: var(--primary);
+  font-weight: 700;
+}

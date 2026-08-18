@@ -1,147 +1,217 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Applicants for {{ job.title }} • YouthChain</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-  <style>
-    .pill {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #eef;
-      font-size: 12px;
-      color: #334;
-      display: inline-block;
-      margin-left: 8px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header class="page-header">
-      <h1>👥 Applicants for <span class="highlight">{{ job.title }}</span></h1>
-      <p class="subtitle">
-        Review candidate documents, make a decision, and YouthChain will sync the status.
-      </p>
-    </header>
+{% extends "employer_shell.html" %}
+{% from "_admin_icons.html" import icon_search %}
 
-    <main>
-      {% if apps %}
-        <section class="card">
-          <div class="card-header">
-            <h2>Application List</h2>
-            <p class="card-subtitle">
-              Total applications: <strong>{{ apps|length }}</strong>
-            </p>
-          </div>
+{% block title %}Applicants for {{ job.title }}{% endblock %}
 
-          <table class="applicants-table">
-            <thead>
-              <tr>
-                <th>Applicant</th>
-                <th>CV</th>
-                <th>Supporting Doc</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-            {% for app in apps %}
-              <tr>
-                <td>
-                  <strong>{{ app.applicant_name }}</strong>
-                  <span class="pill">{{ app.applicant_email }}</span>
-                </td>
-
-                <td>
-                  {% if app.cv_file %}
-                    <a
-                      href="{{ url_for('download_application', filename=app.cv_file) }}"
-                      class="btn small"
-                    >
-                      Download CV
-                    </a>
-                  {% else %}
-                    <span class="muted">None</span>
-                  {% endif %}
-                </td>
-
-                <td>
-                  {% if app.supporting_file %}
-                    <a
-                      href="{{ url_for('download_application', filename=app.supporting_file) }}"
-                      class="btn small"
-                    >
-                      Download
-                    </a>
-                  {% else %}
-                    <span class="muted">None</span>
-                  {% endif %}
-                </td>
-
-                <td class="status {{ app.status | lower }}">
-                  {{ app.status }}
-                </td>
-
-                <td>
-                  {% if app.status == "Pending" %}
-                    <form method="POST" style="display:inline-flex; gap:8px;">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                      <input type="hidden" name="app_id" value="{{ app.id }}" />
-                      <button
-                        type="submit"
-                        name="action"
-                        value="accept"
-                        class="btn accept"
-                      >
-                        ✅ Accept
-                      </button>
-                      <button
-                        type="submit"
-                        name="action"
-                        value="reject"
-                        class="btn reject"
-                      >
-                        ❌ Reject
-                      </button>
-                    </form>
-                  {% else %}
-                    <span class="muted">Decision made</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </section>
-      {% else %}
-        <section class="card">
-          <h2>No Applications Yet</h2>
-          <p>
-            Nobody has applied for this role yet. You’ll see new applicants in real time as they apply
-            through the YouthChain app.
-          </p>
-        </section>
-      {% endif %}
-
-      <section class="card subtle">
-        <p class="muted">
-          Tip: For accepted candidates, you can follow up manually via email for now –
-          later we can add automated onboarding workflows.
-        </p>
-      </section>
-
-      <a href="{{ url_for('employer_dashboard') }}" class="btn secondary">
-        ⬅ Back to Dashboard
-      </a>
-    </main>
+{% block content %}
+  <div class="admin-section-header" style="margin-bottom: 20px;">
+    <h2>👥 Applicants for <span class="highlight">{{ job.title }}</span></h2>
+    {% if job.job_type == "gig" %}
+      <p>Gig / hire-based work ({{ job.category or "Other" }}) — applicants aren't required to have a CV. Trust comes from completed gigs and ratings instead.</p>
+    {% else %}
+      <p>Review candidate documents, make a decision, and YouthChain will sync the status.</p>
+    {% endif %}
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-    const socket = io(location.origin, { transports: ['websocket'] });
-    socket.on('application_created', () => location.reload());
-    socket.on('application_status_changed', () => location.reload());
-  </script>
-</body>
-</html>
+  {% if apps %}
+    <section class="card">
+      <div class="card-header">
+        <h2>Application List</h2>
+        <p class="card-subtitle">
+          Total applications: <strong>{{ apps|length }}</strong>
+        </p>
+      </div>
+
+      {% if apps|length > 8 %}
+      <div class="shell-table-search">
+        {{ icon_search() }}
+        <input type="search" placeholder="Search by applicant name or email…" data-table-filter="#applicants-table" />
+      </div>
+      {% endif %}
+
+      <div class="table-scroll">
+      <table class="applicants-table" id="applicants-table">
+        <thead>
+          <tr>
+            <th>Applicant</th>
+            <th>Credentials</th>
+            {% if job.job_type == "gig" %}<th>Trust</th>{% endif %}
+            <th>CV</th>
+            <th>Supporting Doc</th>
+            <th>Status</th>
+            <th>Messages</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for app in apps %}
+          <tr>
+            <td data-label="Applicant">
+              <strong>{{ app.applicant_name }}</strong>
+              <br /><span class="muted">{{ app.applicant_email }}</span>
+            </td>
+
+            <td data-label="Credentials">
+              {% if app.credentials['items'] %}
+                <details class="employer-credential-summary">
+                  <summary>
+                    {% if app.credentials.verified_count %}<span class="status accepted">🎖 {{ app.credentials.verified_count }} verified</span>{% endif %}
+                    {% if app.credentials.revoked_count %}<span class="status rejected">⚠ {{ app.credentials.revoked_count }} revoked</span>{% endif %}
+                    {% if app.credentials.pending_count %}<span class="status pending">⏳ {{ app.credentials.pending_count }} pending</span>{% endif %}
+                  </summary>
+                  <ul class="employer-credential-list">
+                    {% for cred in app.credentials['items'] %}
+                    <li>
+                      <a href="{{ url_for('verify_by_id', cred_id=cred.id) }}" class="status {{ 'accepted' if cred.status == 'verified' else ('rejected' if cred.status == 'revoked' else 'pending') }}" target="_blank" rel="noopener">
+                        {{ cred.title }}
+                      </a>
+                      <span class="muted">{{ cred.issuer }}</span>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                  <!-- Each credential above links straight to its own
+                       /verify/<id> page -- the same public, live-checked
+                       page a candidate would share directly, showing the
+                       actual hash and re-checking the chain in real time
+                       rather than trusting this summary's cached DB
+                       flags. This generic hash-paste tool is only for a
+                       credential an employer has from OUTSIDE this list
+                       (e.g. a paper certificate someone hands them in
+                       person) -- see /employer/verify's own page copy. -->
+                  <a href="{{ url_for('verify') }}" class="link" target="_blank" rel="noopener">Have a hash from somewhere else? Verify it manually ↗</a>
+                </details>
+              {% else %}
+                <span class="muted">No credentials on file</span>
+              {% endif %}
+            </td>
+
+            {% if job.job_type == "gig" %}
+            <td data-label="Trust">
+              <div class="employer-trust-summary">
+                {% if app.trust and app.trust.rating_count %}
+                  <strong>★ {{ app.trust.avg_rating }}</strong> ({{ app.trust.rating_count }} rating{{ "s" if app.trust.rating_count != 1 }})
+                  <br />{{ app.trust.completed_gigs }} completed gig{{ "s" if app.trust.completed_gigs != 1 }}
+                {% else %}
+                  New worker — no ratings yet
+                {% endif %}
+              </div>
+            </td>
+            {% endif %}
+
+            <td data-label="CV">
+              {% if app.cv_file %}
+                <a
+                  href="{{ url_for('download_application', filename=app.cv_file) }}"
+                  class="btn small"
+                >
+                  Download CV
+                </a>
+              {% elif job.job_type == "gig" %}
+                <span class="muted">No CV required for this gig</span>
+              {% else %}
+                <span class="muted">None</span>
+              {% endif %}
+            </td>
+
+            <td data-label="Supporting Doc">
+              {% if app.supporting_file %}
+                <a
+                  href="{{ url_for('download_application', filename=app.supporting_file) }}"
+                  class="btn small"
+                >
+                  Download
+                </a>
+              {% else %}
+                <span class="muted">None</span>
+              {% endif %}
+            </td>
+
+            <td class="status {{ app.status | lower }}">
+              {{ app.status }}
+            </td>
+
+            <td data-label="Messages">
+              <a
+                href="{{ url_for('employer_messages_page', job_id=job.id, app_id=app.id) }}"
+                class="btn small"
+              >
+                💬 Message
+              </a>
+            </td>
+
+            <td data-label="Action">
+              {% if app.status == "Pending" %}
+                <form method="POST" class="inline-actions">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <input type="hidden" name="app_id" value="{{ app.id }}" />
+                  <button
+                    type="submit"
+                    name="action"
+                    value="accept"
+                    class="btn accept"
+                  >
+                    ✅ Accept
+                  </button>
+                  <button
+                    type="submit"
+                    name="action"
+                    value="reject"
+                    class="btn reject"
+                  >
+                    ❌ Reject
+                  </button>
+                </form>
+              {% elif job.job_type == "gig" and app.status == "Accepted" %}
+                <form method="POST" action="{{ url_for('employer_complete_application', app_id=app.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit" class="btn small">✔ Mark Complete</button>
+                </form>
+              {% elif job.job_type == "gig" and app.status == "Completed" and not app.worker_rating %}
+                <form method="POST" action="{{ url_for('employer_rate_worker', app_id=app.id) }}" class="employer-rate-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <select name="score" required aria-label="Rating">
+                    <option value="">Rate…</option>
+                    {% for n in range(5, 0, -1) %}
+                    <option value="{{ n }}">{{ n }}/5</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn small">Submit Rating</button>
+                </form>
+              {% elif app.worker_rating %}
+                <span class="muted">You rated: ★ {{ app.worker_rating.score }}/5</span>
+              {% else %}
+                <span class="muted">Decision made</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+  {% else %}
+    <section class="card">
+      <h2>No Applications Yet</h2>
+      <p>
+        Nobody has applied for this role yet. You'll see new applicants in real time as they apply
+        through the YouthChain app.
+      </p>
+    </section>
+  {% endif %}
+
+  <section class="card subtle">
+    <p class="muted">
+      Tip: For accepted candidates, you can follow up manually via email for now –
+      later we can add automated onboarding workflows.
+    </p>
+  </section>
+
+  <a href="{{ url_for('employer_dashboard') }}" class="btn secondary outline">
+    ⬅ Back to Dashboard
+  </a>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='socket.io.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='employer_applications_live.js') }}"></script>
+{% endblock %}

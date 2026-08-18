@@ -1,0 +1,46 @@
+{% extends "employer_auth_shell.html" %}
+{% from "_admin_icons.html" import icon_eye, icon_eye_off %}
+
+{% block title %}Appeal a Suspension{% endblock %}
+{% block auth_title %}Appeal Your Suspension{% endblock %}
+{% block auth_subtitle %}If your employer account was suspended in error, tell us why here. An admin will review it.{% endblock %}
+
+{% block content %}
+  {% if submitted %}
+    <div class="result success" role="status">
+      Your appeal has been submitted. An admin will review it and respond by email to the address on your account.
+    </div>
+    <div class="form-footer">
+      <a href="{{ url_for('employer_login') }}" class="btn secondary outline">Back to login</a>
+    </div>
+  {% else %}
+    {% if error %}
+      <div class="result error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <label for="email">Account email</label>
+      <input id="email" type="email" name="email" required autocomplete="username" />
+
+      <label for="password">Account password</label>
+      <div class="shell-password-field">
+        <input id="password" type="password" name="password" required autocomplete="current-password" />
+        <button type="button" class="shell-password-toggle" data-toggle-password="#password" aria-label="Show password">
+          <span class="icon-eye">{{ icon_eye() }}</span>
+          <span class="icon-eye-off">{{ icon_eye_off() }}</span>
+        </button>
+      </div>
+      <p class="muted">We verify your password to confirm this appeal is really from your account.</p>
+
+      <label for="message">Why do you believe this suspension was a mistake?</label>
+      <textarea id="message" name="message" rows="5" maxlength="2000" required></textarea>
+
+      <div class="form-footer">
+        <button type="submit" class="btn primary">Submit Appeal</button>
+        <a href="{{ url_for('employer_login') }}" class="btn secondary outline">Cancel</a>
+      </div>
+    </form>
+  {% endif %}
+{% endblock %}

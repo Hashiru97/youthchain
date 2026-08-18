@@ -1,0 +1,217 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty, icon_clock, icon_shield_check, icon_briefcase, icon_document, icon_check %}
+
+{% block title %}Job Scanner{% endblock %}
+{% block page_title %}Job Scanner{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Configured sources, recent scan history, and scan health for the Discover feed.</p>{% endblock %}
+
+{% block content %}
+  {% if error %}
+  <div class="result error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  {# Scanner Health -- answers "is this actually working right now" at a
+     glance, without reading server logs or writing a throwaway script
+     (which is exactly how every one of these numbers got checked while
+     this feature was being built). #}
+  <div class="admin-stat-grid">
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon {{ 'tone-success' if health.poller_enabled else 'tone-secondary' }}">{{ icon_shield_check() }}</div>
+      <div class="admin-stat-value">{{ "Enabled" if health.poller_enabled else "Disabled" }}</div>
+      <div class="admin-stat-label">Scheduled scanning{{ " (ENABLE_JOB_SCANNER_POLLER not set)" if not health.poller_enabled else "" }}</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-primary">{{ icon_briefcase() }}</div>
+      <div class="admin-stat-value">{{ health.active_sources }} / {{ health.total_sources }}</div>
+      <div class="admin-stat-label">Active sources</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-tertiary">{{ icon_document() }}</div>
+      <div class="admin-stat-value">{{ health.total_scraped_jobs }}</div>
+      <div class="admin-stat-label">Scraped jobs live in Discover</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-success">{{ icon_check() }}</div>
+      <div class="admin-stat-value">{{ health.jobs_with_description }} / {{ health.total_scraped_jobs }}</div>
+      <div class="admin-stat-label">Have a full description</div>
+    </div>
+    <div class="admin-stat-card">
+      <div class="admin-stat-icon tone-secondary">{{ icon_clock() }}</div>
+      <div class="admin-stat-value">{{ health.last_successful_scan_at or "Never" }}</div>
+      <div class="admin-stat-label">Last successful scan</div>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Sources ({{ sources|length }})</h2>
+      <label class="admin-auto-refresh">
+        <input type="checkbox" id="scanner-auto-refresh-toggle" />
+        Auto-refresh
+        <select id="scanner-auto-refresh-interval">
+          <option value="10">10s</option>
+          <option value="30" selected>30s</option>
+          <option value="60">60s</option>
+        </select>
+      </label>
+    </div>
+
+    {% if sources %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Name</th><th>URL</th><th>Frequency</th><th>Last scan</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for source in sources %}
+        <tr>
+          <td data-label="Name">{{ source.name }}</td>
+          <td data-label="URL"><span class="muted">{{ source.base_url }}</span></td>
+          <td data-label="Frequency">every {{ source.scan_frequency_minutes }}m</td>
+          <td data-label="Last scan">{{ source.last_scan_started_at or "Never" }}</td>
+          <td data-label="Status">
+            <span class="admin-role-pill {{ 'role-admin' if source.active else 'role-verifier' }}">
+              {{ "Active" if source.active else "Paused" }}
+            </span>
+          </td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_scanner_trigger_source', source_id=source.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="btn small">Scan now</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_scanner_update_source', source_id=source.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="hidden" name="active" value="{{ '0' if source.active else '1' }}" />
+              <button type="submit" class="btn small secondary outline">{{ "Pause" if source.active else "Resume" }}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No sources configured yet — add one below.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Add a source</h2>
+    <form method="POST" action="{{ url_for('admin_scanner_create_source') }}" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <label for="name">Source name</label>
+      <input id="name" type="text" name="name" placeholder="e.g., Careers.sl" required />
+
+      <label for="base_url">URL</label>
+      <input id="base_url" type="url" name="base_url" placeholder="https://careers.sl/jobs" required />
+
+      <label for="scan_frequency_minutes">Scan frequency (minutes)</label>
+      <input id="scan_frequency_minutes" type="number" name="scan_frequency_minutes" min="30" max="1440" value="360" />
+      <small class="helper-text">Between 30 minutes and 24 hours (1440 minutes).</small>
+
+      <div class="form-footer">
+        <button type="submit" class="btn primary">Add source</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recent scan runs</h2>
+    </div>
+    {% if recent_runs %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Source</th><th>Status</th><th>Trigger</th><th>Queued</th><th>Results</th><th>Error</th></tr>
+      </thead>
+      <tbody>
+        {% for run in recent_runs %}
+        {% set source = sources_by_id.get(run.source_id) %}
+        <tr>
+          <td data-label="Source">{{ source.name if source else "Unknown source" }}</td>
+          <td data-label="Status">
+            <span class="status {{ 'accepted' if run.status == 'success' else ('rejected' if run.status == 'failed' else 'pending') }}">
+              {{ run.status | capitalize }}
+            </span>
+          </td>
+          <td data-label="Trigger">{{ run.trigger | capitalize }}</td>
+          <td data-label="Queued"><span class="admin-icon-inline">{{ icon_clock() }}</span> {{ run.queued_at }}</td>
+          <td data-label="Results">
+            {% if run.status == "success" %}
+              found {{ run.jobs_found }}, created {{ run.jobs_created }}, updated {{ run.jobs_updated }}
+              {% if run.jobs_backfilled is not none %}
+                <br><span class="muted">{{ run.jobs_backfilled }} got a full description from their own page</span>
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td data-label="Error"><span class="muted">{{ run.error_message or "—" }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No scans have run yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    // Auto-refresh toggle + interval selector, persisted in localStorage so
+    // it survives the reload it itself triggers. Plain setInterval +
+    // location.reload(), matching this admin console's existing
+    // server-rendered-Jinja style everywhere else — no new JS framework
+    // for one diagnostics page.
+    (function () {
+      var toggle = document.getElementById("scanner-auto-refresh-toggle");
+      var intervalSelect = document.getElementById("scanner-auto-refresh-interval");
+      var STORAGE_KEY = "youthchain_scanner_auto_refresh";
+      var timer = null;
+
+      function stored() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function save(enabled, seconds) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ enabled: enabled, seconds: seconds }));
+        } catch (e) {}
+      }
+
+      function apply() {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        if (toggle.checked) {
+          var seconds = parseInt(intervalSelect.value, 10) || 30;
+          timer = setInterval(function () {
+            window.location.reload();
+          }, seconds * 1000);
+        }
+        save(toggle.checked, parseInt(intervalSelect.value, 10) || 30);
+      }
+
+      var saved = stored();
+      if (saved) {
+        toggle.checked = !!saved.enabled;
+        intervalSelect.value = String(saved.seconds || 30);
+      }
+      toggle.addEventListener("change", apply);
+      intervalSelect.addEventListener("change", apply);
+      apply();
+    })();
+  </script>
+{% endblock %}

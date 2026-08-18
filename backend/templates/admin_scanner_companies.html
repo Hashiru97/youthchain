@@ -1,0 +1,64 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Scraped Companies{% endblock %}
+{% block page_title %}Scraped Companies{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Company names the scanner has encountered — a separate, lightweight verification from Employer accounts, since scraped listings have no account behind them at all.</p>{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Unverified ({{ unverified|length }})</h2>
+    </div>
+    {% if unverified %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Company</th><th>First seen</th><th>Last seen</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for company in unverified %}
+        <tr>
+          <td data-label="Company">{{ company.name }}</td>
+          <td data-label="First seen">{{ company.first_seen_at }}</td>
+          <td data-label="Last seen">{{ company.last_seen_at }}</td>
+          <td data-label="Action">
+            <form method="POST" action="{{ url_for('admin_scanner_verify_company', company_id=company.id) }}" class="inline-actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button type="submit" class="btn small">Mark verified</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No unverified companies right now.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card subtle">
+    <div class="admin-section-header">
+      <h2>Recently verified</h2>
+    </div>
+    {% if verified %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead><tr><th>Company</th><th>Verified</th></tr></thead>
+      <tbody>
+        {% for company in verified %}
+        <tr>
+          <td data-label="Company">{{ company.name }}</td>
+          <td data-label="Verified">{{ company.verified_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No companies verified yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

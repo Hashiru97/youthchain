@@ -1,0 +1,54 @@
+{% extends "employer_shell.html" %}
+
+{% block title %}Messages with {{ applicant.name if applicant else "Applicant" }}{% endblock %}
+
+{% block content %}
+  <div class="admin-section-header" style="margin-bottom: 20px;">
+    <h2>💬 Messages</h2>
+    <p>
+      Conversation with <strong>{{ applicant.name if applicant else "this applicant" }}</strong>
+      about <strong>{{ job.title }}</strong>.
+    </p>
+  </div>
+
+  <section class="card">
+    {% if error %}
+    <div class="result error" role="alert">{{ error }}</div>
+    {% endif %}
+    {% if messages %}
+    <div class="thread">
+      {% for m in messages %}
+        <div class="bubble {{ m.sender_type }}">
+          {% if m.body %}{{ m.body }}{% endif %}
+          {% if m.attachment_file %}
+            <div><a href="{{ url_for('download_message_attachment', filename=m.attachment_file) }}" class="link">📎 Attachment</a></div>
+          {% endif %}
+          <span class="meta">
+            {{ "You (employer)" if m.sender_type == "employer" else (applicant.name if applicant else "Applicant") }} · {{ m.created_at }}
+            {% if m.sender_type == "employer" %} · {{ "✓ Read" if m.read else "Sent" }}{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No messages yet — say hello.</p>
+    {% endif %}
+
+    <form method="POST" class="form" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label for="body">Message</label>
+      <textarea id="body" name="body" rows="3" maxlength="2000"></textarea>
+      <label for="attachment">Attachment (optional)</label>
+      <input id="attachment" type="file" name="attachment" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
+      <div class="form-footer">
+        <button type="submit" class="btn primary">Send</button>
+        <a href="{{ url_for('employer_applications', job_id=job.id) }}" class="btn secondary outline">
+          ⬅ Back to Applicants
+        </a>
+        <a href="{{ url_for('employer_messages_inbox') }}" class="btn secondary outline">
+          💬 All Messages
+        </a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

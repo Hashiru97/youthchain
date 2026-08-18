@@ -1,0 +1,80 @@
+# Self-hosted observability add-on — Prometheus (metrics) + Grafana
+# (dashboards) + Loki/Promtail (log aggregation). Deliberately additive
+# rather than a self-contained stack (contrast docker-compose.tls.yml,
+# which genuinely needs to redeclare the backend service since it changes
+# how backend's ports are published): this file adds only new services and
+# is meant to run alongside the base compose file, which already defines
+# `backend` — Compose resolves that service name across both files.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#
+# Then:
+#   - Prometheus: http://localhost:9090 (not published beyond localhost —
+#     see the loopback-only port bindings below; this stack is for an
+#     operator's own machine/VPN-reachable box, not the public internet)
+#   - Grafana: http://localhost:3000 (admin / GRAFANA_ADMIN_PASSWORD — set
+#     that env var, e.g. in a root .env file Compose auto-loads, before
+#     running this stack anywhere beyond a throwaway local box; it falls
+#     back to the "admin" placeholder below only when unset, so local dev
+#     keeps working with zero setup)
+#   - Datasources (Prometheus + Loki) are auto-provisioned — no manual
+#     "add datasource" step needed. Dashboards are not pre-built; build one
+#     against the youthchain_backend_request_* metrics that
+#     prometheus_flask_exporter exposes out of the box.
+#
+# NOT a replacement for docs/monitoring.md's guidance on external
+# uptime/alerting — Prometheus/Grafana here are for an operator to look at,
+# not to page anyone. Alertmanager (real paging) is a real, separate
+# addition this file deliberately doesn't bundle in, to avoid pretending
+# alert routing exists when nobody has configured where alerts go.
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:

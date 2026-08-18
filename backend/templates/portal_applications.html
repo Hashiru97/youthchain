@@ -1,0 +1,74 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_map_pin, icon_message, icon_smartphone, icon_star %}
+
+{% block title %}My Applications{% endblock %}
+
+{% block content %}
+  <header class="page-header" style="padding-top: 28px;">
+    <h1>📋 My Applications</h1>
+    <p class="subtitle">Track the status of every job you've applied to.</p>
+    <a href="{{ url_for('portal_work_history') }}" class="btn secondary outline" style="margin-top: 8px;">{{ icon_star() }} View Work History</a>
+  </header>
+
+  {% if rows %}
+    <div class="portal-app-list">
+      {% for application, job in rows %}
+        {% set given = ratings_given.get(application.id) %}
+        {% set received = ratings_received.get(application.id) %}
+        <div class="portal-app-row">
+          <div class="portal-app-row-main">
+            <div class="portal-app-row-title">{{ job.title if job else "Job no longer available" }}</div>
+            <div class="portal-app-row-sub">
+              {% if job %}{{ icon_map_pin() }} {{ job.location }} · {% endif %}Applied {{ application.created_at.strftime('%d %b %Y') if application.created_at else '' }}
+            </div>
+          </div>
+          <span class="status {{ application.status | lower }}">{{ application.status }}</span>
+          <span class="portal-app-row-message-teaser" title="Messaging is available in the YouthChain app">
+            {{ icon_message() }} App only
+          </span>
+        </div>
+        {% if job and job.job_type == "gig" and application.status == "Completed" %}
+        <div class="portal-app-row-rating">
+          {% if received %}
+            <span class="portal-skill-pill portal-skill-pill-gig">{{ icon_star() }} You were rated {{ received.score }}/5</span>
+            <form method="POST" action="{{ url_for('portal_flag_rating', rating_id=received.id) }}" class="portal-app-row-dispute">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="text" name="reason" placeholder="Why is this unfair?" required />
+              <button type="submit" class="btn small secondary outline">Dispute</button>
+            </form>
+          {% endif %}
+          {% if given %}
+            <span class="portal-skill-pill portal-skill-pill-gig">{{ icon_star() }} You rated them {{ given.score }}/5</span>
+          {% else %}
+            <form method="POST" action="{{ url_for('portal_rate_employer', app_id=application.id) }}" class="portal-app-row-rate">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <select name="score" required aria-label="Rate this employer">
+                <option value="">Rate this employer…</option>
+                {% for n in range(5, 0, -1) %}
+                <option value="{{ n }}">{{ n }}/5</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="comment" placeholder="Comment (optional)" />
+              <button type="submit" class="btn small primary">Submit</button>
+            </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>No applications yet</h3>
+      <p>Browse open roles and apply — your applications will show up here.</p>
+      <a class="btn primary" href="{{ url_for('portal_dashboard') }}">Find Jobs</a>
+    </div>
+  {% endif %}
+
+  <a href="{{ url_for('get_app') }}" class="portal-app-banner">
+    <span class="portal-app-banner-icon">{{ icon_smartphone() }}</span>
+    <span class="portal-app-banner-text">
+      <strong>Message employers directly in the app</strong>
+      <span>Reply to employers, get instant status updates, and never miss a message — download the YouthChain app for the full experience.</span>
+    </span>
+  </a>
+{% endblock %}

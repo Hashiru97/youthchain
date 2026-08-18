@@ -1,0 +1,42 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_smartphone, icon_bell, icon_message, icon_shield_check %}
+
+{% block title %}Get the App{% endblock %}
+
+{% block content %}
+  <section class="portal-hero">
+    <h1>Everything on the web, plus what only a phone can do</h1>
+    <p>The YouthChain mobile app is in active development. Here's what it adds once it's on your device.</p>
+  </section>
+
+  <div class="portal-credential-grid" style="margin-top: 8px;">
+    <div class="portal-credential-card">
+      <div class="portal-credential-card-title">{{ icon_message() }} Direct messaging</div>
+      <div class="portal-credential-card-sub">Reply to employers in real time, right from a conversation thread — no refreshing a web page to check for a reply.</div>
+    </div>
+    <div class="portal-credential-card">
+      <div class="portal-credential-card-title">{{ icon_bell() }} Push notifications</div>
+      <div class="portal-credential-card-sub">Know the moment an employer messages you, accepts your application, or your credential is verified on-chain.</div>
+    </div>
+    <div class="portal-credential-card">
+      <div class="portal-credential-card-title">{{ icon_smartphone() }} Works with a weak connection</div>
+      <div class="portal-credential-card-sub">Your profile and passport stay usable even with an unreliable connection — built for how people actually get online across Sierra Leone.</div>
+    </div>
+    <div class="portal-credential-card">
+      <div class="portal-credential-card-title">{{ icon_shield_check() }} Everything you can already do here</div>
+      <div class="portal-credential-card-sub">Browse and apply for jobs, track applications, and hold your verified digital passport — all of that works today, right in this browser.</div>
+    </div>
+  </div>
+
+  <section class="card">
+    <h2 class="card-title">Download links aren't live yet</h2>
+    <p>
+      YouthChain hasn't been submitted to Google Play or the App Store yet — we won't link you to a store
+      listing that doesn't exist. In the meantime, everything you need to find a job and apply is right here
+      on the web. This page will be updated with real download links the moment the app is published.
+    </p>
+    <div class="form-footer">
+      <a href="{{ url_for('portal_dashboard') }}" class="btn primary">Browse jobs now</a>
+    </div>
+  </section>
+{% endblock %}

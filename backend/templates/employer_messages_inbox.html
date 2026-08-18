@@ -1,0 +1,49 @@
+{% extends "employer_shell.html" %}
+
+{% block title %}Messages{% endblock %}
+
+{% block content %}
+  <div class="admin-section-header" style="margin-bottom: 20px;">
+    <h2>💬 Messages</h2>
+    <p>Every conversation across all your job posts, most recently active first.</p>
+  </div>
+
+  {% if threads %}
+    <div class="employer-thread-list">
+      {% for t in threads %}
+        <a
+          href="{{ url_for('employer_messages_page', job_id=t.job.id, app_id=t.application.id) }}"
+          class="employer-thread-row {{ 'unread' if t.unread_count }}"
+        >
+          <span class="employer-thread-avatar">
+            {{ (t.applicant.name[:1] | upper) if t.applicant else "?" }}
+          </span>
+          <span class="employer-thread-main">
+            <span class="employer-thread-top">
+              <span class="employer-thread-name">{{ t.applicant.name if t.applicant else t.application.applicant_name }}</span>
+              <span class="employer-thread-job">{{ t.job.title if t.job else "" }}</span>
+            </span>
+            <span class="employer-thread-preview">
+              {% if t.last_message %}
+                {% if t.last_message.sender_type == "employer" %}You: {% endif %}{{ t.last_message.body or "📎 Attachment" }}
+              {% else %}
+                No messages yet
+              {% endif %}
+            </span>
+          </span>
+          <span class="employer-thread-meta">
+            {% if t.last_message %}<span class="employer-thread-time">{{ t.last_message.created_at }}</span>{% endif %}
+            {% if t.unread_count %}<span class="shell-nav-badge">{{ t.unread_count }}</span>{% endif %}
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>💬 No conversations yet</h3>
+      <p>
+        When an applicant messages you about one of your jobs, it'll show up here.
+      </p>
+    </div>
+  {% endif %}
+{% endblock %}

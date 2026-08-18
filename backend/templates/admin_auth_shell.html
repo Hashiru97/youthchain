@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>{% block title %}Admin{% endblock %} • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css', v=asset_version('admin.css')) }}" />
+</head>
+<body>
+  {% from "_admin_icons.html" import icon_sun, icon_moon %}
+  <button type="button" class="shell-theme-toggle auth-shell-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
+    <span class="icon-sun">{{ icon_sun() }}</span>
+    <span class="icon-moon">{{ icon_moon() }}</span>
+  </button>
+  <div class="admin-auth-shell">
+    <div class="admin-auth-card">
+      <div class="admin-auth-brand">
+        <div class="admin-auth-brand-mark">
+          <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
+        </div>
+        <h1>{% block auth_title %}{% endblock %}</h1>
+        <p>{% block auth_subtitle %}{% endblock %}</p>
+      </div>
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# Repo-root .dockerignore -- the backend image's build context is now the
+# repo root (not backend/ alone), since it needs to COPY in the sibling
+# blockchain/ project too (see docker-compose.yml's own comment on this).
+backend/venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/instance/
+backend/uploads/
+backend/backups/
+backend/tests/
+backend/.env
+
+blockchain/node_modules/
+blockchain/artifacts/
+blockchain/cache/
+blockchain/.env
+
+youthchain_app/
+docs/
+loadtest/
+observability/
+youthchain_concept_note/
+
+.git/
+*.md

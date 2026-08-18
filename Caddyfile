@@ -1,0 +1,24 @@
+# Used only with docker-compose.tls.yml. Replace with your real domain —
+# Caddy uses the hostname here to request a Let's Encrypt certificate for
+# it automatically; "your-domain.example" will not issue a real cert.
+your-domain.example {
+	# WebSocket support for Socket.IO (real-time job/application/message
+	# updates) is transparent in Caddy's reverse_proxy — no extra directive
+	# needed. The 120s read_timeout covers Socket.IO's long-polling
+	# fallback. It used to also need to cover /issue_credential's ~90s
+	# synchronous blockchain write (BL-18) — that write now happens in a
+	# background thread instead (see
+	# _write_onchain_tx_for_credential_async in app.py), so
+	# /issue_credential itself returns quickly and no longer factors into
+	# this number at all. Left at 120s regardless: that's a real,
+	# still-needed margin for Socket.IO's own long-polling fallback on
+	# its own, not a value chosen for the blockchain write in the first
+	# place.
+	reverse_proxy backend:5000 {
+		transport http {
+			read_timeout 120s
+		}
+	}
+
+	encode gzip
+}

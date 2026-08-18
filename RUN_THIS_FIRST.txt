@@ -1,15 +1,9 @@
-1. Start blockchain:
-   cd blockchain
-   npx hardhat node
+See README.md's "Quickstart" section for the full, current setup steps
+(Docker Compose, or running each piece directly) — kept there, not
+duplicated here, so this file can't drift out of sync with it again.
 
-2. Deploy contract:
-   npx hardhat run scripts/deploy.js --network localhost
-
-3. Start backend:
-   cd backend
-   pip install -r requirements.txt
-   python3 app.py
-
-4. Start Flutter app:
-   cd youthchain_app
-   flutter run
+Fastest path:
+    cp backend/.env.example backend/.env
+    # set JWT_SECRET_KEY in backend/.env
+    docker compose up -d --build
+    curl http://127.0.0.1:5000/healthz

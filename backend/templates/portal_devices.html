@@ -1,0 +1,42 @@
+{% extends "portal_shell.html" %}
+{% from "_admin_icons.html" import icon_smartphone, icon_monitor %}
+
+{% block title %}Devices{% endblock %}
+
+{% block content %}
+  <header class="page-header" style="padding-top: 28px;">
+    <h1>{{ icon_smartphone() }} Connected devices</h1>
+    <p class="subtitle">Every phone and browser currently signed into your account. If you don't recognize one, revoke it — that signs it out immediately.</p>
+  </header>
+
+  {% if sessions %}
+    <div class="portal-credential-grid">
+      {% for s in sessions %}
+        <div class="portal-credential-card">
+          <div class="portal-credential-card-title">
+            {{ icon_smartphone() if s.channel == "app" else icon_monitor() }}
+            {{ s.device_label or "Unknown device" }}
+            {% if s.session_token == current_token %}<span class="portal-skill-pill">This device</span>{% endif %}
+          </div>
+          <div class="portal-credential-card-sub">
+            {{ "Mobile app" if s.channel == "app" else "Web browser" }}
+            &middot; last active {{ s.last_seen_at.strftime("%d %b %Y, %H:%M") if s.last_seen_at else "just now" }}
+            {% if s.ip_address %}&middot; {{ s.ip_address }}{% endif %}
+          </div>
+          <form method="POST" action="{{ url_for('portal_revoke_device', session_id=s.id) }}" style="margin-top: 10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="btn small reject"
+              data-confirm="{{ 'Revoke this device? You will be signed out immediately.' if s.session_token == current_token else 'Revoke this device? It will be signed out immediately.' }}">
+              Revoke
+            </button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h3>No active sessions</h3>
+      <p>You're not signed in anywhere right now — that shouldn't be possible while viewing this page. Try refreshing.</p>
+    </div>
+  {% endif %}
+{% endblock %}

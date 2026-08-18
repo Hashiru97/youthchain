@@ -1,0 +1,20 @@
+{% extends "admin_auth_shell.html" %}
+
+{% block title %}Verify 2FA{% endblock %}
+{% block auth_title %}Two-Factor Verification{% endblock %}
+{% block auth_subtitle %}Enter the 6-digit code from your authenticator app.{% endblock %}
+
+{% block content %}
+  {% if error %}
+    <div class="result error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <label for="code">6-digit code</label>
+    <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autofocus required class="admin-totp-code-display" />
+    <div class="form-footer">
+      <button type="submit" class="btn primary btn-full-center">Verify</button>
+    </div>
+  </form>
+{% endblock %}

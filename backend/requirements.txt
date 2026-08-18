@@ -1,12 +1,142 @@
-Flask==3.0.3
-Flask-Cors==4.0.1
+# Flask/Flask-Cors/Werkzeug/python-dotenv/python-engineio/python-socketio
+# versions below were bumped together to close 18 real CVEs found by
+# `pip-audit -r requirements.txt` (PyPA's own tool, backed by the PyPI
+# advisory database — not guessed or assumed), most notably: Flask-Cors
+# 4.0.1's regex path-matching bugs (PYSEC-2026-1383/1384/1385) could let
+# CORS headers apply to routes they shouldn't — directly relevant here,
+# since this app deliberately keeps the session-cookie-authenticated
+# employer/admin portals OUTSIDE CORS scope (see API_PREFIXES in app.py);
+# python-socketio 5.11.2's PYSEC-2026-1854 is a real deserialization RCE
+# in multi-server pickle-based message-queue mode (this app doesn't
+# currently configure SocketIO(message_queue=...), so wasn't reachable
+# today, but costs nothing to close before it might be); Werkzeug's
+# several safe_join/Windows-device-name issues and a multipart
+# resource-exhaustion bypass; gunicorn's Transfer-Encoding request-smuggling
+# pair (see its own pinned comment below for why that one needed a real
+# `docker run` to confirm before bumping, not just a version pin). Full
+# suite (SQLite + Postgres) and a live cross-origin CORS check
+# (tests/test_cors.py) both re-verified passing after this bump, not just
+# `pip check`.
+Flask==3.1.3
+Flask-Cors==6.0.0
 Flask-SQLAlchemy==3.1.1
-Flask-SocketIO==5.3.6
+# Bumped from 5.3.6 -> 5.6.1 separately from the CVE-driven bumps above:
+# a real-connection Socket.IO privacy fix (see _socketio_connect in
+# app.py, added alongside a full-codebase review) needs socketio.
+# test_client() to actually work, and 5.3.6's event-dispatch internals
+# crash under Flask 3.1's session handling
+# ("AttributeError: property 'session' of 'RequestContext' object has no
+# setter") the moment ANY @socketio.on() handler runs -- confirmed by
+# writing the very tests that prove the privacy fix (tests/
+# test_socketio_privacy.py), not assumed. 5.6.1 fixes this cleanly; full
+# suite re-verified passing after the bump.
+Flask-SocketIO==5.6.1
 Flask-JWT-Extended==4.6.0
 Flask-WTF==1.2.1
 SQLAlchemy==2.0.30
-Werkzeug==3.0.3
-python-dotenv==1.0.1
-python-engineio==4.9.1
-python-socketio==5.11.2
+Werkzeug==3.1.6
+python-dotenv==1.2.2
+python-engineio==4.13.2
+python-socketio==5.16.2
 filetype==1.2.0
+
+# Postgres driver — DATABASE_URL (see app.py / .env.example) already reads
+# a postgres:// URL if set, but nothing could actually connect to one
+# without this: SQLite (the zero-config default) has a hard single-writer
+# ceiling that Phase 3 #19/#20 of the engineering review flags as a Severe/
+# Critical gap for any real deployment scale. Installed unconditionally
+# (not an extras group) so the DATABASE_URL override is guaranteed to work
+# out of the box rather than failing at the moment an operator needs it.
+psycopg2-binary==2.9.12
+
+# Production WSGI server. Discovered via a real `docker run`, not guessed:
+# once debug mode is correctly gated off in production (see the
+# IS_PRODUCTION fix in app.py's `if __name__ == "__main__"` block),
+# Flask-SocketIO's own run() refuses outright to use the Werkzeug dev
+# server outside debug mode ("The Werkzeug web server is not designed to
+# run in production"). eventlet gives Socket.IO's long-polling/websocket
+# transports the concurrency model they need; gunicorn is only invoked in
+# the Docker image (see Dockerfile) — local `python app.py` development is
+# unaffected.
+# S3-compatible client for off-site backup upload (scripts/backup.py) —
+# works against self-hosted MinIO (docker-compose.backup.yml) or a real
+# cloud bucket identically, since both speak the S3 API.
+boto3==1.43.64
+
+# Self-hosted HashiCorp Vault client (see _get_secret() in app.py and
+# docker-compose.vault.yml) — real secrets-management integration, not a
+# hard dependency: falls back to plain environment variables when
+# VAULT_ADDR/VAULT_TOKEN are unset, so a from-scratch clone still works.
+hvac==2.4.0
+
+# TOTP 2FA for Admin accounts (RFC 6238 — Google Authenticator/Authy
+# compatible) and local QR-code generation for enrollment (no third-party
+# QR API — that would leak the secret itself to that third party).
+pyotp==2.10.0
+qrcode[pil]==8.2
+
+# Exposes GET /metrics in Prometheus format (see app.py) — paired with
+# docker-compose.observability.yml's self-hosted Prometheus + Grafana, so
+# real metrics/dashboards exist without needing a paid SaaS APM account.
+prometheus-flask-exporter==0.23.2
+# Was already an installed transitive dependency of the exporter above,
+# but app.py now imports it directly too (the youthchain_backup_* gauges)
+# — pinned explicitly rather than relying on another package's transitive
+# resolution for something imported by name in this codebase's own code.
+prometheus-client==0.26.0
+
+# Real, versioned schema migrations (TD-04) — replaces the ad hoc
+# PRAGMA-guarded startup check that used to live in app.py. See
+# migrations/ for the initial migration and README.md's deployment notes
+# for the `flask db upgrade` step a real deployment now needs.
+Flask-Migrate==4.1.0
+alembic==1.19.0
+
+# Shared-store backend for OTP rate limiting (see REDIS_URL / _redis_client
+# in app.py) — replaces the in-memory dict that silently under-protects the
+# moment a second backend instance exists behind a load balancer. Falls
+# back to in-memory automatically if REDIS_URL is unset or unreachable, so
+# installing this does not require a Redis instance for local dev/tests.
+redis==8.1.0
+
+# Still pinned below the current latest (26.x) on purpose: 26.x's
+# worker-class resolution switched to entry_points-based plugin discovery,
+# which failed to find eventlet's worker class in this environment at
+# build time ("Entry point ('gunicorn.workers', 'eventlet') not found") —
+# a real incompatibility found via `docker run`, not assumed. Bumped from
+# 21.2.0 to 22.0.0 to close a real Transfer-Encoding request-smuggling
+# pair (PYSEC-2026-1433/1434, found via `pip-audit`) — re-verified via
+# another real `docker build` + `docker run` + a live /healthz request
+# (not just a version pin) that 22.0.0 still resolves the `eventlet`
+# worker-class shorthand directly, the same as 21.2.0, and does NOT hit
+# the entry_points issue that blocks 26.x.
+eventlet==0.41.1
+gunicorn==22.0.0
+
+# Real push (Firebase Cloud Messaging) / SMS (Twilio) providers for BL-38
+# (see send_push_notification()/send_sms() in app.py). Both are inert
+# without real credentials (FIREBASE_CREDENTIALS_JSON / TWILIO_* in
+# .env.example) — installing the SDKs unconditionally, same as
+# psycopg2-binary above, so setting those env vars later is a config-only
+# change, not a new deploy step.
+firebase-admin==7.5.0
+twilio==9.10.9
+
+# ClamAV client (see file_is_malware_free() in app.py and
+# docker-compose.clamav.yml). Real gap found via a full-platform review:
+# uploaded CVs/certificates/employer documents were only ever checked that
+# their content matched the claimed extension (filetype above), never
+# actually scanned for malicious content — and every one of those files is
+# later downloaded by a DIFFERENT user (an employer reviewing an
+# applicant's CV, an admin reviewing a verification document). Same
+# optional-integration pattern as everything else in this file: inert
+# (scanning fails open, same as before) unless CLAMD_HOST is set.
+clamd==1.0.2
+
+# Was already an installed transitive dependency (hvac/twilio/boto3 all
+# pull it in), but app.py now imports it directly too (see
+# _password_is_breached() — the Pwned Passwords k-anonymity check added
+# during a full OWASP Top 10 review, A07) — pinned explicitly rather than
+# relying on another package's transitive resolution, same reasoning as
+# prometheus-client above.
+requests==2.34.2

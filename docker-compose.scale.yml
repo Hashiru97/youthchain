@@ -1,0 +1,198 @@
+# Horizontal-scaling stack: nginx load balancer + 3 backend replicas +
+# Postgres + Redis. Self-contained (like docker-compose.tls.yml) rather
+# than additive, since it changes the backend topology fundamentally (one
+# instance -> three named instances, SQLite -> Postgres, in-memory rate
+# limiting -> Redis) rather than adding independent services alongside the
+# base stack.
+#
+# This is only honestly possible because of two things built earlier this
+# session: stateless JWT auth (no server-side session to keep sticky to one
+# instance) and Redis-backed OTP rate limiting (a shared store, so the
+# limiter is correct across replicas instead of each instance granting its
+# own separate attempt budget). Before those, "horizontal scaling" would
+# have been a compose file that started multiple processes with silently
+# broken security properties, not a real scaling story.
+#
+# Usage:
+#   docker compose -f docker-compose.scale.yml up -d --build
+#   curl http://localhost:8080/healthz   # via nginx, not a direct backend port
+#
+# Two real bugs found and fixed getting this to actually work, not
+# guessed: (1) plain `depends_on: [postgres]` only waits for the container
+# to start, not for Postgres to be ready to accept connections — all three
+# backends raced to connect before it was up and crashed; fixed with a
+# real `pg_isready` healthcheck + `condition: service_healthy`.
+# (2) all three replicas running `flask db upgrade` concurrently in their
+# own entrypoints raced to CREATE TABLE alembic_version, and the losers
+# crashed with a real Postgres UniqueViolation — the crash-loop happened
+# to self-heal via Docker's restart policy, which is not the same as a
+# fix. Fixed with a dedicated one-shot `migrate` service that runs the
+# migration exactly once; backend1/2/3 wait for it to fully complete
+# before starting (their own startup `flask db upgrade` then runs against
+# an already-current schema and is a correct no-op, not a second race).
+#
+# Live-verified this session (see docs/load-testing.md for exact numbers):
+# real requests round-robin across all three replicas, and a rate-limit
+# check tripped via one replica is correctly seen by the others (Redis
+# shared state, not per-process).
+#
+# THIRD REAL GAP FOUND, NOT YET FIXED -- this stack terminates no TLS
+# anywhere, but sets FLASK_ENV=production on every backend, which makes
+# app.py mark the session cookie Secure (see app.py's own comment on
+# SESSION_COOKIE_SECURE: "deploy behind TLS ... for any real environment").
+# A Secure-flagged cookie sent over plain HTTP is silently dropped by the
+# browser -- employer login and the job-seeker portal login (both real
+# session-cookie auth, not JWT) will appear to succeed (200, Set-Cookie
+# sent) but no session will ever actually persist, on this stack exactly
+# as shipped. This is NOT fixed by adding a TLS-terminating load balancer
+# in front of this stack either: loadbalancer/nginx.conf unconditionally
+# sets `proxy_set_header X-Forwarded-Proto $scheme;`, and $scheme here is
+# always "http" (nginx itself only ever `listen`s on 80) -- it overwrites
+# whatever a real upstream terminator already set, so Flask's ProxyFix
+# would still see request.is_secure == False regardless of what's in
+# front. DO NOT expose this stack to real users until TLS termination is
+# added INSIDE nginx.conf itself (cert + `listen 443 ssl` + redirect from
+# 80), since nginx is this topology's actual internet-facing edge.
+
+services:
+  postgres:
+    # Custom pg_cron-enabled image — see infra/postgres-cron/Dockerfile
+    # and docker-compose.yml's postgres service for why this can no
+    # longer be stock postgres:16-alpine.
+    build: ./infra/postgres-cron
+    command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
+    environment:
+      - POSTGRES_PASSWORD=youthchain
+      - POSTGRES_DB=youthchain
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: applies migrations exactly once, then exits. backend1/2/3
+  # wait for this to fully succeed before starting, so their own startup
+  # `flask db upgrade` (unchanged, same entrypoint as every other compose
+  # file) runs against an already-current schema instead of racing.
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+    command: ["true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend1:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      # Safe across all three replicas × their gunicorn workers — the
+      # claim query (scanner/poller.py) uses Postgres FOR UPDATE SKIP
+      # LOCKED specifically so every one of them can run this loop with
+      # zero risk of double-claiming the same scan.
+      - ENABLE_JOB_SCANNER_POLLER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+  backend2:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      # Safe across all three replicas × their gunicorn workers — the
+      # claim query (scanner/poller.py) uses Postgres FOR UPDATE SKIP
+      # LOCKED specifically so every one of them can run this loop with
+      # zero risk of double-claiming the same scan.
+      - ENABLE_JOB_SCANNER_POLLER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+  backend3:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      # Safe across all three replicas × their gunicorn workers — the
+      # claim query (scanner/poller.py) uses Postgres FOR UPDATE SKIP
+      # LOCKED specifically so every one of them can run this loop with
+      # zero risk of double-claiming the same scan.
+      - ENABLE_JOB_SCANNER_POLLER=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - uploads-data:/app/uploads
+      - backups-data:/app/backups
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./loadbalancer/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend1
+      - backend2
+      - backend3
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  uploads-data:
+  backups-data:

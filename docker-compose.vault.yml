@@ -1,0 +1,35 @@
+# Self-hosted HashiCorp Vault for real secrets management (see
+# _get_secret() in backend/app.py). Additive, like docker-compose.observability.yml
+# — only adds the `vault` service; run alongside the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.vault.yml up -d
+#
+# IMPORTANT — dev mode only, stated explicitly: `vault server -dev` runs
+# single-node, in-memory storage, auto-unsealed, with a fixed root token.
+# Everything is lost on restart, and the root token below is checked into
+# source control — appropriate for local development and for proving the
+# integration actually works (see docs/secrets-management.md), NOT for
+# production. A real deployment needs Vault's production mode: real
+# storage backend (Raft/Consul), unseal keys held by separate operators,
+# and a token distributed out-of-band, not committed to a compose file —
+# exactly the kind of infrastructure decision this repo can prepare the
+# integration for but cannot make on your behalf.
+#
+# After bringing this up, point the backend at it (in backend/.env):
+#   VAULT_ADDR=http://vault:8200        (from inside the compose network)
+#   VAULT_TOKEN=youthchain-dev-root-token
+# then write real secrets in:
+#   docker exec <vault-container> vault kv put secret/youthchain/config \
+#     JWT_SECRET_KEY=<real-value> ADMIN_API_KEY=<real-value>
+
+services:
+  vault:
+    image: hashicorp/vault:latest
+    cap_add:
+      - IPC_LOCK
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=youthchain-dev-root-token
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+    restart: unless-stopped

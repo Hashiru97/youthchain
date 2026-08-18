@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Privacy Policy • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>🔒 Privacy Policy</h1>
+      <p class="subtitle">What YouthChain collects, why, and who can see it.</p>
+    </header>
+
+    <main>
+      <section class="card warning-box">
+        <p role="status" class="warning-box-title">
+          ⚠️ Draft — pending legal review. This page is written by YouthChain's
+          engineering team to describe, accurately, what the software
+          technically does. It is not legal advice and has not been reviewed
+          or approved by a lawyer. Before any public launch, this page must
+          be replaced with a policy drafted or reviewed by qualified legal
+          counsel, in line with Sierra Leone's applicable data protection
+          law.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">What we collect</h2>
+        <div class="table-scroll">
+        <table class="applicants-table">
+          <thead><tr><th>Data</th><th>Collected when</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Data">Name, phone, email</td><td data-label="Collected when">Registration</td><td data-label="Why">Account identity, login, contact</td></tr>
+            <tr><td data-label="Data">Password (hashed, never stored in plain text)</td><td data-label="Collected when">Registration</td><td data-label="Why">Authentication</td></tr>
+            <tr><td data-label="Data">CV / uploaded documents</td><td data-label="Collected when">Job application, employer verification</td><td data-label="Why">Shared with the employer for that specific application, or reviewed by a YouthChain admin for employer verification</td></tr>
+            <tr><td data-label="Data">Credential records</td><td data-label="Collected when">Credential issuance</td><td data-label="Why">Portable, verifiable proof of skills/employment history — the core purpose of the platform</td></tr>
+            <tr><td data-label="Data">Messages between employer and applicant</td><td data-label="Collected when">In-app messaging</td><td data-label="Why">Visible only to the two participants of that application's thread and admins</td></tr>
+            <tr><td data-label="Data">Usage events (logins, applications, page views)</td><td data-label="Collected when">Ongoing platform use</td><td data-label="Why">Aggregate analytics only — see /admin/analytics, which does not display per-user personal data</td></tr>
+            <tr><td data-label="Data">Push notification device token</td><td data-label="Collected when">Mobile app, after login</td><td data-label="Why">Delivering notifications when the app is closed</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Who can see your data</h2>
+        <ul>
+          <li>You, always, via the app.</li>
+          <li>An employer you apply to sees your application, CV, and any messages you send them for that application — nothing else.</li>
+          <li>YouthChain admins can see platform data to operate, moderate, and secure the service, and to review employer verification documents.</li>
+          <li>YouthChain does not sell personal data to third parties.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Your choices</h2>
+        <ul>
+          <li>You must actively accept this policy (a required checkbox) before registering.</li>
+          <li>You can contact YouthChain to request deletion of your account and associated data, subject to records YouthChain is legally required to retain (e.g. issued credentials that other parties may already have verified).</li>
+        </ul>
+      </section>
+
+      <section class="card subtle">
+        <h2 class="card-title">Questions</h2>
+        <p class="muted">
+          This platform is under active development. If you have questions about your data, contact the YouthChain team through the channel where you obtained this app.
+        </p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

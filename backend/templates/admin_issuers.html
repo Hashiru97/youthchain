@@ -1,0 +1,85 @@
+{% extends "admin_shell.html" %}
+{% from "_admin_icons.html" import icon_inbox_empty %}
+
+{% block title %}Blockchain Issuers{% endblock %}
+{% block page_title %}Blockchain Issuers{% endblock %}
+{% block page_subtitle %}<p class="admin-topbar-subtitle">Wallet addresses allowed to call registerCredential() on-chain. The deploying wallet is accredited automatically at contract deployment — accredit a second address here before a partner org needs to issue credentials directly.</p>{% endblock %}
+
+{% block content %}
+  {% if error %}
+    <div class="result error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Accredit a new issuer</h2>
+    </div>
+    <form method="POST" action="{{ url_for('admin_accredit_issuer') }}" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label for="issuer-address">Wallet address</label>
+      <input
+        type="text" id="issuer-address" name="address" required
+        pattern="0x[0-9a-fA-F]{40}" maxlength="42"
+        placeholder="0x..."
+        autocomplete="off" spellcheck="false"
+      />
+      <small class="helper-text">This sends a real on-chain transaction and can take up to a minute.</small>
+      <button type="submit" class="btn primary">Accredit</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="admin-section-header">
+      <h2>Accreditation history{% if issuers %} ({{ issuers|length }}){% endif %}</h2>
+    </div>
+    {% if issuers is none %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>Couldn't reach the blockchain node to load issuer history. Check that it's running and try again.</p>
+    </div>
+    {% elif issuers %}
+    <div class="table-scroll">
+    <table class="applicants-table">
+      <thead>
+        <tr><th>Address</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for issuer in issuers %}
+        <tr {% if not issuer.accredited %}class="admin-row-flagged"{% endif %}>
+          <td data-label="Address"><code class="mono">{{ issuer.address }}</code></td>
+          <td data-label="Status">
+            {% if issuer.accredited %}
+              <span class="status accepted">Accredited</span>
+            {% else %}
+              <span class="status rejected">Revoked</span>
+            {% endif %}
+          </td>
+          <td data-label="Action">
+            {% if issuer.accredited %}
+            <form method="POST" action="{{ url_for('admin_revoke_issuer') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="hidden" name="address" value="{{ issuer.address }}" />
+              <button type="submit" class="btn reject small"
+                data-confirm="Revoke issuer permission for {{ issuer.address }}? They will no longer be able to register credentials.">Revoke</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('admin_accredit_issuer') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="hidden" name="address" value="{{ issuer.address }}" />
+              <button type="submit" class="btn primary small">Re-accredit</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="admin-empty-queue">
+      {{ icon_inbox_empty() }}
+      <p>No issuers accredited yet.</p>
+    </div>
+    {% endif %}
+  </section>
+{% endblock %}
