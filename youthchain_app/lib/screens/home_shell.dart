@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../theme/app_theme.dart';
 import 'discover_screen.dart';
 import 'job_screen.dart';
@@ -42,9 +43,9 @@ class _HomeShellState extends State<HomeShell> {
         backgroundColor: context.colors.surface,
         selectedItemColor: context.colors.primary,
         unselectedItemColor: context.colors.textMuted,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.work_outline_rounded), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.travel_explore_rounded), label: "Discover"),
+        items: [
+          BottomNavigationBarItem(icon: const Icon(Icons.work_outline_rounded), label: context.l10n.navHome),
+          BottomNavigationBarItem(icon: const Icon(Icons.travel_explore_rounded), label: context.l10n.navDiscover),
         ],
       ),
     );

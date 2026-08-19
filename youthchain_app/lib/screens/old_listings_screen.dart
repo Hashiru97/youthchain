@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -59,7 +60,7 @@ class _OldListingsScreenState extends State<OldListingsScreen> {
       if (!mounted) return;
       jobs = [];
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network error loading old listings.")),
+        SnackBar(content: Text(context.l10n.networkErrorLoadingOldListings)),
       );
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -68,10 +69,11 @@ class _OldListingsScreenState extends State<OldListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Old Listings"),
+        title: Text(l10n.oldListingsPageTitle),
         backgroundColor: context.colors.tertiary,
       ),
       body: isLoading
@@ -99,11 +101,10 @@ class _OldListingsScreenState extends State<OldListingsScreen> {
                         children: [
                           SizedBox(
                             height: constraints.maxHeight,
-                            child: const EmptyState(
+                            child: EmptyState(
                               icon: Icons.history_rounded,
-                              title: "No old listings",
-                              subtitle: "Listings move here once their deadline passes, "
-                                  "and are removed automatically about a week later.",
+                              title: l10n.noOldListings,
+                              subtitle: l10n.oldListingsEmptySubtitle,
                             ),
                           ),
                         ],

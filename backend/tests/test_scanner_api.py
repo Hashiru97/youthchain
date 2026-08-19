@@ -229,3 +229,112 @@ def test_employer_jobs_are_unaffected_by_the_expiry_filter(client):
     resp = client.get("/jobs")
     titles = {j["title"] for j in resp.get_json()}
     assert titles == {"Employer Job"}
+
+
+# ---------------------------------------------------------------------
+# Discover-feed candidate ranking (extends Home's own skills-overlap
+# scoring, see api_match_jobs, to scraped listings once they have a real
+# required_skills value -- see scanner/claude_extractor.py's own field).
+
+def _make_candidate(app_module, user_id, skills=""):
+    with app_module.app.app_context():
+        candidate = app_module.Candidate(email=f"candidate{user_id}@test.com", user_id=user_id, skills=skills)
+        app_module.db.session.add(candidate)
+        app_module.db.session.commit()
+        return candidate.id
+
+
+def test_discover_jobs_ranked_by_skill_overlap_when_candidate_exists(client):
+    import app as app_module
+
+    _make_scraped_job(app_module, title="Great Match", required_skills="Python, Excel")
+    _make_scraped_job(app_module, title="No Match", required_skills="Welding, Carpentry")
+    _make_scraped_job(app_module, title="No Skills Stated", required_skills=None)
+
+    user = register_user(client)
+    _make_candidate(app_module, user["user"]["id"], skills="python, excel")
+
+    resp = client.get("/api/discover_jobs", headers=auth_headers(user["access_token"]))
+    jobs = resp.get_json()
+    titles_in_order = [j["title"] for j in jobs]
+    assert titles_in_order[0] == "Great Match"
+    scores = {j["title"]: j["score"] for j in jobs}
+    assert scores["Great Match"] == 100
+    assert scores["No Match"] == 0
+    assert scores["No Skills Stated"] == 0
+
+
+def test_discover_jobs_unranked_when_no_candidate_profile(client):
+    """No profile yet means the "score" key is absent entirely, not
+    present-but-zero -- same convention job_screen.dart's own
+    `hasScore = job.containsKey("score")` already relies on for Home, so
+    a card doesn't show a misleading "0% match" badge before ranking is
+    even meaningful."""
+    import app as app_module
+
+    _make_scraped_job(app_module, title="Some Job", required_skills="Python")
+    user = register_user(client)
+
+    resp = client.get("/api/discover_jobs", headers=auth_headers(user["access_token"]))
+    jobs = resp.get_json()
+    assert all("score" not in j for j in jobs)
+
+
+def test_discover_jobs_search_disables_ranking(client):
+    """Same rule Home's own /api/match_jobs follows (BL-45): ranking and
+    free-text search don't mix. An active q= search must omit "score"
+    entirely, not return a skills-ranked subset of the search results."""
+    import app as app_module
+
+    _make_scraped_job(app_module, title="Python Developer", required_skills="Python, Excel")
+    user = register_user(client)
+    _make_candidate(app_module, user["user"]["id"], skills="python, excel")
+
+    resp = client.get("/api/discover_jobs?q=python", headers=auth_headers(user["access_token"]))
+    jobs = resp.get_json()
+    assert len(jobs) == 1
+    assert "score" not in jobs[0]
+
+
+def test_discover_jobs_ranking_does_not_include_expired_listings(client):
+    """Ranking bypasses _search_jobs()'s own filtering, so the expired-
+    listings exclusion has to be re-applied independently -- confirms it
+    actually was."""
+    import app as app_module
+
+    _make_scraped_job(
+        app_module, title="Expired Great Match", required_skills="Python",
+        application_deadline=date.today() - timedelta(days=1),
+    )
+    _make_scraped_job(app_module, title="Active Great Match", required_skills="Python")
+
+    user = register_user(client)
+    _make_candidate(app_module, user["user"]["id"], skills="python")
+
+    resp = client.get("/api/discover_jobs", headers=auth_headers(user["access_token"]))
+    titles = {j["title"] for j in resp.get_json()}
+    assert titles == {"Active Great Match"}
+
+
+def test_discover_jobs_ranking_respects_pagination_across_the_full_set(client):
+    """Real correctness requirement, not just a nice-to-have: ranking
+    must sort the FULL matching set before paginating, not just re-order
+    within whatever _search_jobs()'s own SQL-level LIMIT/OFFSET happened
+    to fetch first -- otherwise a great match sitting past the first
+    page's cutoff (by recency) could never surface at all."""
+    import app as app_module
+
+    # Ten decoys, all more "recent" (higher id) than the real match below,
+    # none of which the candidate's skills overlap with at all.
+    for i in range(10):
+        _make_scraped_job(app_module, title=f"Decoy {i}", required_skills="Welding")
+    _make_scraped_job(app_module, title="Buried Great Match", required_skills="Python")
+
+    user = register_user(client)
+    _make_candidate(app_module, user["user"]["id"], skills="python")
+
+    resp = client.get("/api/discover_jobs?limit=3", headers=auth_headers(user["access_token"]))
+    jobs = resp.get_json()
+    assert len(jobs) == 3
+    assert jobs[0]["title"] == "Buried Great Match"
+    assert jobs[0]["score"] == 100

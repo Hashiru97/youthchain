@@ -64,11 +64,12 @@ shorter than MIN_USEFUL_DESCRIPTION_LENGTH is treated the same as no
 description at all.
 """
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from scanner.claude_extractor import ScanExtractionError, extract_job_detail, extract_jobs
 from scanner.firecrawl_client import ScanSourceError, fetch_url_plain, scrape_url
+from scanner.scam_signals import detect_scam_signals
 
 # See the module docstring's "Needs backfill is a length check" note.
 MIN_USEFUL_DESCRIPTION_LENGTH = 100
@@ -90,6 +91,15 @@ class ScanOutcome:
     # a scan failure on its own since a listing-page-only result is still
     # a real, usable Job row.
     jobs_backfilled: int = 0
+    # IDs of Job rows genuinely created this scan (not just updated) —
+    # lets a caller (see app._dispatch_job_alerts_for_scan) fire Saved
+    # Search / profile-skill job alerts against only brand-new listings.
+    # Deliberately not "every job touched this scan": a Job's external_id
+    # already makes the upsert loop below create each real listing only
+    # once, so alerting on creation alone is what keeps alert dispatch
+    # naturally idempotent across rescans without a separate seen/
+    # notified tracking table.
+    created_job_ids: list[int] = field(default_factory=list)
 
 
 def _content_hash(job_data: dict) -> str:
@@ -132,6 +142,20 @@ def _parse_deadline(raw: str | None):
         return datetime.strptime(raw.strip(), "%Y-%m-%d").date()
     except (ValueError, AttributeError):
         return None
+
+
+def _apply_scam_signals(job_row) -> None:
+    """
+    Recomputes Job.scam_signals from whatever's currently on job_row --
+    called after the listing pass sets/updates title/description/salary/
+    apply_url, and again after the backfill loop below changes any of
+    those same fields, so the stored signals always reflect the fullest
+    text available rather than freezing whatever the listing pass alone
+    saw. See scanner.scam_signals.detect_scam_signals's own docstring
+    for what it actually checks.
+    """
+    signals = detect_scam_signals(job_row.title, job_row.description, job_row.salary, job_row.apply_url)
+    job_row.scam_signals = ",".join(signals) if signals else None
 
 
 def _upsert_scraped_company(company_name: str, db, ScrapedCompany) -> None:
@@ -231,6 +255,9 @@ def run_scan_for_source(
     # existing row a previous scan's backfill attempt never
     # reached/succeeded for, or only ever got a listing-page stub.
     to_backfill: list = []
+    # Populated below only in the "not existing" branch -- see
+    # ScanOutcome.created_job_ids' own docstring for why creation-only.
+    new_job_rows: list = []
 
     for job_data in jobs_data:
         external_id = job_data.get("external_id") or _content_hash(job_data)
@@ -254,6 +281,7 @@ def run_scan_for_source(
             existing.apply_url = job_data.get("apply_url") or existing.apply_url
             existing.employment_type = job_data.get("employment_type") or existing.employment_type
             existing.application_deadline = _parse_deadline(job_data.get("deadline")) or existing.application_deadline
+            existing.required_skills = job_data.get("required_skills") or existing.required_skills
             existing.scraped_at = now
             updated += 1
             job_row = existing
@@ -266,7 +294,7 @@ def run_scan_for_source(
                 # inventing data the source didn't actually provide.
                 location=job_data.get("location") or "Not specified",
                 duration="Not specified",
-                required_skills=None,
+                required_skills=job_data.get("required_skills"),
                 job_type="formal",
                 category=None,
                 employer_id=None,
@@ -283,6 +311,9 @@ def run_scan_for_source(
             )
             db.session.add(job_row)
             created += 1
+            new_job_rows.append(job_row)
+
+        _apply_scam_signals(job_row)
 
         if job_data.get("company_name"):
             _upsert_scraped_company(job_data["company_name"], db, ScrapedCompany)
@@ -297,6 +328,10 @@ def run_scan_for_source(
     # leaves it recoverable by the stale-scan reaper rather than stuck
     # looking "success" with counts that don't match what actually ran.
     db.session.commit()
+    # IDs only exist post-commit (autoincrement PKs aren't assigned until
+    # flush) -- read them back now, before the backfill loop below can
+    # touch these same rows further.
+    created_job_ids = [j.id for j in new_job_rows]
 
     if len(to_backfill) > MAX_JOBS_BACKFILLED_PER_SCAN:
         logger.warning(
@@ -364,8 +399,17 @@ def run_scan_for_source(
             if parsed_deadline:
                 job_row.application_deadline = parsed_deadline
                 got_new_data = True
+        if detail.get("required_skills") and not job_row.required_skills:
+            job_row.required_skills = detail["required_skills"]
+            got_new_data = True
         if got_new_data:
             backfilled += 1
+            # Re-run now, not just after the listing pass above -- the
+            # detail page is exactly where a fee demand or vague pay is
+            # most likely to actually show up (a listing index rarely
+            # carries a listing's full body text at all, see this
+            # module's own "Two Firecrawl+Claude passes" docstring).
+            _apply_scam_signals(job_row)
         # Commit after every attempt, not just successful ones --
         # this loop is the slow, network-bound part of a scan (see the
         # module docstring); losing every already-completed backfill to
@@ -387,4 +431,5 @@ def run_scan_for_source(
     )
     return ScanOutcome(
         success=True, jobs_found=len(jobs_data), jobs_created=created, jobs_updated=updated, jobs_backfilled=backfilled,
+        created_job_ids=created_job_ids,
     )

@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/messages_screen.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -71,7 +73,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: MessagesScreen(applicationId: 1)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MessagesScreen(applicationId: 1),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -86,7 +93,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: MessagesScreen(applicationId: 1)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MessagesScreen(applicationId: 1),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -110,7 +122,12 @@ void main() {
       });
 
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light(), home: MessagesScreen(applicationId: 1)),
+        MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MessagesScreen(applicationId: 1),
+      ),
       );
       await tester.pumpAndSettle();
 

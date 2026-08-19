@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/devices_screen.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -65,7 +67,12 @@ void main() {
       return http.Response(twoSessions, 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('This phone'), findsOneWidget);
@@ -80,7 +87,12 @@ void main() {
       return http.Response(jsonEncode({"sessions": []}), 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('No active sessions'), findsOneWidget);
@@ -96,7 +108,12 @@ void main() {
       return http.Response(jsonEncode({"sessions": callCount == 1 ? [] : jsonDecode(twoSessions)["sessions"]}), 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('No active sessions'), findsOneWidget);
@@ -120,7 +137,12 @@ void main() {
       return http.Response(twoSessions, 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Something went wrong'), findsOneWidget);
@@ -170,7 +192,12 @@ void main() {
         return http.Response(twoSessions, 200);
       });
 
-      await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+      await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
       await tester.pumpAndSettle();
 
       // Two revoke buttons exist (one per card) -- tap the second card's.
@@ -202,7 +229,12 @@ void main() {
       return http.Response(twoSessions, 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: DevicesScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: DevicesScreen(),
+    ));
     await tester.pumpAndSettle();
 
     final revokeButtons = find.widgetWithIcon(IconButton, Icons.logout_rounded);
@@ -228,6 +260,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Builder(
             builder: (context) => Scaffold(
               body: Center(

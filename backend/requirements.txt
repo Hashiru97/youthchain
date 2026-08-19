@@ -74,6 +74,12 @@ hvac==2.4.0
 # QR API — that would leak the secret itself to that third party).
 pyotp==2.10.0
 qrcode[pil]==8.2
+# Was already an installed transitive dependency of qrcode[pil] above, but
+# app.py now imports it directly too (_compress_uploaded_image_if_needed
+# -- best-effort downscale of oversized certificate/CV photo uploads) —
+# pinned explicitly rather than relying on another package's transitive
+# resolution, same reasoning as prometheus_client just below.
+Pillow==12.3.0
 
 # Exposes GET /metrics in Prometheus format (see app.py) — paired with
 # docker-compose.observability.yml's self-hosted Prometheus + Grafana, so
@@ -140,3 +146,8 @@ clamd==1.0.2
 # relying on another package's transitive resolution, same reasoning as
 # prometheus-client above.
 requests==2.34.2
+
+# Defense-in-depth allowlist sanitizer for the AI-assisted CV's HTML
+# output (see cv_generator.py's own docstring for the full three-layer
+# model — this is the third, independent layer, not the only one).
+bleach==6.2.0

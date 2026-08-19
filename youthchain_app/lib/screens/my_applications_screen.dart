@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../services/pending_applications.dart';
 import '../theme/app_theme.dart';
@@ -69,8 +70,8 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
         isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No connection and no previously loaded data."),
+        SnackBar(
+          content: Text(context.l10n.noConnectionNoPreviousData),
         ),
       );
     } catch (_) {
@@ -91,7 +92,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Rating submitted")));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.ratingSubmitted)));
       await fetchApplications();
     }
   }
@@ -101,27 +102,28 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
   /// enough here, unlike the star-rating sheet, since it's just a reason
   /// and a submit button.
   Future<void> _disputeRating(int ratingId) async {
+    final l10n = context.l10n;
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Dispute this rating"),
+        title: Text(l10n.disputeRatingTitle),
         content: TextField(
           controller: reasonCtrl,
           maxLines: 3,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: "Why is this rating unfair?",
+          decoration: InputDecoration(
+            labelText: l10n.whyIsRatingUnfairLabel,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text("Cancel"),
+            child: Text(l10n.cancelButton),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(reasonCtrl.text.trim()),
-            child: const Text("Submit"),
+            child: Text(l10n.submitButton),
           ),
         ],
       ),
@@ -136,17 +138,17 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
       if (!mounted) return;
       if (resp.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Reported for admin review")),
+          SnackBar(content: Text(context.l10n.reportedForAdminReview)),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not submit dispute")),
+          SnackBar(content: Text(context.l10n.couldNotSubmitDispute)),
         );
       }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network error submitting dispute")),
+        SnackBar(content: Text(context.l10n.networkErrorSubmittingDispute)),
       );
     }
   }
@@ -164,13 +166,13 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
       if (!ok && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Could not open file")));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.couldNotOpenFile)));
       }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Could not open file")));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.couldNotOpenFile)));
     }
   }
 
@@ -179,11 +181,11 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("My Applications"),
+        title: Text(context.l10n.myApplicationsTitle),
         backgroundColor: context.colors.tertiary,
         actions: [
           IconButton(
-            tooltip: "Refresh",
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
               fetchApplications();
@@ -205,9 +207,10 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
     final ago = _cachedAt == null
         ? ""
         : " (as of ${_cachedAt!.hour.toString().padLeft(2, '0')}:${_cachedAt!.minute.toString().padLeft(2, '0')})";
+    final message = context.l10n.offlineShowingPreviousDataLabel(ago);
     return Semantics(
       liveRegion: true,
-      label: "You're offline. Showing previously loaded data$ago.",
+      label: message,
       child: Container(
         width: double.infinity,
         color: context.colors.warningBg,
@@ -225,7 +228,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                "You're offline. Showing previously loaded data$ago.",
+                message,
                 style: TextStyle(
                   fontSize: 12,
                   color: context.colors.warning,
@@ -266,7 +269,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                 ),
               ),
               StatusBadge(
-                label: isFailed ? "Failed" : "Queued — offline",
+                label: isFailed ? context.l10n.failedBadge : context.l10n.queuedOfflineBadge,
                 color: isFailed ? context.colors.error : context.colors.warning,
                 background: Colors.white,
                 icon: isFailed
@@ -280,8 +283,8 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
           Text(
             isFailed
                 ? (item.lastError ??
-                      "Submission failed — tap retry to try again.")
-                : "Will submit automatically once you're back online.",
+                      context.l10n.submissionFailedRetryHint)
+                : context.l10n.willSubmitAutomatically,
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -290,14 +293,14 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text("Retry now"),
+                  label: Text(context.l10n.retryNowButton),
                   onPressed: () =>
                       PendingApplicationsQueue.instance.retry(item),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
               IconButton(
-                tooltip: "Discard",
+                tooltip: context.l10n.discardTooltip,
                 icon: const Icon(Icons.delete_outline_rounded),
                 onPressed: () =>
                     PendingApplicationsQueue.instance.discard(item),
@@ -322,11 +325,10 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
           ? ListView(
               children: [
                 const SizedBox(height: 120),
-                const EmptyState(
+                EmptyState(
                   icon: Icons.inbox_outlined,
-                  title: "No applications yet",
-                  subtitle:
-                      "Jobs you apply to will show up here so you can track their status.",
+                  title: context.l10n.noApplicationsYetTitle,
+                  subtitle: context.l10n.noApplicationsYetSubtitle,
                 ),
               ],
             )
@@ -346,7 +348,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
 
                 final leadingTitle = (title != null && title.isNotEmpty)
                     ? title
-                    : "Job ID: ${app["job_id"]}";
+                    : context.l10n.jobIdFallback("${app["job_id"]}");
 
                 final hasCV = (app["cv_file"] as String?)?.isNotEmpty == true;
                 final hasSupport =
@@ -476,7 +478,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                           Icons.chat_bubble_outline_rounded,
                                           size: 16,
                                         ),
-                                        label: const Text("Messages"),
+                                        label: Text(context.l10n.messagesButtonLabel),
                                         onPressed: () {
                                           Navigator.push(
                                             context,
@@ -494,7 +496,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                     if (hasCV) ...[
                                       const SizedBox(width: AppSpacing.sm),
                                       IconButton(
-                                        tooltip: "Open CV",
+                                        tooltip: context.l10n.openCvTooltip,
                                         icon: const Icon(
                                           Icons.picture_as_pdf_outlined,
                                         ),
@@ -513,7 +515,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                     if (hasSupport) ...[
                                       const SizedBox(width: AppSpacing.xs),
                                       IconButton(
-                                        tooltip: "Open supporting doc",
+                                        tooltip: context.l10n.openSupportingDocTooltip,
                                         icon: const Icon(
                                           Icons.attach_file_rounded,
                                         ),
@@ -550,7 +552,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                           Icons.star_outline_rounded,
                                           size: 16,
                                         ),
-                                        label: const Text("Rate this employer"),
+                                        label: Text(context.l10n.rateThisEmployerButton),
                                         onPressed: () => _rateEmployer(
                                           (app["id"] as num).toInt(),
                                         ),
@@ -560,8 +562,9 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                     Row(
                                       children: [
                                         StatusBadge(
-                                          label:
-                                              "You rated: ${employerRating["score"]}/5",
+                                          label: context.l10n.youRatedLabel(
+                                            "${employerRating["score"]}",
+                                          ),
                                           color: context.colors.secondary,
                                           background: context.colors.secondaryLight,
                                           icon: Icons.star_rounded,
@@ -573,7 +576,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                             (employerRating["id"] as num)
                                                 .toInt(),
                                           ),
-                                          child: const Text("Dispute"),
+                                          child: Text(context.l10n.disputeButton),
                                         ),
                                       ],
                                     ),

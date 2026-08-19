@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../services/push_notification_service.dart';
 import '../theme/app_theme.dart';
@@ -69,7 +70,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _sendCode() async {
     final identifier = identifierController.text.trim();
     if (identifier.isEmpty) {
-      setState(() => _error = _isEmail ? 'Please enter your email address' : 'Please enter your phone number');
+      setState(() => _error = _isEmail ? context.l10n.pleaseEnterEmail : context.l10n.pleaseEnterPhone);
       return;
     }
 
@@ -88,11 +89,11 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       if (res.statusCode == 200) {
         setState(() => _step = _RegStep.code);
       } else {
-        setState(() => _error = data?['error'] ?? 'Failed to send code (${res.statusCode})');
+        setState(() => _error = data?['error'] ?? context.l10n.failedToSendCode(res.statusCode));
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error. Check your connection and try again.');
+      setState(() => _error = context.l10n.networkErrorGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -101,7 +102,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _verifyCode() async {
     final code = otpController.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Enter the 6-digit code');
+      setState(() => _error = context.l10n.enterSixDigitCode);
       return;
     }
 
@@ -124,11 +125,11 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       if (res.statusCode == 200 && data?['success'] == true) {
         setState(() => _step = _RegStep.details);
       } else {
-        setState(() => _error = data?['error'] ?? 'Invalid or expired code');
+        setState(() => _error = data?['error'] ?? context.l10n.invalidOrExpiredCode);
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error. Check your connection and try again.');
+      setState(() => _error = context.l10n.networkErrorGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -137,19 +138,19 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _createAccount() async {
     if ([firstNameController, lastNameController, otherController, passwordController, confirmPasswordController]
         .any((c) => c.text.trim().isEmpty)) {
-      setState(() => _error = 'Please complete all fields');
+      setState(() => _error = context.l10n.pleaseCompleteAllFields);
       return;
     }
     if (passwordController.text != confirmPasswordController.text) {
-      setState(() => _error = 'Passwords do not match');
+      setState(() => _error = context.l10n.passwordsDoNotMatch);
       return;
     }
     if (passwordController.text.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters');
+      setState(() => _error = context.l10n.passwordMinLength);
       return;
     }
     if (!_consentAccepted) {
-      setState(() => _error = 'Please accept the privacy policy to continue');
+      setState(() => _error = context.l10n.pleaseAcceptPrivacyPolicy);
       return;
     }
 
@@ -185,14 +186,14 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         await ApiClient.instance.saveSession(token: data['access_token'] as String, userId: userId);
         PushNotificationService.registerToken();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.registrationSuccessful)));
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false, arguments: {'userId': userId});
       } else {
-        setState(() => _error = data?['error'] ?? 'Registration failed (${res.statusCode})');
+        setState(() => _error = data?['error'] ?? context.l10n.registrationFailedGeneric(res.statusCode));
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error during registration');
+      setState(() => _error = context.l10n.networkErrorDuringRegistration);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -213,6 +214,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -246,9 +248,9 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  const Text(
-                    "Create your account",
-                    style: TextStyle(
+                  Text(
+                    l10n.createAccountHeading,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
@@ -257,7 +259,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "Match verified skills to real jobs.",
+                    l10n.createAccountSubtitle,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 13,
@@ -284,7 +286,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text("Create YouthChain Account", style: Theme.of(context).textTheme.headlineSmall),
+                        Text(l10n.createYouthChainAccountTitle, style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: AppSpacing.md),
                         if (_error != null) ...[
                           Container(
@@ -302,9 +304,9 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                           ),
                           const SizedBox(height: AppSpacing.sm),
                         ],
-                        if (_step == _RegStep.contact) ..._buildContactStep(),
-                        if (_step == _RegStep.code) ..._buildCodeStep(),
-                        if (_step == _RegStep.details) ..._buildDetailsStep(),
+                        if (_step == _RegStep.contact) ..._buildContactStep(l10n),
+                        if (_step == _RegStep.code) ..._buildCodeStep(l10n),
+                        if (_step == _RegStep.details) ..._buildDetailsStep(l10n),
                         const SizedBox(height: AppSpacing.md),
                         Center(
                           child: Wrap(
@@ -312,7 +314,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
-                                "Already have an account? ",
+                                l10n.alreadyHaveAccountPrompt,
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
                               TextButton(
@@ -322,7 +324,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 ),
                                 onPressed: () => Navigator.of(context).pushReplacementNamed('/login'),
-                                child: const Text("Login"),
+                                child: Text(l10n.loginLinkText),
                               ),
                             ],
                           ),
@@ -339,15 +341,15 @@ class RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  List<Widget> _buildContactStep() {
+  List<Widget> _buildContactStep(AppLocalizations l10n) {
     return [
-      const Text('How should we send your verification code?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      Text(l10n.howSendVerificationCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
       const SizedBox(height: AppSpacing.sm),
       Row(
         children: [
           Expanded(
             child: _ChannelChoiceCard(
-              label: 'Email',
+              label: l10n.channelEmail,
               icon: Icons.email_outlined,
               selected: _isEmail,
               onTap: () => setState(() => _channel = 'email'),
@@ -356,7 +358,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: _ChannelChoiceCard(
-              label: 'Phone (SMS)',
+              label: l10n.channelPhoneSms,
               icon: Icons.sms_outlined,
               selected: !_isEmail,
               onTap: () => setState(() => _channel = 'sms'),
@@ -370,24 +372,24 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         controller: identifierController,
         keyboardType: _isEmail ? TextInputType.emailAddress : TextInputType.phone,
         decoration: InputDecoration(
-          labelText: _isEmail ? 'Email Address' : 'Phone Number',
+          labelText: _isEmail ? l10n.emailAddressLabel : l10n.phoneNumberLabel,
           prefixIcon: Icon(_isEmail ? Icons.email_outlined : Icons.phone_outlined),
         ),
       ),
       const SizedBox(height: 4),
       Text(
-        "We'll send a 6-digit code to verify it's really you.",
+        l10n.registrationSendCodeHint,
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Send verification code', _sendCode),
+      _primaryButton(l10n.sendVerificationCodeButton, _sendCode),
     ];
   }
 
-  List<Widget> _buildCodeStep() {
+  List<Widget> _buildCodeStep(AppLocalizations l10n) {
     return [
       Text(
-        'A 6-digit code was sent to ${identifierController.text.trim()}.',
+        l10n.verificationCodeSentTo(identifierController.text.trim()),
         style: Theme.of(context).textTheme.bodyMedium,
       ),
       const SizedBox(height: AppSpacing.sm),
@@ -398,10 +400,10 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         textAlign: TextAlign.center,
         autofocus: true,
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 8),
-        decoration: const InputDecoration(labelText: 'Verification Code', counterText: ''),
+        decoration: InputDecoration(labelText: l10n.verificationCodeLabel, counterText: ''),
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Verify', _verifyCode),
+      _primaryButton(l10n.verifyButton, _verifyCode),
       const SizedBox(height: 4),
       Center(
         child: TextButton(
@@ -412,30 +414,30 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                     _error = null;
                     otpController.clear();
                   }),
-          child: const Text('Use a different email/phone'),
+          child: Text(l10n.useDifferentEmailPhone),
         ),
       ),
     ];
   }
 
-  List<Widget> _buildDetailsStep() {
+  List<Widget> _buildDetailsStep(AppLocalizations l10n) {
     final identifier = identifierController.text.trim();
     return [
-      Text('✅ $identifier is verified.', style: Theme.of(context).textTheme.bodyMedium),
+      Text(l10n.identifierVerifiedHeading(identifier), style: Theme.of(context).textTheme.bodyMedium),
       const SizedBox(height: AppSpacing.sm),
       TextField(
         controller: firstNameController,
-        decoration: const InputDecoration(
-          labelText: 'First Name',
-          prefixIcon: Icon(Icons.person_outline_rounded),
+        decoration: InputDecoration(
+          labelText: l10n.firstNameLabel,
+          prefixIcon: const Icon(Icons.person_outline_rounded),
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
       TextField(
         controller: lastNameController,
-        decoration: const InputDecoration(
-          labelText: 'Last Name',
-          prefixIcon: Icon(Icons.person_outline_rounded),
+        decoration: InputDecoration(
+          labelText: l10n.lastNameLabel,
+          prefixIcon: const Icon(Icons.person_outline_rounded),
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
@@ -443,16 +445,16 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         controller: otherController,
         keyboardType: _isEmail ? TextInputType.phone : TextInputType.emailAddress,
         decoration: InputDecoration(
-          labelText: _isEmail ? 'Phone Number' : 'Email Address',
+          labelText: _isEmail ? l10n.phoneNumberLabel : l10n.emailAddressLabel,
           prefixIcon: Icon(_isEmail ? Icons.phone_outlined : Icons.email_outlined),
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
       TextField(
         controller: ncraIdController,
-        decoration: const InputDecoration(
-          labelText: 'NCRA ID (optional)',
-          prefixIcon: Icon(Icons.badge_outlined),
+        decoration: InputDecoration(
+          labelText: l10n.ncraIdOptionalLabel,
+          prefixIcon: const Icon(Icons.badge_outlined),
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
@@ -460,7 +462,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         controller: passwordController,
         obscureText: _obscurePassword,
         decoration: InputDecoration(
-          labelText: "Password",
+          labelText: l10n.passwordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
             icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
@@ -473,7 +475,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         controller: confirmPasswordController,
         obscureText: _obscureConfirm,
         decoration: InputDecoration(
-          labelText: "Confirm Password",
+          labelText: l10n.confirmPasswordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
             icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
@@ -493,11 +495,11 @@ class RegistrationScreenState extends State<RegistrationScreen> {
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text("I agree to the ", style: Theme.of(context).textTheme.bodySmall),
+                Text(l10n.agreeToThePrefix, style: Theme.of(context).textTheme.bodySmall),
                 GestureDetector(
                   onTap: _openPrivacyPolicy,
                   child: Text(
-                    "Privacy Policy",
+                    l10n.privacyPolicyLink,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: context.colors.primary,
                           fontWeight: FontWeight.w700,
@@ -511,7 +513,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
         ],
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Create Account', _createAccount),
+      _primaryButton(l10n.createAccountButton, _createAccount),
     ];
   }
 

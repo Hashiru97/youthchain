@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_sheet.dart';
 import '../widgets/save_job_button.dart';
@@ -37,7 +38,8 @@ class JobDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String title = (job["title"] as String?) ?? "Job";
+    final l10n = context.l10n;
+    final String title = (job["title"] as String?) ?? l10n.jobDetailFallbackTitle;
     final String location = (job["location"] as String?) ?? "";
     final String duration = (job["duration"] as String?) ?? "";
     final skillList = _parseSkills(job["required_skills"] as String?);
@@ -49,7 +51,7 @@ class JobDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Job Details"),
+        title: Text(l10n.jobDetailsTitle),
         actions: [
           if (job["id"] != null)
             SaveJobButton(
@@ -63,7 +65,7 @@ class JobDetailScreen extends StatelessWidget {
             ),
           if (employerId != null)
             IconButton(
-              tooltip: "Report this job",
+              tooltip: l10n.reportThisJobTooltip,
               icon: const Icon(Icons.flag_outlined),
               onPressed: () => showReportSheet(
                 context,
@@ -158,7 +160,7 @@ class JobDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hiring organization",
+                    l10n.hiringOrganizationLabel,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
@@ -174,7 +176,7 @@ class JobDetailScreen extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            "Posted by YouthChain (no employer account linked to this listing)",
+                            l10n.postedByYouthChainNoEmployer,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
@@ -188,7 +190,7 @@ class JobDetailScreen extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                (employer["name"] as String?) ?? "Employer",
+                                (employer["name"] as String?) ?? l10n.employerFallbackName,
                                 style: Theme.of(context).textTheme.bodyLarge
                                     ?.copyWith(fontWeight: FontWeight.w600),
                               ),
@@ -201,6 +203,21 @@ class JobDetailScreen extends StatelessWidget {
                             ),
                           ],
                         ),
+                        // Composite trust score (see _employer_trust_summary
+                        // in app.py) -- blends verification, open trust-&-
+                        // safety reports, ratings, and response rate.
+                        // Deliberately shown unconditionally, unlike the
+                        // rating-count-gated row just below: it's a real,
+                        // meaningful signal even for a brand-new employer
+                        // with zero ratings yet (a neutral "Fair"), where
+                        // that row alone previously showed nothing at all.
+                        if (employer["trust_tier"] != null) ...[
+                          const SizedBox(height: 4),
+                          StatusBadge.employerTrust(
+                            context,
+                            employer["trust_tier"] as String,
+                          ),
+                        ],
                         // Earned trust from past gig workers (see
                         // _employer_trust_summary in app.py) -- the same
                         // "trust from a real track record" signal a
@@ -220,7 +237,10 @@ class JobDetailScreen extends StatelessWidget {
                               ),
                               const SizedBox(width: 3),
                               Text(
-                                "${employer["avg_rating"]} · ${employer["rating_count"]} rating${(employer["rating_count"] as num) == 1 ? '' : 's'} from past workers",
+                                l10n.employerRatingSummary(
+                                  "${employer["avg_rating"]}",
+                                  employer["rating_count"] as num,
+                                ),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -252,8 +272,8 @@ class JobDetailScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         category != null && category.isNotEmpty
-                            ? "$category — no CV needed to apply. Trust here comes from completed gigs and ratings instead."
-                            : "No CV needed to apply for gig/hire-based work — trust here comes from completed gigs and ratings instead.",
+                            ? l10n.gigNoticeWithCategory(category)
+                            : l10n.gigNoticeNoCategory,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: context.colors.secondaryDark,
                         ),
@@ -266,7 +286,7 @@ class JobDetailScreen extends StatelessWidget {
             if (skillList.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
               Text(
-                "Required skills",
+                l10n.requiredSkillsLabel,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -290,11 +310,11 @@ class JobDetailScreen extends StatelessWidget {
                 ? OutlinedButton.icon(
                     onPressed: null,
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    label: const Text("Applied"),
+                    label: Text(l10n.appliedButtonLabel),
                   )
                 : ElevatedButton.icon(
                     icon: const Icon(Icons.send_rounded, size: 18),
-                    label: Text(isGig ? "Apply" : "Apply with CV"),
+                    label: Text(isGig ? l10n.applyButtonLabel : l10n.applyWithCvButtonLabel),
                     onPressed: () {
                       Navigator.pop(context);
                       onApply();

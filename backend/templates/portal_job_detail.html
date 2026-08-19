@@ -20,6 +20,13 @@
       {{ icon_star() }} {{ employer_trust.avg_rating }} · {{ employer_trust.rating_count }} rating{{ "s" if employer_trust.rating_count != 1 }} from past workers
     </div>
     {% endif %}
+    {% if employer_trust and employer_trust.trust_tier %}
+    <div style="margin-bottom: 10px;">
+      <span class="badge {{ 'badge-success' if employer_trust.trust_tier == 'good' else ('badge-warn' if employer_trust.trust_tier == 'fair' else 'badge-error') }}">
+        {{ {"good": "Good standing", "fair": "Fair standing", "caution": "Use caution"}[employer_trust.trust_tier] }}
+      </span>
+    </div>
+    {% endif %}
     {% endif %}
     <div class="portal-job-detail-meta">
       <span>{{ icon_map_pin() }} {{ job.location }}</span>

@@ -6,13 +6,25 @@
   <meta name="color-scheme" content="light dark" />
   <title>{% block title %}YouthChain{% endblock %} • YouthChain</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <!-- Installable PWA (see /manifest.json, /sw.js in app.py, and
+       sw.js's own docstring for what offline support here does and does
+       not cover). apple-touch-icon + the two apple-mobile-web-app tags
+       are iOS Safari's own separate, manifest-ignoring convention for
+       "Add to Home Screen" -- Android/desktop read the manifest link,
+       iOS reads these instead, so both are needed for the feature to
+       actually work cross-platform. -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0F7A5C" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png', v=asset_version('img/apple-touch-icon.png')) }}" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="YouthChain" />
   <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='portal.css', v=asset_version('portal.css')) }}" />
 </head>
 <body class="portal-shell-body">
-  {% from "_admin_icons.html" import icon_dashboard, icon_briefcase, icon_document, icon_award, icon_shield_check, icon_logout, icon_menu, icon_smartphone, icon_star, icon_sun, icon_moon %}
+  {% from "_admin_icons.html" import icon_dashboard, icon_briefcase, icon_document, icon_award, icon_shield_check, icon_logout, icon_menu, icon_smartphone, icon_star, icon_sun, icon_moon, icon_gauge, icon_download %}
   <div class="portal-scrim" id="portal-nav-scrim"></div>
   <header class="portal-topbar">
     <div class="portal-topbar-inner">
@@ -26,6 +38,25 @@
       <button type="button" class="shell-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
         <span class="icon-sun">{{ icon_sun() }}</span>
         <span class="icon-moon">{{ icon_moon() }}</span>
+      </button>
+      <!-- Real, user-controllable low-data mode (see sw.js/portal_pwa.js) --
+           not just the automatic navigator.connection.saveData signal,
+           which Firefox/Safari never expose and Chrome only reports when
+           the user's OS already has Data Saver on. Always visible, same
+           32px icon-button footprint as the theme toggle right before it
+           -- confirmed via a real mobile-viewport check (Playwright,
+           360-412px CSS width, not just a desktop browser resized) that
+           this plus the install button below fits the topbar at every
+           real phone width without pushing the hamburger off-screen. -->
+      <button type="button" class="shell-low-data-toggle" data-low-data-toggle aria-label="Toggle low-data mode" title="Low-data mode: prefer already-loaded pages over a fresh download">
+        {{ icon_gauge() }}
+      </button>
+      <!-- Hidden until beforeinstallprompt actually fires (portal_pwa.js) --
+           proof the browser considers this page installable right now,
+           not a button that might do nothing when clicked. Never appears
+           on iOS Safari (no such event there) or once already installed. -->
+      <button type="button" class="portal-install-button" data-install-app-button hidden aria-label="Install YouthChain as an app">
+        {{ icon_download() }} <span>Install</span>
       </button>
       <button type="button" class="portal-menu-toggle" id="portal-nav-toggle" aria-label="Toggle navigation menu">
         {{ icon_menu() }}
@@ -82,6 +113,7 @@
 
   <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
   <script src="{{ url_for('static', filename='portal_shell.js', v=asset_version('portal_shell.js')) }}"></script>
+  <script src="{{ url_for('static', filename='portal_pwa.js', v=asset_version('portal_pwa.js')) }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

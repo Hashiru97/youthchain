@@ -225,6 +225,84 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Low-data mode toggle (youth portal only, see portal_pwa.js) -- same
+   32px icon-button box as .shell-theme-toggle, immediately to its right
+   in portal_shell.html, but a single icon whose color/background flips
+   on [data-low-data="on"] rather than swapping between two icons (there
+   isn't a clean "off" variant of a gauge icon the way sun/moon reads for
+   light/dark). No margin-left: auto here -- .shell-theme-toggle already
+   claims that, and only one item in a run needs it to push the whole
+   group to the flex row's far side. Confirmed via a real mobile-viewport
+   check (Playwright, 360-412px CSS width) that this fits the topbar
+   alongside the theme toggle, install button, and hamburger at every
+   real phone width without any overflow. */
+.shell-low-data-toggle {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.shell-low-data-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+.shell-low-data-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+:root[data-low-data="on"] .shell-low-data-toggle {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* Install-app button (youth portal only) -- hidden by default in the
+   template itself (the `hidden` attribute), only ever revealed by
+   portal_pwa.js in response to a real beforeinstallprompt event, so its
+   very existence in the topbar is proof the browser considers this page
+   installable right now rather than a button that might do nothing. */
+.portal-install-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.portal-install-button:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.portal-install-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+.portal-install-button[hidden] {
+  display: none;
+}
+
 /* ---------- Content-area section divider ---------- */
 .shell-section-divider {
   font-size: 11px;

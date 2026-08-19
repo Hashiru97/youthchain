@@ -56,6 +56,7 @@ def run_forever(
     logger,
     interval_seconds: int = 30,
     reap_interval_seconds: int = 3600,
+    on_scan_complete=None,
 ):
     """
     Runs until the process exits. Sleeps interval_seconds between claim
@@ -63,6 +64,18 @@ def run_forever(
     polling rather than e.g. LISTEN/NOTIFY, since pg_cron only queues new
     work every 5 minutes anyway (see the migration), so sub-second
     latency has no real value here.
+
+    on_scan_complete(outcome, source_id), if given, runs after every real
+    scan attempt (queued or not — this module has no opinion on what it
+    does). Injected rather than imported for the same reason every model
+    class above is: this module stays free of any app.py import, so
+    app.py is the one that wires it to _dispatch_job_alerts_for_scan
+    (Saved Search / profile-skill job alerts) with a real db session and
+    app context already in hand. A bug inside the callback is caught by
+    this loop's own outer try/except below, same as any other iteration
+    error — it must never take down the poll loop, and by the time it
+    runs the scan itself has already fully committed, so a rollback here
+    only ever undoes the callback's own partial work, never the scan's.
 
     Also reaps expired scraped listings (see scanner.reaper's own
     docstring for why that doesn't need its own pg_cron job the way scan
@@ -84,7 +97,7 @@ def run_forever(
             claimed = claim_next_due_scan_run(db)
             if claimed is not None:
                 scan_run_id, source_id = claimed
-                run_scan_for_source(
+                outcome = run_scan_for_source(
                     source_id=source_id,
                     db=db,
                     Job=Job,
@@ -96,6 +109,8 @@ def run_forever(
                     logger=logger,
                     scan_run_id=scan_run_id,
                 )
+                if on_scan_complete is not None:
+                    on_scan_complete(outcome, source_id)
 
             now = time.monotonic()
             if now - last_reap_at >= reap_interval_seconds:

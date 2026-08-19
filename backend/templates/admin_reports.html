@@ -8,7 +8,7 @@
 {% block content %}
   <section class="card">
     <div class="admin-section-header">
-      <h2>Open ({{ open_reports|length }})</h2>
+      <h2>Open ({{ total_open }})</h2>
     </div>
     {% if open_reports %}
     <div class="table-scroll">
@@ -45,6 +45,12 @@
       </tbody>
     </table>
     </div>
+    {% if has_prev or has_next %}
+    <div class="admin-pagination">
+      {% if has_prev %}<a href="{{ url_for('admin_reports', offset=prev_offset) }}" class="btn secondary outline">⬅ Previous</a>{% endif %}
+      {% if has_next %}<a href="{{ url_for('admin_reports', offset=next_offset) }}" class="btn secondary outline">Next ➡</a>{% endif %}
+    </div>
+    {% endif %}
     {% else %}
     <div class="admin-empty-queue">
       {{ icon_inbox_empty() }}
@@ -60,16 +66,18 @@
     {% if reviewed %}
     <div class="table-scroll">
     <table class="applicants-table">
-      <thead><tr><th>Employer</th><th>Category</th><th>Decision</th><th>When</th></tr></thead>
+      <thead><tr><th>Employer</th><th>Category</th><th>Decision</th><th>Reviewed by</th><th>When</th></tr></thead>
       <tbody>
         {% for report in reviewed %}
         {% set employer = employers.get(report.employer_id) %}
+        {% set reviewer = reviewers.get(report.reviewed_by_admin_id) %}
         <tr>
           <td data-label="Employer">{{ employer.name if employer else "Unknown employer" }}</td>
           <td data-label="Category">{{ report.category | replace("_", " ") | capitalize }}</td>
           <td class="status {{ 'rejected' if report.status == 'actioned' else 'accepted' }}">
             {{ "Employer suspended" if report.status == "actioned" else "Dismissed" }}
           </td>
+          <td data-label="Reviewed by">{{ reviewer.name if reviewer else "—" }}</td>
           <td data-label="When">{{ report.reviewed_at }}</td>
         </tr>
         {% endfor %}

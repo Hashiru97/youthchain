@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../services/push_notification_service.dart';
 import '../theme/app_theme.dart';
@@ -81,11 +82,11 @@ class LoginScreenState extends State<LoginScreen> {
           arguments: {'userId': userId},
         );
       } else {
-        setState(() => _errorMessage = data?["error"] ?? "Login failed. Please try again.");
+        setState(() => _errorMessage = data?["error"] ?? context.l10n.loginFailedGeneric);
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _errorMessage = "Network error. Check your connection and try again.");
+      setState(() => _errorMessage = context.l10n.networkErrorGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -100,6 +101,7 @@ class LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -131,6 +133,9 @@ class LoginScreenState extends State<LoginScreen> {
                     child: Image.asset("assets/img/youthchain_icon.png"),
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  // "YouthChain" is the brand name -- deliberately not
+                  // localized, same reasoning a logo's wordmark never
+                  // translates.
                   const Text(
                     "YouthChain",
                     style: TextStyle(
@@ -142,7 +147,7 @@ class LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "Connecting youth to work",
+                    l10n.appTagline,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 13,
@@ -173,10 +178,10 @@ class LoginScreenState extends State<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text("Welcome back", style: Theme.of(context).textTheme.headlineSmall),
+                          Text(l10n.welcomeBack, style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 4),
                           Text(
-                            "Sign in to see jobs matched to your verified skills.",
+                            l10n.signInSubtitle,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: AppSpacing.lg),
@@ -188,22 +193,22 @@ class LoginScreenState extends State<LoginScreen> {
 
                           TextFormField(
                             controller: phoneOrEmailController,
-                            decoration: const InputDecoration(
-                              labelText: "Phone or email",
-                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            decoration: InputDecoration(
+                              labelText: l10n.phoneOrEmailLabel,
+                              prefixIcon: const Icon(Icons.person_outline_rounded),
                             ),
                             validator: (v) =>
-                                (v == null || v.trim().isEmpty) ? "Required" : null,
+                                (v == null || v.trim().isEmpty) ? l10n.requiredField : null,
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           TextFormField(
                             controller: passwordController,
                             obscureText: _obscurePassword,
                             decoration: InputDecoration(
-                              labelText: "Password",
+                              labelText: l10n.passwordLabel,
                               prefixIcon: const Icon(Icons.lock_outline_rounded),
                               suffixIcon: IconButton(
-                                tooltip: _obscurePassword ? "Show password" : "Hide password",
+                                tooltip: _obscurePassword ? l10n.showPassword : l10n.hidePassword,
                                 icon: Icon(
                                   _obscurePassword
                                       ? Icons.visibility_outlined
@@ -215,20 +220,35 @@ class LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             validator: (v) =>
-                                (v == null || v.isEmpty) ? "Required" : null,
+                                (v == null || v.isEmpty) ? l10n.requiredField : null,
                             onFieldSubmitted: (_) => loginUser(),
                           ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () => Navigator.of(context).pushNamed('/login-with-code'),
+                                  child: Text(l10n.logInWithCodeLink, overflow: TextOverflow.ellipsis),
+                                ),
                               ),
-                              onPressed: () => Navigator.of(context).pushNamed('/forgot-password'),
-                              child: const Text("Forgot password?"),
-                            ),
+                              Flexible(
+                                child: TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () => Navigator.of(context).pushNamed('/forgot-password'),
+                                  child: Text(l10n.forgotPasswordLink, overflow: TextOverflow.ellipsis),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           SizedBox(
@@ -245,7 +265,7 @@ class LoginScreenState extends State<LoginScreen> {
                                         valueColor: AlwaysStoppedAnimation(Colors.white),
                                       ),
                                     )
-                                  : const Text("Log in"),
+                                  : Text(l10n.logInButton),
                             ),
                           ),
                           const SizedBox(height: AppSpacing.md),
@@ -255,7 +275,7 @@ class LoginScreenState extends State<LoginScreen> {
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
-                                  "Don't have an account? ",
+                                  l10n.noAccountPrompt,
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                                 TextButton(
@@ -266,7 +286,7 @@ class LoginScreenState extends State<LoginScreen> {
                                   ),
                                   onPressed: () =>
                                       Navigator.of(context).pushReplacementNamed('/register'),
-                                  child: const Text("Register"),
+                                  child: Text(l10n.registerLink),
                                 ),
                               ],
                             ),

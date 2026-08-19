@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/discover_job_detail_screen.dart';
 import 'package:youthchain_app/screens/job_detail_screen.dart';
 import 'package:youthchain_app/screens/saved_jobs_screen.dart';
@@ -19,7 +21,9 @@ import 'package:youthchain_app/theme/app_theme.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const secureChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  const secureChannel = MethodChannel(
+    'plugins.it_nomads.com/flutter_secure_storage',
+  );
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(secureChannel, (call) async => null);
 
@@ -55,7 +59,12 @@ void main() {
 
   Future<void> pumpScreen(WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const SavedJobsScreen(userId: 1)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const SavedJobsScreen(userId: 1),
+      ),
     );
     await tester.pump(); // build
     await tester.pump(); // resolve fetches
@@ -89,7 +98,9 @@ void main() {
     expect(find.text('No saved jobs yet'), findsOneWidget);
   });
 
-  testWidgets('pulling to refresh from the empty state re-fetches', (tester) async {
+  testWidgets('pulling to refresh from the empty state re-fetches', (
+    tester,
+  ) async {
     // Regression test: RefreshIndicator previously only wrapped the
     // non-empty ListView.builder branch, so pulling down on "No saved
     // jobs yet" silently did nothing.
@@ -106,7 +117,11 @@ void main() {
     expect(find.text('No saved jobs yet'), findsOneWidget);
     expect(callCount, 1);
 
-    await tester.fling(find.byType(RefreshIndicator), const Offset(0, 300), 1000);
+    await tester.fling(
+      find.byType(RefreshIndicator),
+      const Offset(0, 300),
+      1000,
+    );
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
@@ -116,7 +131,9 @@ void main() {
     expect(find.text('No saved jobs yet'), findsNothing);
   });
 
-  testWidgets('tapping a scraped job opens DiscoverJobDetailScreen', (tester) async {
+  testWidgets('tapping a scraped job opens DiscoverJobDetailScreen', (
+    tester,
+  ) async {
     ApiClient.testClient = MockClient((request) async {
       if (request.url.path == '/api/saved_jobs') {
         return http.Response(jsonEncode([mixedJobs[1]]), 200);
@@ -146,13 +163,18 @@ void main() {
     expect(find.byType(JobDetailScreen), findsOneWidget);
   });
 
-  testWidgets('unsaving a card removes it from the list immediately', (tester) async {
+  testWidgets('unsaving a card removes it from the list immediately', (
+    tester,
+  ) async {
     ApiClient.testClient = MockClient((request) async {
       if (request.url.path == '/api/saved_jobs') {
         return http.Response(jsonEncode(mixedJobs), 200);
       }
       if (request.url.path == '/api/jobs/1/unsave') {
-        return http.Response(jsonEncode({"success": true, "saved": false}), 200);
+        return http.Response(
+          jsonEncode({"success": true, "saved": false}),
+          200,
+        );
       }
       return http.Response(jsonEncode([]), 200);
     });

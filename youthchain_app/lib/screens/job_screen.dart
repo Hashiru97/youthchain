@@ -6,12 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../services/pending_applications.dart';
 import '../services/push_notification_service.dart';
 import '../services/theme_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/language_picker.dart';
+import '../widgets/name_with_badge.dart';
 import '../widgets/save_job_button.dart';
 import '../widgets/status_badge.dart';
 import 'devices_screen.dart';
@@ -23,7 +26,7 @@ import 'profile_cv_screen.dart';
 import 'saved_jobs_screen.dart';
 import 'work_history_screen.dart';
 
-enum _JobScreenMenuAction { profile, savedJobs, devices, logout }
+enum _JobScreenMenuAction { profile, savedJobs, devices, language, logout }
 
 class JobScreen extends StatefulWidget {
   final int userId;
@@ -230,8 +233,8 @@ class JobScreenState extends State<JobScreen> {
       await _fetchUnreadNotifications();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('One of your applications has an update.'),
+        SnackBar(
+          content: Text(context.l10n.applicationUpdateNotice),
         ),
       );
     });
@@ -244,7 +247,7 @@ class JobScreenState extends State<JobScreen> {
       // feedback — surface a clearly-visible, eye-catching (red/error
       // accent) toast the instant a notification arrives while the app is
       // open, in addition to the existing badge-count refresh above.
-      String title = 'New notification';
+      String title = context.l10n.newNotificationDefaultTitle;
       String? body;
       if (data is Map) {
         final t = data['title'];
@@ -353,8 +356,8 @@ class JobScreenState extends State<JobScreen> {
       _showingCachedJobs = false;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No connection and no previously loaded jobs."),
+        SnackBar(
+          content: Text(context.l10n.noConnectionNoPreviousJobs),
         ),
       );
     } catch (_) {
@@ -363,7 +366,7 @@ class JobScreenState extends State<JobScreen> {
       _showingCachedJobs = false;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network error loading jobs.")),
+        SnackBar(content: Text(context.l10n.networkErrorLoadingJobs)),
       );
     }
   }
@@ -407,7 +410,7 @@ class JobScreenState extends State<JobScreen> {
   /// both entry points into applying now carry the same context.
   Future<void> _showApplySheet(Map job) async {
     final int jobId = (job["id"] as num).toInt();
-    final String jobTitle = (job["title"] as String?) ?? "this job";
+    final String jobTitle = (job["title"] as String?) ?? context.l10n.thisJobFallback;
     final employer = (job["employer"] as Map?)?.cast<String, dynamic>();
     final String? employerName = employer?["name"] as String?;
     // Gig/hire-based jobs (see Job.job_type in app.py) don't require a CV
@@ -461,10 +464,8 @@ class JobScreenState extends State<JobScreen> {
               if (cvFile == null) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "Network error — please try submitting again.",
-                    ),
+                  SnackBar(
+                    content: Text(context.l10n.networkErrorTrySubmittingAgain),
                   ),
                 );
                 return;
@@ -485,20 +486,16 @@ class JobScreenState extends State<JobScreen> {
                 );
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "You're offline — saved and will submit automatically once you're back online.",
-                    ),
-                    duration: Duration(seconds: 4),
+                  SnackBar(
+                    content: Text(context.l10n.offlineApplicationQueued),
+                    duration: const Duration(seconds: 4),
                   ),
                 );
               } catch (_) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "Could not save this application offline either — please try again.",
-                    ),
+                  SnackBar(
+                    content: Text(context.l10n.couldNotSaveApplicationOffline),
                   ),
                 );
               }
@@ -508,7 +505,7 @@ class JobScreenState extends State<JobScreen> {
               if (cvRequired && cvFile == null) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("CV is required.")),
+                  SnackBar(content: Text(context.l10n.cvIsRequired)),
                 );
                 return;
               }
@@ -568,12 +565,12 @@ class JobScreenState extends State<JobScreen> {
                   await fetchAppliedJobs();
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Application submitted")),
+                    SnackBar(content: Text(context.l10n.applicationSubmitted)),
                   );
                 } else {
-                  String msg = "Failed to submit application";
+                  String msg = context.l10n.failedToSubmitApplication;
                   if (resp.statusCode == 413) {
-                    msg = "File too large (max 16 MB)";
+                    msg = context.l10n.fileTooLarge;
                   } else {
                     try {
                       final m = json.decode(body);
@@ -619,13 +616,13 @@ class JobScreenState extends State<JobScreen> {
                     ),
                   ),
                   Text(
-                    "Apply to $jobTitle",
+                    context.l10n.applyToJobTitle(jobTitle),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   if (employerName != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      "at $employerName",
+                      context.l10n.atEmployerName(employerName),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: context.colors.textSecondary,
                       ),
@@ -650,7 +647,7 @@ class JobScreenState extends State<JobScreen> {
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
-                              "No CV needed for gig/hire-based work — your trust here comes from completed gigs and ratings.",
+                              context.l10n.noCvNeededGigNotice,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: context.colors.secondaryDark),
                             ),
@@ -662,7 +659,7 @@ class JobScreenState extends State<JobScreen> {
                   const SizedBox(height: AppSpacing.md),
                   _DocPickerTile(
                     icon: Icons.description_outlined,
-                    title: cvRequired ? "CV" : "Proof of past work",
+                    title: cvRequired ? context.l10n.cvDocLabel : context.l10n.proofOfPastWorkLabel,
                     required: cvRequired,
                     fileName: cvFile?.name,
                     onPick: pickCV,
@@ -670,7 +667,7 @@ class JobScreenState extends State<JobScreen> {
                   const SizedBox(height: AppSpacing.sm),
                   _DocPickerTile(
                     icon: Icons.attach_file_rounded,
-                    title: "Supporting document",
+                    title: context.l10n.supportingDocumentLabel,
                     required: false,
                     fileName: supportFile?.name,
                     onPick: pickSupport,
@@ -681,7 +678,7 @@ class JobScreenState extends State<JobScreen> {
                     height: 50,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text("Submit application"),
+                      label: Text(context.l10n.submitApplicationButton),
                       onPressed: submit,
                     ),
                   ),
@@ -691,6 +688,27 @@ class JobScreenState extends State<JobScreen> {
           },
         );
       },
+    );
+  }
+
+  // Quick-switch entry point for BL-49 feedback that language was too
+  // hard to find buried inside Profile & CV -- reuses the exact same
+  // LanguagePicker (and LocaleController underneath) as that screen, so
+  // there's exactly one place the English/Krio/device-default choice is
+  // ever implemented, just two places it can be reached from.
+  void _showLanguageDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.languageMenuItem),
+        content: const LanguagePicker(showLabel: false),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.closeButton),
+          ),
+        ],
+      ),
     );
   }
 
@@ -747,9 +765,9 @@ class JobScreenState extends State<JobScreen> {
       child: Wrap(
         spacing: 8,
         children: [
-          chip("All jobs", ""),
-          chip("Formal", "formal"),
-          chip("Gig / hire-based", "gig"),
+          chip(context.l10n.allJobsChip, ""),
+          chip(context.l10n.jobTypeFormal, "formal"),
+          chip(context.l10n.jobTypeGig, "gig"),
         ],
       ),
     );
@@ -775,14 +793,14 @@ class JobScreenState extends State<JobScreen> {
               Expanded(
                 flex: 3,
                 child: Semantics(
-                  label: "Search jobs by title",
+                  label: context.l10n.searchJobsByTitleSemantics,
                   child: TextField(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
                     textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      hintText: "Search jobs...",
-                      prefixIcon: Icon(Icons.search_rounded, size: 20),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.searchJobsHint,
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       isDense: true,
                     ),
                   ),
@@ -792,14 +810,14 @@ class JobScreenState extends State<JobScreen> {
               Expanded(
                 flex: 2,
                 child: Semantics(
-                  label: "Filter jobs by location",
+                  label: context.l10n.filterJobsByLocationSemantics,
                   child: TextField(
                     controller: _locationController,
                     onChanged: _onSearchChanged,
                     textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      hintText: "Location",
-                      prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.locationHint,
+                      prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
                       isDense: true,
                     ),
                   ),
@@ -815,7 +833,7 @@ class JobScreenState extends State<JobScreen> {
                 child: TextButton.icon(
                   onPressed: _clearFilters,
                   icon: const Icon(Icons.clear_rounded, size: 16),
-                  label: const Text("Clear filters — showing unranked results"),
+                  label: Text(context.l10n.clearFiltersButton),
                 ),
               ),
             ),
@@ -866,7 +884,7 @@ class JobScreenState extends State<JobScreen> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.1),
                 ),
                 Text(
-                  "Connecting youth to work",
+                  context.l10n.appTagline,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -883,8 +901,8 @@ class JobScreenState extends State<JobScreen> {
             children: [
               IconButton(
                 tooltip: _unreadNotifications > 0
-                    ? "Notifications, $_unreadNotifications unread"
-                    : "Notifications",
+                    ? context.l10n.notificationsUnreadTooltip(_unreadNotifications)
+                    : context.l10n.notificationsTooltip,
                 icon: const Icon(Icons.notifications_outlined),
                 onPressed: () {
                   Navigator.push(
@@ -940,7 +958,7 @@ class JobScreenState extends State<JobScreen> {
           // in a collapsible nav as "hard to notice" -- same lesson
           // applied here before it became a live complaint on mobile too.
           IconButton(
-            tooltip: ThemeController.isDark ? "Switch to light mode" : "Switch to dark mode",
+            tooltip: ThemeController.isDark ? context.l10n.switchToLightMode : context.l10n.switchToDarkMode,
             icon: Icon(
               ThemeController.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
             ),
@@ -957,7 +975,7 @@ class JobScreenState extends State<JobScreen> {
           // (account-management actions, not primary navigation) collapses
           // into one overflow menu.
           PopupMenuButton<_JobScreenMenuAction>(
-            tooltip: "More",
+            tooltip: context.l10n.moreTooltip,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (action) {
               switch (action) {
@@ -988,41 +1006,52 @@ class JobScreenState extends State<JobScreen> {
                     MaterialPageRoute(builder: (_) => const DevicesScreen()),
                   );
                   break;
+                case _JobScreenMenuAction.language:
+                  _showLanguageDialog(context);
+                  break;
                 case _JobScreenMenuAction.logout:
                   _logout();
                   break;
               }
             },
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: _JobScreenMenuAction.profile,
                 child: ListTile(
-                  leading: Icon(Icons.person_outline_rounded),
-                  title: Text("My Profile & CV"),
+                  leading: const Icon(Icons.person_outline_rounded),
+                  title: Text(context.l10n.myProfileCvMenuItem),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
               PopupMenuItem(
                 value: _JobScreenMenuAction.savedJobs,
                 child: ListTile(
-                  leading: Icon(Icons.bookmark_outline_rounded),
-                  title: Text("Saved Jobs"),
+                  leading: const Icon(Icons.bookmark_outline_rounded),
+                  title: Text(context.l10n.savedJobsMenuItem),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
               PopupMenuItem(
                 value: _JobScreenMenuAction.devices,
                 child: ListTile(
-                  leading: Icon(Icons.devices_other_rounded),
-                  title: Text("Devices"),
+                  leading: const Icon(Icons.devices_other_rounded),
+                  title: Text(context.l10n.devicesMenuItem),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: _JobScreenMenuAction.language,
+                child: ListTile(
+                  leading: const Icon(Icons.language_rounded),
+                  title: Text(context.l10n.languageMenuItem),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
               PopupMenuItem(
                 value: _JobScreenMenuAction.logout,
                 child: ListTile(
-                  leading: Icon(Icons.logout_rounded),
-                  title: Text("Logout"),
+                  leading: const Icon(Icons.logout_rounded),
+                  title: Text(context.l10n.logoutMenuItem),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -1044,7 +1073,7 @@ class JobScreenState extends State<JobScreen> {
               ),
               child: Semantics(
                 liveRegion: true,
-                label: "You're offline. Showing previously loaded jobs.",
+                label: context.l10n.offlineShowingPreviousJobs,
                 child: Row(
                   children: [
                     Icon(
@@ -1055,7 +1084,7 @@ class JobScreenState extends State<JobScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "You're offline. Showing previously loaded jobs.",
+                        context.l10n.offlineShowingPreviousJobs,
                         style: TextStyle(
                           fontSize: 12,
                           color: context.colors.warning,
@@ -1094,12 +1123,12 @@ class JobScreenState extends State<JobScreen> {
                               EmptyState(
                                 icon: Icons.work_off_outlined,
                                 title: _searchQuery.isNotEmpty || _locationFilter.isNotEmpty
-                                    ? "No jobs match your search"
-                                    : "No jobs available right now",
+                                    ? context.l10n.noJobsMatchSearch
+                                    : context.l10n.noJobsAvailable,
                                 subtitle:
                                     _searchQuery.isNotEmpty || _locationFilter.isNotEmpty
-                                    ? "Try a different keyword or location."
-                                    : "Check back soon — new opportunities are posted regularly.",
+                                    ? context.l10n.tryDifferentKeywordLocation
+                                    : context.l10n.checkBackSoonJobs,
                               ),
                             ],
                           )
@@ -1144,6 +1173,8 @@ class JobScreenState extends State<JobScreen> {
                             ?.cast<String, dynamic>();
                         final int? employerRatingCount =
                             (employer?["rating_count"] as num?)?.toInt();
+                        final String? employerTrustTier =
+                            employer?["trust_tier"] as String?;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -1208,39 +1239,49 @@ class JobScreenState extends State<JobScreen> {
                                               children: [
                                                 Text(
                                                   (job["title"] as String?) ??
-                                                      "Untitled job",
+                                                      context.l10n.untitledJob,
                                                   style: Theme.of(
                                                     context,
                                                   ).textTheme.titleMedium,
                                                 ),
                                                 if (employer != null) ...[
                                                   const SizedBox(height: 3),
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          (employer["name"]
-                                                                  as String?) ??
-                                                              "Employer",
-                                                          style: Theme.of(
-                                                            context,
-                                                          ).textTheme.bodySmall,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      StatusBadge.employerVerification(
-                                                        context,
-                                                        (employer["verification_status"]
+                                                  // Real bug found via live
+                                                  // testing: this row shares
+                                                  // the card with the icon
+                                                  // box, the match-score
+                                                  // badge, and the save
+                                                  // button, so almost
+                                                  // nothing was left for the
+                                                  // Expanded name once the
+                                                  // "Verified Business"/
+                                                  // "Verified Individual"
+                                                  // badge claimed its own
+                                                  // width first -- observed
+                                                  // live collapsing a real
+                                                  // employer name down to
+                                                  // "Te...". See
+                                                  // NameWithBadge's own
+                                                  // docstring for the fix.
+                                                  NameWithBadge(
+                                                    name:
+                                                        (employer["name"]
                                                                 as String?) ??
-                                                            "unverified",
-                                                        type:
-                                                            employer["verification_type"]
-                                                                as String?,
-                                                        dense: true,
-                                                      ),
-                                                    ],
+                                                            context.l10n.employerFallbackName,
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.bodySmall,
+                                                    badge:
+                                                        StatusBadge.employerVerification(
+                                                      context,
+                                                      (employer["verification_status"]
+                                                              as String?) ??
+                                                          "unverified",
+                                                      type:
+                                                          employer["verification_type"]
+                                                              as String?,
+                                                      dense: true,
+                                                    ),
                                                   ),
                                                   if (employerRatingCount !=
                                                           null &&
@@ -1258,12 +1299,43 @@ class JobScreenState extends State<JobScreen> {
                                                           width: 3,
                                                         ),
                                                         Text(
-                                                          "${employer["avg_rating"]} · $employerRatingCount rating${employerRatingCount == 1 ? '' : 's'} from past workers",
+                                                          context.l10n.employerRatingSummary(
+                                                            "${employer["avg_rating"]}",
+                                                            employerRatingCount,
+                                                          ),
                                                           style: Theme.of(
                                                             context,
                                                           ).textTheme.bodySmall,
                                                         ),
                                                       ],
+                                                    ),
+                                                  ],
+                                                  // Composite trust score
+                                                  // (see _employer_trust_summary
+                                                  // in app.py) -- only shown
+                                                  // here, unlike the
+                                                  // always-shown badge on the
+                                                  // job detail screen, when
+                                                  // it isn't "good" (the
+                                                  // common case for a
+                                                  // healthy employer) -- a
+                                                  // list of many job cards
+                                                  // all showing "Good
+                                                  // standing" would be
+                                                  // noise, but "Fair" or
+                                                  // especially "Use caution"
+                                                  // is exactly the signal
+                                                  // worth surfacing while a
+                                                  // youth is still scanning
+                                                  // which jobs to open.
+                                                  if (employerTrustTier !=
+                                                          null &&
+                                                      employerTrustTier !=
+                                                          'good') ...[
+                                                    const SizedBox(height: 2),
+                                                    StatusBadge.employerTrust(
+                                                      context,
+                                                      employerTrustTier,
                                                     ),
                                                   ],
                                                 ],
@@ -1272,45 +1344,100 @@ class JobScreenState extends State<JobScreen> {
                                                   StatusBadge.jobType(context, jobType),
                                                 ],
                                                 const SizedBox(height: 4),
-                                                Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons
-                                                          .location_on_outlined,
-                                                      size: 15,
-                                                      color:
-                                                          context.colors.textMuted,
-                                                    ),
-                                                    const SizedBox(width: 3),
-                                                    Expanded(
-                                                      child: Text(
-                                                        (job["location"]
-                                                                as String?) ??
-                                                            "",
-                                                        style: Theme.of(
-                                                          context,
-                                                        ).textTheme.bodySmall,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
+                                                // Same bug class as the
+                                                // employer-name row above,
+                                                // same live evidence
+                                                // (observed "Freeto..." for
+                                                // "Freetown"): a plain Row
+                                                // gave duration's fixed-
+                                                // width Text whatever room
+                                                // it needed first, and
+                                                // location's Expanded slot
+                                                // got only what was left in
+                                                // this already-narrow row.
+                                                // A bounded LayoutBuilder
+                                                // (outside the Wrap, not
+                                                // inside -- a Wrap child
+                                                // gets unbounded
+                                                // constraints, so ellipsis
+                                                // would never trigger) gives
+                                                // location a real width to
+                                                // truncate within only if it
+                                                // actually needs to; Wrap
+                                                // then lets duration flow to
+                                                // its own line instead of
+                                                // always sharing one line
+                                                // and crushing location.
+                                                LayoutBuilder(
+                                                  builder: (context, constraints) => Wrap(
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    spacing: 8,
+                                                    runSpacing: 2,
+                                                    children: [
+                                                      ConstrainedBox(
+                                                        constraints: BoxConstraints(
+                                                          maxWidth: constraints.maxWidth,
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .location_on_outlined,
+                                                              size: 15,
+                                                              color: context
+                                                                  .colors
+                                                                  .textMuted,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 3,
+                                                            ),
+                                                            Flexible(
+                                                              child: Text(
+                                                                (job["location"]
+                                                                        as String?) ??
+                                                                    "",
+                                                                style: Theme.of(
+                                                                  context,
+                                                                ).textTheme.bodySmall,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Icon(
-                                                      Icons.schedule_outlined,
-                                                      size: 15,
-                                                      color:
-                                                          context.colors.textMuted,
-                                                    ),
-                                                    const SizedBox(width: 3),
-                                                    Text(
-                                                      (job["duration"]
-                                                              as String?) ??
-                                                          "",
-                                                      style: Theme.of(
-                                                        context,
-                                                      ).textTheme.bodySmall,
-                                                    ),
-                                                  ],
+                                                      Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Icon(
+                                                            Icons
+                                                                .schedule_outlined,
+                                                            size: 15,
+                                                            color: context
+                                                                .colors
+                                                                .textMuted,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 3,
+                                                          ),
+                                                          Text(
+                                                            (job["duration"]
+                                                                    as String?) ??
+                                                                "",
+                                                            style: Theme.of(
+                                                              context,
+                                                            ).textTheme.bodySmall,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -1359,7 +1486,7 @@ class JobScreenState extends State<JobScreen> {
                                                   Icons.check_rounded,
                                                   size: 18,
                                                 ),
-                                                label: const Text("Applied"),
+                                                label: Text(context.l10n.appliedButtonLabel),
                                               )
                                             : ElevatedButton.icon(
                                                 onPressed: isUploading
@@ -1375,10 +1502,10 @@ class JobScreenState extends State<JobScreen> {
                                                 ),
                                                 label: Text(
                                                   isUploading
-                                                      ? "Uploading..."
+                                                      ? context.l10n.uploadingButtonLabel
                                                       : (isGig
-                                                            ? "Apply"
-                                                            : "Apply with CV"),
+                                                            ? context.l10n.applyButtonLabel
+                                                            : context.l10n.applyWithCvButtonLabel),
                                                 ),
                                               ),
                                       ),
@@ -1403,7 +1530,7 @@ class JobScreenState extends State<JobScreen> {
             heroTag: "myApplications",
             backgroundColor: context.colors.tertiary,
             icon: const Icon(Icons.history_rounded),
-            label: const Text("My Applications"),
+            label: Text(context.l10n.myApplicationsFab),
             onPressed: () {
               Navigator.push(
                 context,
@@ -1421,7 +1548,7 @@ class JobScreenState extends State<JobScreen> {
             heroTag: "passport",
             backgroundColor: context.colors.passport,
             icon: const Icon(Icons.card_membership_rounded),
-            label: const Text("Passport"),
+            label: Text(context.l10n.passportFab),
             onPressed: () {
               Navigator.push(
                 context,
@@ -1441,7 +1568,7 @@ class JobScreenState extends State<JobScreen> {
             heroTag: "workHistory",
             backgroundColor: context.colors.secondary,
             icon: const Icon(Icons.star_rounded),
-            label: const Text("Work History"),
+            label: Text(context.l10n.workHistoryFab),
             onPressed: () {
               Navigator.push(
                 context,
@@ -1491,14 +1618,14 @@ class _DocPickerTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  required ? "$title (required)" : "$title (optional)",
+                  required ? context.l10n.docRequiredSuffix(title) : context.l10n.docOptionalSuffix(title),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
                 ),
                 Text(
-                  fileName ?? "No file selected",
+                  fileName ?? context.l10n.noFileSelected,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -1506,7 +1633,7 @@ class _DocPickerTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          OutlinedButton(onPressed: onPick, child: const Text("Choose")),
+          OutlinedButton(onPressed: onPick, child: Text(context.l10n.chooseButton)),
         ],
       ),
     );

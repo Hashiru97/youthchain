@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_context.dart';
 import '../theme/app_theme.dart';
 import '../widgets/formatted_description.dart';
 import '../widgets/report_sheet.dart';
@@ -47,13 +48,13 @@ class DiscoverJobDetailScreen extends StatelessWidget {
       final ok = await launchUrl(uri, mode: LaunchMode.inAppWebView);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not open the application link")),
+          SnackBar(content: Text(context.l10n.couldNotOpenApplicationLink)),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not open the application link")),
+          SnackBar(content: Text(context.l10n.couldNotOpenApplicationLink)),
         );
       }
     }
@@ -61,7 +62,8 @@ class DiscoverJobDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = (job["title"] as String?) ?? "Job";
+    final l10n = context.l10n;
+    final title = (job["title"] as String?) ?? l10n.jobDetailFallbackTitle;
     final location = (job["location"] as String?) ?? "";
     final companyName = job["company_name"] as String?;
     final companyVerified = job["company_verified"] == true;
@@ -77,7 +79,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Job Details"),
+        title: Text(l10n.jobDetailsTitle),
         actions: [
           // See JobDetailScreen's identical fix for why color is forced
           // here: this AppBar's background is colors.primary too, same
@@ -85,7 +87,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
           SaveJobButton(jobId: jobId, initiallySaved: initiallySaved, color: Colors.white),
           IconButton(
             icon: const Icon(Icons.flag_outlined, color: Colors.white),
-            tooltip: "Report this listing",
+            tooltip: l10n.reportThisListingTooltip,
             onPressed: () => showReportSheet(context, scrapedJobId: jobId),
           ),
         ],
@@ -123,7 +125,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                         runSpacing: 6,
                         children: [
                           StatusBadge(
-                            label: sourceName ?? "Scraped listing",
+                            label: sourceName ?? l10n.scrapedListingBadge,
                             color: context.colors.textMuted,
                             background: context.colors.background,
                             icon: Icons.travel_explore_rounded,
@@ -131,7 +133,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                           ),
                           if (isExpired)
                             StatusBadge(
-                              label: "Expired",
+                              label: l10n.expiredBadge,
                               color: context.colors.error,
                               background: context.colors.errorBg,
                               icon: Icons.event_busy_rounded,
@@ -152,7 +154,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
-                                isExpired ? "Deadline was $deadlineFormatted" : "Apply by $deadlineFormatted",
+                                isExpired ? l10n.deadlineWasLabel(deadlineFormatted) : l10n.applyByLabel(deadlineFormatted),
                                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                       color: isExpired ? context.colors.error : null,
                                     ),
@@ -212,7 +214,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Company", style: Theme.of(context).textTheme.titleSmall),
+                    Text(l10n.companyLabel, style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -224,7 +226,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                         ),
                         if (companyVerified)
                           StatusBadge(
-                            label: "Verified",
+                            label: l10n.verifiedBadge,
                             color: context.colors.success,
                             background: context.colors.successBg,
                             icon: Icons.verified_rounded,
@@ -253,16 +255,14 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                         Icon(Icons.shield_outlined, size: 18, color: context.colors.warning),
                         const SizedBox(width: 6),
                         Text(
-                          "This employer isn't verified — stay safe",
+                          l10n.employerNotVerifiedWarning,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(color: context.colors.warning),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "• Never pay to apply for a job\n"
-                      "• Verify the employer independently before sharing personal details\n"
-                      "• If you meet in person, meet in a public place",
+                      l10n.unverifiedEmployerSafetyTips,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -271,7 +271,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
             ],
             if (description != null && description.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
-              Text("Description", style: Theme.of(context).textTheme.titleSmall),
+              Text(l10n.descriptionLabel, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               FormattedJobDescription(text: description),
             ],
@@ -288,7 +288,7 @@ class DiscoverJobDetailScreen extends StatelessWidget {
                   height: 48,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text("Apply"),
+                    label: Text(l10n.applyButtonLabel),
                     onPressed: () => _openApplyUrl(context),
                   ),
                 ),

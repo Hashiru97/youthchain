@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../theme/app_theme.dart';
 
 /// A single, consistent pill-badge component for every status shown across
@@ -71,7 +72,7 @@ class StatusBadge extends StatelessWidget {
     final colors = context.colors;
     if (jobType == 'gig') {
       return StatusBadge(
-        label: 'Gig / hire-based',
+        label: context.l10n.jobTypeGig,
         color: colors.secondary,
         background: colors.secondaryLight,
         icon: Icons.handshake_rounded,
@@ -79,7 +80,7 @@ class StatusBadge extends StatelessWidget {
       );
     }
     return StatusBadge(
-      label: 'Formal',
+      label: context.l10n.jobTypeFormal,
       color: colors.textSecondary,
       background: colors.background,
       icon: Icons.description_rounded,
@@ -105,7 +106,7 @@ class StatusBadge extends StatelessWidget {
     final colors = context.colors;
     if (revoked) {
       return StatusBadge(
-        label: 'Revoked',
+        label: context.l10n.credentialRevoked,
         color: colors.error,
         background: colors.errorBg,
         icon: Icons.gpp_bad_rounded,
@@ -113,13 +114,13 @@ class StatusBadge extends StatelessWidget {
     }
     return verified
         ? StatusBadge(
-            label: 'On-chain',
+            label: context.l10n.credentialOnChain,
             color: colors.onChain,
             background: colors.primaryLight,
             icon: Icons.verified_rounded,
           )
         : StatusBadge(
-            label: 'Pending',
+            label: context.l10n.credentialPending,
             color: colors.warning,
             background: colors.warningBg,
             icon: Icons.schedule_rounded,
@@ -147,12 +148,13 @@ class StatusBadge extends StatelessWidget {
     bool dense = false,
   }) {
     final colors = context.colors;
+    final l10n = context.l10n;
     switch (status) {
       case 'verified':
         return StatusBadge(
           label: type == 'individual'
-              ? 'Verified Individual'
-              : 'Verified Business',
+              ? l10n.employerVerifiedIndividual
+              : l10n.employerVerifiedBusiness,
           color: colors.success,
           background: colors.successBg,
           icon: Icons.verified_rounded,
@@ -160,7 +162,7 @@ class StatusBadge extends StatelessWidget {
         );
       case 'pending':
         return StatusBadge(
-          label: 'Pending review',
+          label: l10n.employerPendingReview,
           color: colors.warning,
           background: colors.warningBg,
           icon: Icons.schedule_rounded,
@@ -168,7 +170,7 @@ class StatusBadge extends StatelessWidget {
         );
       case 'rejected':
         return StatusBadge(
-          label: 'Rejected',
+          label: l10n.employerRejected,
           color: colors.error,
           background: colors.errorBg,
           icon: Icons.cancel_rounded,
@@ -176,11 +178,70 @@ class StatusBadge extends StatelessWidget {
         );
       default:
         return StatusBadge(
-          label: 'Unverified',
+          label: l10n.employerUnverified,
           color: colors.textMuted,
           background: colors.background,
           icon: Icons.help_outline_rounded,
           dense: dense,
+        );
+    }
+  }
+
+  /// Scam-signal caution badge for a scraped Discover listing (see
+  /// Job.scam_signals / scanner.scam_signals in the backend — fee
+  /// requests, a personal-email-only contact, or vague/missing pay).
+  /// Deliberately the same error (red) color as StatusBadge.onChain's
+  /// [revoked] case, not warning (amber/yellow) — this is a real safety
+  /// caution about a listing that may be trying to extract money or
+  /// personal contact from a job seeker, not a routine "pending" status.
+  factory StatusBadge.scamWarning(BuildContext context) {
+    final colors = context.colors;
+    return StatusBadge(
+      label: context.l10n.scamWarningBadge,
+      color: colors.error,
+      background: colors.errorBg,
+      icon: Icons.warning_amber_rounded,
+      dense: true,
+    );
+  }
+
+  /// Employer.trust_tier (see _employer_trust_summary in app.py) -- a
+  /// composite 0-100 score blending verification, open trust-&-safety
+  /// reports, ratings from past workers, and whether the employer
+  /// actually responds to applicants. Deliberately shown regardless of
+  /// whether ratings exist yet, unlike StatusBadge.employerVerification's
+  /// neighboring rating-count row -- a brand-new employer with zero
+  /// ratings previously showed NO trust signal at all beyond the
+  /// verification badge; the composite score is meaningful (a neutral
+  /// "fair") even at that cold start, so hiding it the same way the
+  /// ratings-only row still correctly does would throw away real signal.
+  factory StatusBadge.employerTrust(BuildContext context, String tier) {
+    final colors = context.colors;
+    final l10n = context.l10n;
+    switch (tier) {
+      case 'good':
+        return StatusBadge(
+          label: l10n.employerTrustGood,
+          color: colors.success,
+          background: colors.successBg,
+          icon: Icons.shield_rounded,
+          dense: true,
+        );
+      case 'caution':
+        return StatusBadge(
+          label: l10n.employerTrustCaution,
+          color: colors.error,
+          background: colors.errorBg,
+          icon: Icons.gpp_maybe_rounded,
+          dense: true,
+        );
+      default:
+        return StatusBadge(
+          label: l10n.employerTrustFair,
+          color: colors.warning,
+          background: colors.warningBg,
+          icon: Icons.shield_outlined,
+          dense: true,
         );
     }
   }
@@ -193,7 +254,7 @@ class StatusBadge extends StatelessWidget {
     final bg = score >= 70
         ? colors.successBg
         : (score >= 40 ? colors.warningBg : colors.background);
-    return StatusBadge(label: '$score% match', color: color, background: bg);
+    return StatusBadge(label: context.l10n.matchScoreLabel(score), color: color, background: bg);
   }
 
   @override

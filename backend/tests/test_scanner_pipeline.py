@@ -85,6 +85,99 @@ def test_happy_path_creates_jobs_and_records_success(client, monkeypatch):
         assert scan_run.status == "success"
         assert scan_run.jobs_created == 1
 
+        assert outcome.created_job_ids == [job.id]
+        # Ordinary listing, no scam signals -- see the dedicated tests
+        # below for the fee_request/personal_email/vague_pay cases.
+        assert job.scam_signals is None
+        assert job.to_dict()["scam_signals"] == []
+
+
+def test_scam_signals_are_computed_and_stored_on_a_newly_created_job(client, monkeypatch):
+    """Real gap this closes: nothing analyzed a scraped listing's own
+    content for scam indicators before -- see scanner.scam_signals."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+        monkeypatch.setattr(
+            pipeline,
+            "extract_jobs",
+            lambda markdown, key, logger=None: [
+                {
+                    "title": "Work From Home Data Entry",
+                    "company_name": None,
+                    "location": "Freetown",
+                    "salary": "Very attractive",
+                    "description": "Pay a small processing fee to secure your position. Contact us at easywork2026@gmail.com.",
+                    "apply_url": None,
+                    "external_id": "scam-listing-1",
+                },
+            ],
+        )
+
+        _run(app_module, source.id)
+
+        job = app_module.Job.query.filter_by(external_id="scam-listing-1").first()
+        assert set(job.scam_signals.split(",")) == {"fee_request", "personal_email", "vague_pay"}
+        assert set(job.to_dict()["scam_signals"]) == {"fee_request", "personal_email", "vague_pay"}
+
+
+def test_scam_signals_are_recomputed_on_rescan_when_content_changes(client, monkeypatch):
+    """A listing that gets edited at the source to add (or remove) a red
+    flag must not keep whatever the very first scan happened to see."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+
+        clean_listing = {
+            "title": "Office Assistant", "company_name": "Acme SL", "location": "Freetown",
+            "salary": "Le 900,000/month", "description": "General office support duties.",
+            "apply_url": None, "external_id": "rescan-1",
+        }
+        monkeypatch.setattr(pipeline, "extract_jobs", lambda markdown, key, logger=None: [clean_listing])
+        _run(app_module, source.id)
+        job = app_module.Job.query.filter_by(external_id="rescan-1").first()
+        assert job.scam_signals is None
+
+        edited_listing = dict(clean_listing, description="Registration fee required before you can start.")
+        monkeypatch.setattr(pipeline, "extract_jobs", lambda markdown, key, logger=None: [edited_listing])
+        _run(app_module, source.id)
+        app_module.db.session.refresh(job)
+        assert job.scam_signals == "fee_request"
+
+
+def test_created_job_ids_excludes_jobs_merely_updated_on_a_rescan(client, monkeypatch):
+    """ScanOutcome.created_job_ids feeds app._dispatch_job_alerts_for_scan
+    (Saved Search / profile-skill job alerts) — it must reflect only
+    genuinely new listings, or a rescan that merely refreshes an existing
+    job's salary/description would re-fire alerts for it every time."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+
+        listing = {
+            "title": "Junior Developer", "company_name": "Acme SL", "location": "Freetown",
+            "salary": "Le 2,000,000/month", "description": "Build things.",
+            "apply_url": "https://careers.sl/jobs/123", "external_id": "https://careers.sl/jobs/123",
+            "employment_type": "Full-time",
+        }
+        monkeypatch.setattr(pipeline, "extract_jobs", lambda markdown, key, logger=None: [listing])
+
+        first = _run(app_module, source.id)
+        assert first.jobs_created == 1
+        assert len(first.created_job_ids) == 1
+
+        second = _run(app_module, source.id)
+        assert second.jobs_created == 0
+        assert second.jobs_updated == 1
+        assert second.created_job_ids == []
+
 
 def test_listing_without_a_description_gets_backfilled_from_its_own_page(client, monkeypatch):
     """The real bug found against real Careers.sl/JobSearch SL data: a
@@ -135,6 +228,45 @@ def test_listing_without_a_description_gets_backfilled_from_its_own_page(client,
         assert scan_run.jobs_backfilled == 1
         assert job.salary == "Le 3,000,000/month"
         assert job.employment_type == "Full-time"
+
+
+def test_scam_signals_are_recomputed_after_a_successful_backfill(client, monkeypatch):
+    """The listing pass alone rarely carries a job's real body text (see
+    test_listing_without_a_description_gets_backfilled_from_its_own_page
+    just above) -- a fee demand hidden in the detail page's real
+    description must still get caught once the backfill pass reveals it,
+    not just whatever the (usually empty) listing pass alone saw."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: f"# markdown for {url}")
+        monkeypatch.setattr(
+            pipeline,
+            "extract_jobs",
+            lambda markdown, key, logger=None: [{
+                "title": "Remote Data Entry", "company_name": "Acme SL", "location": "Freetown",
+                "salary": None, "description": None,
+                "apply_url": "https://careers.sl/job/remote-data-entry/",
+                "external_id": "https://careers.sl/job/remote-data-entry/",
+                "employment_type": None,
+            }],
+        )
+        monkeypatch.setattr(
+            pipeline,
+            "extract_job_detail",
+            lambda markdown, key, logger=None: {
+                "description": "A small registration fee is required before your first assignment.",
+                "salary": None, "employment_type": None, "location": None,
+            },
+        )
+
+        outcome = _run(app_module, source.id)
+
+        assert outcome.jobs_backfilled == 1
+        job = app_module.Job.query.filter_by(source="scraped").first()
+        assert job.scam_signals == "fee_request"
 
 
 def test_a_short_listing_page_stub_still_gets_selected_for_backfill(client, monkeypatch):
@@ -855,3 +987,95 @@ def test_backfill_pass_can_fill_a_deadline_the_listing_pass_missed(client, monke
         assert outcome.jobs_backfilled == 1
         job = app_module.Job.query.filter_by(source="scraped").first()
         assert job.application_deadline == date(2026, 9, 1)
+
+
+def test_required_skills_is_extracted_and_stored(client, monkeypatch):
+    """required_skills is what powers GET /api/discover_jobs's candidate-
+    match ranking (same scoring /api/match_jobs already does for Home) --
+    unlike employer-posted jobs, scraped ones had this hardcoded to None
+    until now."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+        monkeypatch.setattr(
+            pipeline,
+            "extract_jobs",
+            lambda markdown, key, logger=None: [{
+                "title": "Enumerator", "company_name": None, "location": None,
+                "salary": None, "description": "A real, full job description well over the hundred character floor.",
+                "apply_url": None, "external_id": "job-with-skills",
+                "employment_type": None, "deadline": None,
+                "required_skills": "Microsoft Excel, customer service",
+            }],
+        )
+        _run(app_module, source.id)
+
+        job = app_module.Job.query.filter_by(source="scraped").first()
+        assert job.required_skills == "Microsoft Excel, customer service"
+
+
+def test_rescan_does_not_clobber_real_skills_with_a_missing_one(client, monkeypatch):
+    """Same "prefer real data over a rescan's empty value" reasoning as
+    deadline/description/salary above."""
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+
+        with_skills = [{
+            "title": "Enumerator", "company_name": None, "location": None,
+            "salary": None, "description": "A real, full job description well over the hundred character floor.",
+            "apply_url": None, "external_id": "job-rescan-skills",
+            "employment_type": None, "deadline": None, "required_skills": "Data entry, Excel",
+        }]
+        monkeypatch.setattr(pipeline, "extract_jobs", lambda markdown, key, logger=None: with_skills)
+        _run(app_module, source.id)
+
+        without_skills = [{
+            "title": "Enumerator", "company_name": None, "location": None,
+            "salary": None, "description": "A real, full job description well over the hundred character floor.",
+            "apply_url": None, "external_id": "job-rescan-skills",
+            "employment_type": None, "deadline": None, "required_skills": None,
+        }]
+        monkeypatch.setattr(pipeline, "extract_jobs", lambda markdown, key, logger=None: without_skills)
+        _run(app_module, source.id)
+
+        job = app_module.Job.query.filter_by(source="scraped").first()
+        assert job.required_skills == "Data entry, Excel"
+
+
+def test_backfill_pass_can_fill_required_skills_the_listing_pass_missed(client, monkeypatch):
+    import app as app_module
+
+    with app_module.app.app_context():
+        source = _make_source(app_module)
+        monkeypatch.setattr(pipeline, "scrape_url", lambda url, key: "# fake markdown")
+        monkeypatch.setattr(
+            pipeline,
+            "extract_jobs",
+            lambda markdown, key, logger=None: [{
+                "title": "Enumerator", "company_name": None, "location": None,
+                "salary": None, "description": None,
+                "apply_url": "https://careers.sl/job/enumerator/",
+                "external_id": "https://careers.sl/job/enumerator/",
+                "employment_type": None, "deadline": None, "required_skills": None,
+            }],
+        )
+        monkeypatch.setattr(
+            pipeline,
+            "extract_job_detail",
+            lambda content, key, logger=None: {
+                "description": "A real, full job description well over the hundred character floor.",
+                "salary": None, "employment_type": None, "location": None, "deadline": None,
+                "required_skills": "Valid driver's license",
+            },
+        )
+
+        outcome = _run(app_module, source.id)
+
+        assert outcome.jobs_backfilled == 1
+        job = app_module.Job.query.filter_by(source="scraped").first()
+        assert job.required_skills == "Valid driver's license"

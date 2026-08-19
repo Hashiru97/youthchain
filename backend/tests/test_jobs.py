@@ -162,6 +162,11 @@ def test_job_payload_includes_owning_employer_name_and_verification_status(clien
     assert jobs["Owned Job"]["employer"] == {
         "name": "Acme Corp", "verification_status": "verified", "verification_type": "business",
         "industry": None, "avg_rating": None, "rating_count": 0,
+        # See test_employer_trust.py for full composite-score coverage --
+        # this just pins that _employer_summary() actually includes it in
+        # the shape every job payload returns. verified + no reports/
+        # ratings/applications = 20+24+20+10 = 74, "good".
+        "trust_score": 74, "trust_tier": "good",
     }
 
 

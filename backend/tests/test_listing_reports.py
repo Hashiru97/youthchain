@@ -186,6 +186,58 @@ def test_admin_can_dismiss_a_listing_report(client):
         assert app_module.Job.query.get(job_id) is not None
 
 
+def test_reviewed_listing_report_shows_which_admin_resolved_it(client):
+    import app as app_module
+
+    job_id = _make_scraped_job(app_module)
+    user = register_user(client)
+    client.post("/api/report_listing", json={"job_id": job_id, "category": "scam"}, headers=auth_headers(user["access_token"]))
+
+    with app_module.app.app_context():
+        report_id = app_module.ScrapedListingReport.query.first().id
+
+    email, password = _create_admin(app_module)
+    _login_admin(client, email, password)
+    page = client.get("/admin/listing_reports")
+    token = _csrf_token(page.get_data(as_text=True))
+    client.post(
+        f"/admin/listing_reports/{report_id}/resolve",
+        data={"csrf_token": token, "decision": "dismiss"},
+    )
+
+    page = client.get("/admin/listing_reports")
+    assert "Ops" in page.get_data(as_text=True)  # _create_admin's fixed admin name
+
+
+def test_admin_listing_reports_open_queue_is_paginated(client):
+    import app as app_module
+
+    email, password = _create_admin(app_module)
+    _login_admin(client, email, password)
+
+    with app_module.app.app_context():
+        reporter = app_module.User(name="Reporter", email="reporter@test.com", phone="000", password_hash="x")
+        app_module.db.session.add(reporter)
+        app_module.db.session.commit()
+        for i in range(30):
+            app_module.db.session.add(app_module.ScrapedListingReport(
+                reporter_user_id=reporter.id, job_id=None, category="other",
+                status="open", created_at=app_module.datetime.utcnow(),
+            ))
+        app_module.db.session.commit()
+
+    page1 = client.get("/admin/listing_reports")
+    body1 = page1.get_data(as_text=True)
+    assert "Open (30)" in body1
+    assert "Next" in body1
+
+    page2 = client.get("/admin/listing_reports?offset=25")
+    body2 = page2.get_data(as_text=True)
+    assert "Open (30)" in body2
+    assert "Previous" in body2
+    assert "Next" not in body2
+
+
 def test_admin_removing_a_listing_deletes_the_job_and_any_saved_copies(client):
     """Real FK-safety concern: a Postgres FK on saved_job.job_id would
     reject deleting a Job that's still referenced by a SavedJob row --

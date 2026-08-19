@@ -1,10 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
+import 'l10n/kri_material_fallback.dart';
 import 'screens/registration_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/login_otp_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/home_shell.dart';
 import 'services/api_client.dart';
+import 'services/locale_controller.dart';
 import 'services/push_notification_service.dart';
 import 'services/theme_controller.dart';
 import 'theme/app_theme.dart';
@@ -21,6 +25,7 @@ void main() async {
   // the web portal's theme_init.js exists to prevent.
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.load();
+  await LocaleController.load();
   await Firebase.initializeApp();
 
   ApiClient.onSessionExpired = () {
@@ -95,37 +100,58 @@ class YouthChainApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeController.mode,
       builder: (context, themeMode, _) {
-        return MaterialApp(
-          navigatorKey: navigatorKey,
-          title: 'YouthChain',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: themeMode,
+        return ValueListenableBuilder<Locale?>(
+          valueListenable: LocaleController.locale,
+          builder: (context, locale, _) {
+            return MaterialApp(
+              navigatorKey: navigatorKey,
+              title: 'YouthChain',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light(),
+              darkTheme: AppTheme.dark(),
+              themeMode: themeMode,
 
-          // Resolves an existing session before deciding registration vs. home.
-          home: const AuthGate(),
+              // `null` (LocaleController's own "follow the device" default)
+              // is exactly what MaterialApp.locale already expects for "use
+              // Flutter's own resolution against supportedLocales" -- no
+              // extra plumbing needed for that fallback case.
+              locale: locale,
+              // See kri_material_fallback.dart's own docstring: this is
+              // the one shared delegate list every MaterialApp in this
+              // codebase (this one, and every widget test's own) must
+              // use, so a locale gap here can never again be invisible
+              // to the test suite the way the Krio crash was.
+              localizationsDelegates: appLocalizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
 
-          // Simple named routes
-          routes: {
-            '/login': (_) => const LoginScreen(),
-            '/register': (_) => const RegistrationScreen(),
-            '/forgot-password': (_) => const ForgotPasswordScreen(),
-          },
+              // Resolves an existing session before deciding registration vs. home.
+              home: const AuthGate(),
 
-          // Robust dynamic route for JobScreen
-          onGenerateRoute: (settings) {
-            if (settings.name == '/home') {
-              final args = settings.arguments;
-              if (args is Map<String, dynamic> && args['userId'] != null) {
-                final int userId = args['userId'] as int;
-                return MaterialPageRoute(builder: (_) => HomeShell(userId: userId));
-              }
+              // Simple named routes
+              routes: {
+                '/login': (_) => const LoginScreen(),
+                '/register': (_) => const RegistrationScreen(),
+                '/forgot-password': (_) => const ForgotPasswordScreen(),
+                '/login-with-code': (_) => const LoginOtpScreen(),
+              },
 
-              // If arguments are missing/bad, fall back to login instead of crashing
-              return MaterialPageRoute(builder: (_) => const LoginScreen());
-            }
-            return null;
+              // Robust dynamic route for JobScreen
+              onGenerateRoute: (settings) {
+                if (settings.name == '/home') {
+                  final args = settings.arguments;
+                  if (args is Map<String, dynamic> && args['userId'] != null) {
+                    final int userId = args['userId'] as int;
+                    return MaterialPageRoute(
+                      builder: (_) => HomeShell(userId: userId),
+                    );
+                  }
+
+                  // If arguments are missing/bad, fall back to login instead of crashing
+                  return MaterialPageRoute(builder: (_) => const LoginScreen());
+                }
+                return null;
+              },
+            );
           },
         );
       },

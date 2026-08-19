@@ -8,7 +8,7 @@
 {% block content %}
   <section class="card">
     <div class="admin-section-header">
-      <h2>Open ({{ open_flags|length }})</h2>
+      <h2>Open ({{ total_open }})</h2>
     </div>
     {% if open_flags %}
     <div class="table-scroll">
@@ -48,6 +48,12 @@
       </tbody>
     </table>
     </div>
+    {% if has_prev or has_next %}
+    <div class="admin-pagination">
+      {% if has_prev %}<a href="{{ url_for('admin_rating_flags', offset=prev_offset) }}" class="btn secondary outline">⬅ Previous</a>{% endif %}
+      {% if has_next %}<a href="{{ url_for('admin_rating_flags', offset=next_offset) }}" class="btn secondary outline">Next ➡</a>{% endif %}
+    </div>
+    {% endif %}
     {% else %}
     <div class="admin-empty-queue">
       {{ icon_inbox_empty() }}
@@ -63,16 +69,18 @@
     {% if reviewed %}
     <div class="table-scroll">
     <table class="applicants-table">
-      <thead><tr><th>Rating</th><th>Flagged by</th><th>Decision</th><th>When</th></tr></thead>
+      <thead><tr><th>Rating</th><th>Flagged by</th><th>Decision</th><th>Reviewed by</th><th>When</th></tr></thead>
       <tbody>
         {% for flag in reviewed %}
         {% set rating = ratings.get(flag.rating_id) %}
+        {% set reviewer = reviewers.get(flag.reviewed_by_admin_id) %}
         <tr>
           <td data-label="Rating">{{ (rating.score ~ "/5") if rating else "—" }}</td>
           <td data-label="Flagged by">{{ flag.flagged_by_role | capitalize }}</td>
           <td class="status {{ 'rejected' if flag.status == 'actioned' else 'accepted' }}">
             {{ "Rating hidden" if flag.status == "actioned" else "Dismissed" }}
           </td>
+          <td data-label="Reviewed by">{{ reviewer.name if reviewer else "—" }}</td>
           <td data-label="When">{{ flag.reviewed_at }}</td>
         </tr>
         {% endfor %}

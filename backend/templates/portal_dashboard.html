@@ -52,6 +52,11 @@
             {{ icon_star() }} {{ trust.avg_rating }} · {{ trust.rating_count }} rating{{ "s" if trust.rating_count != 1 }} from past workers
           </div>
           {% endif %}
+          {% if trust and trust.trust_tier and trust.trust_tier != 'good' %}
+          <span class="badge {{ 'badge-warn' if trust.trust_tier == 'fair' else 'badge-error' }}" style="padding: 2px 8px; margin-top: 2px; font-size: 11px;">
+            {{ "Fair standing" if trust.trust_tier == "fair" else "Use caution" }}
+          </span>
+          {% endif %}
           {% endif %}
           <div class="portal-job-card-meta">
             <span>{{ icon_map_pin() }} {{ job.location }}</span>

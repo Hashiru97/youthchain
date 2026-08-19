@@ -14,6 +14,24 @@
   </section>
   {% endif %}
 
+  {# Composite trust score (see _employer_trust_summary in app.py) --
+     blends verification, open trust-&-safety reports, ratings, and how
+     often applicants actually get a response. Shown to the employer
+     unconditionally (unlike the ratings-only card above, gated on
+     rating_count) since it's meaningful from a neutral "fair" cold
+     start -- this is the one place an employer can see, and act on,
+     the same signal youth see about them elsewhere in the product. #}
+  {% if trust and trust.trust_tier %}
+  <section class="card" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+    <span class="badge {{ 'badge-success' if trust.trust_tier == 'good' else ('badge-warn' if trust.trust_tier == 'fair' else 'badge-error') }}">
+      {{ {"good": "Good standing", "fair": "Fair standing", "caution": "Use caution"}[trust.trust_tier] }}
+    </span>
+    <span class="muted">
+      Your trust score (visible to youth as a badge) reflects verification, open reports, ratings, and how often you respond to applicants.
+    </span>
+  </section>
+  {% endif %}
+
   {% if not is_verified or not has_jobs %}
   <section class="employer-onboarding">
     <h2>Welcome to YouthChain, {{ employer.name }} 👋</h2>

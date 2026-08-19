@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>You're offline • YouthChain</title>
+  <!--
+    Plain static file, not a Jinja template -- sw.js's own docstring
+    explains why: this must be reachable with zero server (it's what a
+    dropped connection falls back to), so it can't depend on a live
+    Flask render. Same stylesheets every /portal/* page already loads
+    (precached by sw.js alongside this file itself), so it looks like a
+    real part of the site rather than a bare unstyled error page.
+  -->
+  <link rel="icon" type="image/svg+xml" href="/static/img/youthchain-icon.svg" />
+  <script src="/static/theme_init.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/shell_common.css" />
+  <link rel="stylesheet" href="/static/portal.css" />
+</head>
+<body class="portal-shell-body">
+  <main class="portal-content">
+    <div class="empty-state">
+      <h3>You're offline</h3>
+      <p>
+        This page hasn't been loaded before, so there's nothing saved to show yet.
+        Pages you've already visited (like a job list or an application you've
+        opened) stay viewable without a connection — this one just isn't one of
+        them.
+      </p>
+      <p><a href="/portal" class="btn primary">Try again</a></p>
+    </div>
+  </main>
+</body>
+</html>

@@ -266,6 +266,12 @@ def test_messages_response_includes_the_owning_employers_name_and_verification_s
     assert body["employer"] == {
         "name": "Acme", "verification_status": "unverified", "verification_type": "business",
         "industry": None, "avg_rating": None, "rating_count": 0,
+        # See test_employer_trust.py for full composite-score coverage --
+        # this just pins that _employer_summary() actually includes it in
+        # the shape this endpoint returns. unverified, no reports/ratings,
+        # 1 application (below the 3-application response-rate minimum) =
+        # 24+10+20+10 = 64, "fair".
+        "trust_score": 64, "trust_tier": "fair",
     }
 
 

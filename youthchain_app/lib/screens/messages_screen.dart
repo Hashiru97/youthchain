@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -78,7 +79,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network error loading messages")),
+        SnackBar(content: Text(context.l10n.networkErrorLoadingMessages)),
       );
     }
   }
@@ -110,13 +111,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not open attachment")),
+          SnackBar(content: Text(context.l10n.couldNotOpenAttachment)),
         );
       }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not open attachment")),
+        SnackBar(content: Text(context.l10n.couldNotOpenAttachment)),
       );
     }
   }
@@ -164,11 +165,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
         await _fetchMessages();
       } else if (res.statusCode == 413) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("File too large (max 16 MB)")),
+          SnackBar(content: Text(context.l10n.fileTooLarge)),
         );
       } else {
         final data = jsonDecodeSafe(res.body);
-        final msg = (data?["error"] as String?) ?? "Failed to send message";
+        final msg = (data?["error"] as String?) ?? context.l10n.failedToSendMessage;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(msg)));
@@ -176,44 +177,45 @@ class _MessagesScreenState extends State<MessagesScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Network error sending message")),
+        SnackBar(content: Text(context.l10n.networkErrorSendingMessage)),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
-  StatusBadge _employerBadge(String status, {String? type}) {
+  StatusBadge _employerBadge(BuildContext context, String status, {String? type}) {
+    final l10n = context.l10n;
     switch (status) {
       case 'verified':
         return StatusBadge(
           label: type == 'individual'
-              ? 'Verified Individual'
-              : 'Verified Business',
+              ? l10n.employerVerifiedIndividual
+              : l10n.employerVerifiedBusiness,
           color: Colors.white,
           background: Colors.transparent,
           icon: Icons.verified_rounded,
           dense: true,
         );
       case 'pending':
-        return const StatusBadge(
-          label: 'Pending review',
+        return StatusBadge(
+          label: l10n.employerPendingReview,
           color: Colors.white,
           background: Colors.transparent,
           icon: Icons.schedule_rounded,
           dense: true,
         );
       case 'rejected':
-        return const StatusBadge(
-          label: 'Rejected',
+        return StatusBadge(
+          label: l10n.employerRejected,
           color: Colors.white,
           background: Colors.transparent,
           icon: Icons.cancel_rounded,
           dense: true,
         );
       default:
-        return const StatusBadge(
-          label: 'Unverified',
+        return StatusBadge(
+          label: l10n.employerUnverified,
           color: Colors.white,
           background: Colors.transparent,
           icon: Icons.help_outline_rounded,
@@ -232,14 +234,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final String line;
     Widget? badge;
     if (employer == null) {
-      line = "Posted by YouthChain";
+      line = context.l10n.postedByYouthChain;
     } else {
-      final name = (employer["name"] as String?) ?? "Employer";
+      final name = (employer["name"] as String?) ?? context.l10n.employerFallbackName;
       final status =
           (employer["verification_status"] as String?) ?? "unverified";
       final type = employer["verification_type"] as String?;
       line = name;
-      badge = _employerBadge(status, type: type);
+      badge = _employerBadge(context, status, type: type);
     }
     return PreferredSize(
       preferredSize: const Size.fromHeight(28),
@@ -280,8 +282,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       appBar: AppBar(
         title: Text(
           widget.jobTitle != null
-              ? "Messages · ${widget.jobTitle}"
-              : "Messages",
+              ? context.l10n.messagesTitleWithJob(widget.jobTitle!)
+              : context.l10n.messagesTitle,
           overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: context.colors.tertiary,
@@ -289,7 +291,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         actions: [
           if (_employerId != null)
             IconButton(
-              tooltip: "Report this employer",
+              tooltip: context.l10n.reportThisEmployerTooltip,
               icon: const Icon(Icons.flag_outlined),
               onPressed: () => showReportSheet(
                 context,
@@ -300,7 +302,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
               ),
             ),
           IconButton(
-            tooltip: "Refresh",
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetchMessages,
           ),
@@ -312,10 +314,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : messages.isEmpty
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.forum_outlined,
-                    title: "No messages yet",
-                    subtitle: "Say hello to get the conversation started.",
+                    title: context.l10n.noMessagesYetTitle,
+                    subtitle: context.l10n.noMessagesYetSubtitle,
                   )
                 : ListView.builder(
                     controller: _scrollController,
@@ -364,8 +366,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             children: [
                               if (body.isNotEmpty)
                                 Semantics(
-                                  label:
-                                      "${isEmployer ? 'Employer' : 'You'} said: $body",
+                                  label: context.l10n.messageSaidSemantics(
+                                    isEmployer
+                                        ? context.l10n.employerFallbackName
+                                        : context.l10n.senderYouLabel,
+                                    body,
+                                  ),
                                   child: Text(
                                     body,
                                     style: TextStyle(
@@ -392,7 +398,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        "Attachment",
+                                        context.l10n.attachmentLinkLabel,
                                         style: TextStyle(
                                           fontSize: 13,
                                           decoration: TextDecoration.underline,
@@ -408,7 +414,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               if (!isEmployer) ...[
                                 const SizedBox(height: 4),
                                 Text(
-                                  isRead ? "Read" : "Sent",
+                                  isRead ? context.l10n.messageStatusRead : context.l10n.messageStatusSent,
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.white.withValues(alpha: 0.75),
@@ -465,7 +471,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       IconButton(
-                        tooltip: "Attach a file",
+                        tooltip: context.l10n.attachAFileTooltip,
                         icon: Icon(
                           Icons.attach_file_rounded,
                           color: context.colors.textSecondary,
@@ -474,14 +480,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       ),
                       Expanded(
                         child: Semantics(
-                          label: "Type a message",
+                          label: context.l10n.typeAMessageSemantics,
                           child: TextField(
                             controller: _bodyController,
                             maxLength: 2000,
                             minLines: 1,
                             maxLines: 4,
-                            decoration: const InputDecoration(
-                              hintText: "Type a message...",
+                            decoration: InputDecoration(
+                              hintText: context.l10n.typeAMessageHint,
                               counterText: "",
                             ),
                           ),
@@ -505,7 +511,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                 shape: BoxShape.circle,
                               ),
                               child: IconButton(
-                                tooltip: "Send message",
+                                tooltip: context.l10n.sendMessageTooltip,
                                 icon: const Icon(
                                   Icons.send_rounded,
                                   color: Colors.white,

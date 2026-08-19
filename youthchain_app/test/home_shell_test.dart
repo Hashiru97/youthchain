@@ -16,6 +16,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/home_shell.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -38,7 +40,10 @@ void main() {
         return http.Response(jsonEncode([]), 200);
       }
       if (path == '/api/notifications') {
-        return http.Response(jsonEncode({"notifications": [], "unread_count": 0}), 200);
+        return http.Response(
+          jsonEncode({"notifications": [], "unread_count": 0}),
+          200,
+        );
       }
       // /jobs, /api/match_jobs/<id>, /my_applications/<id> and anything
       // else JobScreen's initState fetches -- an empty-but-valid list is
@@ -51,9 +56,16 @@ void main() {
     ApiClient.testClient = null;
   });
 
-  testWidgets('shows a bottom nav with Home and Discover, defaulting to Home', (tester) async {
+  testWidgets('shows a bottom nav with Home and Discover, defaulting to Home', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const HomeShell(userId: 1)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const HomeShell(userId: 1),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -63,9 +75,16 @@ void main() {
     expect(find.text('Discover'), findsOneWidget);
   });
 
-  testWidgets('tapping Discover switches the active IndexedStack tab', (tester) async {
+  testWidgets('tapping Discover switches the active IndexedStack tab', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const HomeShell(userId: 1)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const HomeShell(userId: 1),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -87,4 +106,43 @@ void main() {
 
     expect(navBar().currentIndex, 1);
   });
+
+  testWidgets(
+    'rendering in Krio does not crash the bottom nav (regression test)',
+    (tester) async {
+      // Real crash found on a physical device, not caught by any test
+      // before this one: picking Krio in the profile screen's language
+      // picker sets MaterialApp.locale to Locale('kri') directly, which
+      // skips Flutter's normal "fall back to a locale it actually
+      // supports" resolution -- every delegate gets asked to resolve
+      // 'kri', and Flutter's built-in Material localizations don't have
+      // it. BottomNavigationBar specifically requires MaterialLocalizations
+      // and threw "No MaterialLocalizations found" the instant this
+      // screen tried to render. See kri_material_fallback.dart's own
+      // docstring for the fix and why appLocalizationsDelegates (not the
+      // narrower AppLocalizations.localizationsDelegates) is what every
+      // MaterialApp in this codebase, including every other test in this
+      // file, must use -- this test only proves the fix; the shared
+      // constant above is what stops the gap from reopening.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          locale: const Locale('kri'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const HomeShell(userId: 1),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(BottomNavigationBar), findsOneWidget);
+      // navHome/navDiscover's own Krio translations (see app_kri.arb) --
+      // pins that the fix didn't just avoid a crash by silently falling
+      // back to English for our own content too.
+      expect(find.text('Os'), findsOneWidget);
+      expect(find.text('Fɛn'), findsOneWidget);
+    },
+  );
 }

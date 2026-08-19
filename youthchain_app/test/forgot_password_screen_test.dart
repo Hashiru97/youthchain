@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/forgot_password_screen.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -32,8 +34,17 @@ void main() {
     ApiClient.testClient = null;
   });
 
-  testWidgets('renders the contact step by default', (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+  testWidgets('renders the contact step by default', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ForgotPasswordScreen(),
+      ),
+    );
 
     expect(find.text('Reset your password'), findsOneWidget);
     expect(find.text('Where should we send your reset code?'), findsOneWidget);
@@ -42,28 +53,44 @@ void main() {
     expect(find.text('Send reset code'), findsOneWidget);
   });
 
-  testWidgets('shows a validation error when sending with an empty identifier', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+  testWidgets(
+    'shows a validation error when sending with an empty identifier',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ForgotPasswordScreen(),
+        ),
+      );
 
-    await tester.tap(find.text('Send reset code'));
-    await tester.pump();
+      await tester.tap(find.text('Send reset code'));
+      await tester.pump();
 
-    expect(find.textContaining('enter your email'), findsOneWidget);
-  });
+      expect(find.textContaining('enter your email'), findsOneWidget);
+    },
+  );
 
-  testWidgets('choosing Phone (SMS) switches the identifier field to a phone number', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+  testWidgets(
+    'choosing Phone (SMS) switches the identifier field to a phone number',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ForgotPasswordScreen(),
+        ),
+      );
 
-    await tester.tap(find.text('Phone (SMS)'));
-    await tester.pump();
+      await tester.tap(find.text('Phone (SMS)'));
+      await tester.pump();
 
-    expect(find.text('Phone Number'), findsOneWidget);
-    expect(find.text('Email Address'), findsNothing);
-  });
+      expect(find.text('Phone Number'), findsOneWidget);
+      expect(find.text('Email Address'), findsNothing);
+    },
+  );
 
   testWidgets('full happy path: contact -> code -> confirm -> success', (
     WidgetTester tester,
@@ -83,14 +110,23 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ForgotPasswordScreen(),
+      ),
+    );
 
     // Step 1: contact.
     await tester.enterText(find.byType(TextField).first, 'forgetful@test.com');
     await tester.tap(find.text('Send reset code'));
     await tester.pumpAndSettle();
 
-    final resetRequest = requests.firstWhere((r) => r.url.path == '/auth/otp/reset/request');
+    final resetRequest = requests.firstWhere(
+      (r) => r.url.path == '/auth/otp/reset/request',
+    );
     final resetBody = jsonDecode(resetRequest.body) as Map;
     expect(resetBody['channel'], 'email');
     expect(resetBody['identifier'], 'forgetful@test.com');
@@ -101,17 +137,27 @@ void main() {
     await tester.tap(find.text('Verify'));
     await tester.pumpAndSettle();
 
-    final verifyRequest = requests.firstWhere((r) => r.url.path == '/auth/otp/reset/verify');
+    final verifyRequest = requests.firstWhere(
+      (r) => r.url.path == '/auth/otp/reset/verify',
+    );
     expect((jsonDecode(verifyRequest.body) as Map)['code'], '654321');
 
     // Step 3: confirm.
     expect(find.textContaining('is verified'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextField, 'New Password'), 'BrandNewPassw0rd!');
-    await tester.enterText(find.widgetWithText(TextField, 'Confirm New Password'), 'BrandNewPassw0rd!');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'New Password'),
+      'BrandNewPassw0rd!',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm New Password'),
+      'BrandNewPassw0rd!',
+    );
     await tester.tap(find.text('Change Password'));
     await tester.pumpAndSettle();
 
-    final confirmRequest = requests.firstWhere((r) => r.url.path == '/auth/otp/reset/confirm');
+    final confirmRequest = requests.firstWhere(
+      (r) => r.url.path == '/auth/otp/reset/confirm',
+    );
     final confirmBody = jsonDecode(confirmRequest.body) as Map;
     expect(confirmBody['identifier'], 'forgetful@test.com');
     expect(confirmBody['code'], '654321');
@@ -129,12 +175,22 @@ void main() {
         return http.Response(jsonEncode({'message': 'sent'}), 200);
       }
       if (request.url.path == '/auth/otp/reset/verify') {
-        return http.Response(jsonEncode({'success': false, 'error': 'Invalid or expired code'}), 400);
+        return http.Response(
+          jsonEncode({'success': false, 'error': 'Invalid or expired code'}),
+          400,
+        );
       }
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ForgotPasswordScreen(),
+      ),
+    );
 
     await tester.enterText(find.byType(TextField).first, 'wrongcode@test.com');
     await tester.tap(find.text('Send reset code'));
@@ -161,7 +217,14 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: ForgotPasswordScreen()));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ForgotPasswordScreen(),
+      ),
+    );
     await tester.enterText(find.byType(TextField).first, 'mismatch@test.com');
     await tester.tap(find.text('Send reset code'));
     await tester.pumpAndSettle();
@@ -169,8 +232,14 @@ void main() {
     await tester.tap(find.text('Verify'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, 'New Password'), 'FirstPassword1!');
-    await tester.enterText(find.widgetWithText(TextField, 'Confirm New Password'), 'SecondPassword1!');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'New Password'),
+      'FirstPassword1!',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm New Password'),
+      'SecondPassword1!',
+    );
     await tester.tap(find.text('Change Password'));
     await tester.pump();
 

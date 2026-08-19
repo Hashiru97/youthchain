@@ -258,6 +258,73 @@ def test_admin_can_suspend_employer_directly_from_a_report(client):
         assert employer.active is False
 
 
+def test_reviewed_report_shows_which_admin_resolved_it(client):
+    """Real gap found reviewing this queue: reviewed_by_admin_id was
+    always captured on resolve, but no template ever rendered it -- there
+    was no way to see, from anywhere in the product, which admin actually
+    took a given action."""
+    import app as app_module
+
+    employer_id, job_id, _app_id, token = _setup_application(client)
+    client.post(
+        "/api/report_employer",
+        json={"employer_id": employer_id, "job_id": job_id, "category": "scam"},
+        headers=auth_headers(token),
+    )
+
+    admin_email, admin_password = _create_admin("reviewer@youthchain.test")
+    _login_admin(client, admin_email, admin_password)
+
+    page = client.get("/admin/reports")
+    with app_module.app.app_context():
+        report_id = app_module.EmployerReport.query.filter_by(employer_id=employer_id).first().id
+
+    dismiss_token = _csrf_token(page.get_data(as_text=True))
+    client.post(
+        f"/admin/reports/{report_id}/resolve",
+        data={"csrf_token": dismiss_token, "decision": "dismiss"},
+    )
+
+    page = client.get("/admin/reports")
+    assert "Ops" in page.get_data(as_text=True)  # _create_admin's fixed admin name
+
+
+def test_admin_reports_open_queue_is_paginated(client):
+    """Real gap found reviewing this queue: the open list rendered every
+    row on one page with no cap at all -- fine at a handful of reports,
+    a real problem at scale."""
+    import app as app_module
+
+    admin_email, admin_password = _create_admin("pageadmin@youthchain.test")
+    _login_admin(client, admin_email, admin_password)
+
+    with app_module.app.app_context():
+        employer = app_module.Employer(name="Bulk Co", email="bulk@test.com", password_hash="x", active=True)
+        app_module.db.session.add(employer)
+        app_module.db.session.commit()
+        reporter = app_module.User(name="Reporter", email="reporter@test.com", phone="000", password_hash="x")
+        app_module.db.session.add(reporter)
+        app_module.db.session.commit()
+        for i in range(30):
+            app_module.db.session.add(app_module.EmployerReport(
+                employer_id=employer.id, reporter_user_id=reporter.id, category="other",
+                status="open", created_at=app_module.datetime.utcnow(),
+            ))
+        app_module.db.session.commit()
+
+    page1 = client.get("/admin/reports")
+    body1 = page1.get_data(as_text=True)
+    assert "Open (30)" in body1
+    assert "Next" in body1
+    assert "Previous" not in body1
+
+    page2 = client.get("/admin/reports?offset=25")
+    body2 = page2.get_data(as_text=True)
+    assert "Open (30)" in body2
+    assert "Previous" in body2
+    assert "Next" not in body2
+
+
 def test_verifier_role_admin_cannot_reach_reports(client):
     verifier_email, verifier_password = _create_admin("verifier@youthchain.test", role="verifier")
     _login_admin(client, verifier_email, verifier_password)

@@ -491,3 +491,103 @@ def test_downloaded_cv_reachable_via_portal_session_not_just_jwt(client):
 
     resp = client.get(f"/application_file/{cv_filename}")
     assert resp.status_code == 200
+
+
+# ----------------- Installable PWA (manifest.json / sw.js) -----------------
+
+def test_manifest_json_has_the_fields_a_browser_needs_to_offer_install(client):
+    resp = client.get("/manifest.json")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["name"] == "YouthChain"
+    # /portal, not / -- the bare root is this backend's JSON API status
+    # message (see home()), not the youth-facing app; installing the
+    # manifest must launch straight into the real app.
+    assert body["start_url"] == "/portal"
+    assert body["display"] == "standalone"
+    sizes = {icon["sizes"] for icon in body["icons"]}
+    assert "192x192" in sizes
+    assert "512x512" in sizes
+    purposes = {icon["purpose"] for icon in body["icons"]}
+    assert "any" in purposes
+    assert "maskable" in purposes
+
+
+def test_every_manifest_icon_path_actually_resolves(client):
+    """A manifest listing icons that 404 would make the browser's own
+    installability check silently fail -- real gap this pins against."""
+    manifest = client.get("/manifest.json").get_json()
+    for icon in manifest["icons"]:
+        resp = client.get(icon["src"])
+        assert resp.status_code == 200, f"{icon['src']} did not resolve"
+
+
+def test_service_worker_is_served_from_the_root_with_the_right_mimetype(client):
+    """Must be served from / (not /static/sw.js) -- a service worker's
+    default scope is everything at or below its own URL, and /portal/*
+    needs to be inside that scope for offline support to cover it."""
+    resp = client.get("/sw.js")
+    assert resp.status_code == 200
+    assert "javascript" in resp.content_type
+    body = resp.get_data(as_text=True)
+    assert "CACHE_NAME" in body
+    # Never intercepts a mutating request -- CSRF tokens are minted per
+    # server render, so a cached POST response would either be stale or
+    # let an offline user believe a real action (apply, rate, revoke a
+    # device) went through when it didn't. Pins that the guard is present
+    # in the shipped file, not just in this feature's own design notes.
+    assert 'request.method !== "GET"' in body
+
+
+def test_portal_pages_link_the_manifest_and_register_the_service_worker(client):
+    html_body = client.get("/portal").get_data(as_text=True)
+    assert '<link rel="manifest" href="/manifest.json" />' in html_body
+    assert 'name="theme-color" content="#0F7A5C"' in html_body
+    assert "portal_pwa.js" in html_body
+
+
+# ----------------- Low-data mode toggle + install prompt -----------------
+# Real gap found reviewing this feature rather than assuming it was done:
+# the service worker already auto-preferred cache when
+# navigator.connection.saveData was on, but that API is unsupported on
+# Firefox/Safari entirely and depends on an OS-level setting elsewhere --
+# there was no user-facing control at all. These pin the fix (a real
+# toggle, an explicit override the worker respects regardless of browser
+# support) and the install-prompt button, both present in the shipped
+# static files/markup, not just described in commit messages.
+
+def test_service_worker_handles_a_manual_low_data_override(client):
+    """manualLowData must exist, be settable via postMessage, and
+    override the automatic saveData signal when set -- pins the actual
+    shipped logic, not just that a SET_LOW_DATA string appears somewhere."""
+    body = client.get("/sw.js").get_data(as_text=True)
+    assert "manualLowData" in body
+    assert '"SET_LOW_DATA"' in body
+    assert "self.addEventListener(\"message\"" in body
+    # The override must win over the automatic signal when explicitly
+    # set (not just consulted alongside it) -- pins the actual precedence
+    # logic, not just that both concepts are mentioned somewhere in the file.
+    assert "manualLowData === null ? self.navigator?.connection?.saveData === true : manualLowData" in body
+
+
+def test_portal_shell_has_a_low_data_toggle_button(client):
+    html_body = client.get("/portal").get_data(as_text=True)
+    assert "data-low-data-toggle" in html_body
+
+
+def test_portal_shell_has_a_hidden_by_default_install_button(client):
+    """Must start hidden -- portal_pwa.js only reveals it on a real
+    beforeinstallprompt event, so its presence is proof of installability,
+    not a button that might silently do nothing when clicked."""
+    html_body = client.get("/portal").get_data(as_text=True)
+    assert 'data-install-app-button hidden' in html_body
+
+
+def test_portal_pwa_js_registers_the_install_prompt_and_low_data_handlers(client):
+    resp = client.get("/static/portal_pwa.js")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "beforeinstallprompt" in body
+    assert "appinstalled" in body
+    assert "data-low-data-toggle" in body
+    assert "data-install-app-button" in body

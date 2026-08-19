@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -115,7 +116,7 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
             onApply: () {
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Open this job from Home to apply.")),
+                SnackBar(content: Text(context.l10n.openJobFromHomeToApply)),
               );
             },
           ),
@@ -132,7 +133,7 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Saved Jobs"),
+        title: Text(context.l10n.savedJobsMenuItem),
         backgroundColor: context.colors.primary,
       ),
       body: Column(
@@ -143,7 +144,7 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
               color: context.colors.warningBg,
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
               child: Text(
-                "Showing previously loaded results — offline or connection issue.",
+                context.l10n.showingCachedResults,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.warning),
               ),
             ),
@@ -159,12 +160,12 @@ class _SavedJobsScreenState extends State<SavedJobsScreen> {
                     onRefresh: _fetchAll,
                     child: jobs.isEmpty
                         ? ListView(
-                            children: const [
-                              SizedBox(height: 120),
+                            children: [
+                              const SizedBox(height: 120),
                               EmptyState(
                                 icon: Icons.bookmark_border_rounded,
-                                title: "No saved jobs yet",
-                                subtitle: "Tap the bookmark icon on any job to save it here.",
+                                title: context.l10n.noSavedJobsYetTitle,
+                                subtitle: context.l10n.noSavedJobsYetSubtitle,
                               ),
                             ],
                           )
@@ -245,7 +246,9 @@ class _SavedJobCard extends StatelessWidget {
                             ],
                           ),
                         StatusBadge(
-                          label: isScraped ? (job["source_name"] as String? ?? "Discover") : "Home",
+                          label: isScraped
+                              ? (job["source_name"] as String? ?? context.l10n.discoverSourceBadge)
+                              : context.l10n.homeSourceBadge,
                           color: context.colors.textMuted,
                           background: context.colors.background,
                           icon: isScraped ? Icons.travel_explore_rounded : Icons.work_outline_rounded,

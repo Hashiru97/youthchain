@@ -259,3 +259,94 @@ def test_match_jobs_fallback_path_includes_job_type_and_category(client):
     jobs = {j["title"]: j for j in resp.get_json()["jobs"]}
     assert jobs["Okada Rider Needed"]["job_type"] == "gig"
     assert jobs["Okada Rider Needed"]["category"] == "Okada / Transport"
+
+
+def test_match_jobs_ranked_path_includes_employer_id(client):
+    """
+    Real gap found via live testing (a real user with a saved profile,
+    not a hypothetical): api_match_jobs's hand-built response dict
+    included the nested "employer" object but dropped the top-level
+    employer_id field entirely. JobDetailScreen gates its "Report this
+    job" button on `job["employer_id"] != null` (see
+    job_detail_screen.dart), so every job opened via this ranked path --
+    the mobile app's DEFAULT feed for anyone with a candidate profile --
+    silently lost its report button, while the exact same job opened via
+    GET /jobs (to_dict()'s own shape) still had one. Now fixed by
+    spreading the full to_dict() instead of a hand-built subset, closing
+    this whole class of "we forgot a field" bug rather than patching
+    employer_id alone.
+    """
+    import app as app_module
+
+    _register_employer(client, email="reportable@test.com", name="ReportableCo")
+    page = client.get("/employer/post")
+    client.post("/employer/post", data={
+        "csrf_token": _csrf_token(page.get_data(as_text=True)),
+        "title": "Cashier Needed", "location": "Freetown", "duration": "3mo",
+    })
+    client.post("/employer/logout", data={"csrf_token": _csrf_token(page.get_data(as_text=True))})
+
+    a = register_user(client, email="reportworker@test.com", phone="224999888")
+    client.post(
+        "/api/candidate", json={"email": "reportworker@test.com"},
+        headers=auth_headers(a["access_token"]),
+    )
+    with app_module.app.app_context():
+        candidate_id = app_module.Candidate.query.filter_by(email="reportworker@test.com").first().id
+        employer_id = app_module.Employer.query.filter_by(email="reportable@test.com").first().id
+
+    resp = client.get(f"/api/match_jobs/{candidate_id}", headers=auth_headers(a["access_token"]))
+    assert resp.status_code == 200
+    jobs = {j["title"]: j for j in resp.get_json()["jobs"]}
+    assert jobs["Cashier Needed"]["employer_id"] == employer_id
+
+
+def test_match_jobs_fallback_path_includes_employer_id(client):
+    """Same gap, same fix, for the no-candidate-yet fallback branch."""
+    import app as app_module
+
+    _register_employer(client, email="reportable2@test.com", name="ReportableCo2")
+    page = client.get("/employer/post")
+    client.post("/employer/post", data={
+        "csrf_token": _csrf_token(page.get_data(as_text=True)),
+        "title": "Guard Needed", "location": "Freetown", "duration": "6mo",
+    })
+    client.post("/employer/logout", data={"csrf_token": _csrf_token(page.get_data(as_text=True))})
+
+    with app_module.app.app_context():
+        employer_id = app_module.Employer.query.filter_by(email="reportable2@test.com").first().id
+
+    a = register_user(client, email="reportworker2@test.com", phone="225999888")
+    resp = client.get("/api/match_jobs/999999", headers=auth_headers(a["access_token"]))
+    assert resp.status_code == 200
+    jobs = {j["title"]: j for j in resp.get_json()["jobs"]}
+    assert jobs["Guard Needed"]["employer_id"] == employer_id
+
+
+def test_match_jobs_ranked_path_required_skills_keeps_original_casing(client):
+    """Quiet inconsistency fixed as a side effect of the same to_dict()
+    spread: the hand-built dict used to lowercase required_skills (it
+    reused the list built for scoring), while every other job-serving
+    endpoint shows the original casing entered by the employer."""
+    import app as app_module
+
+    _register_employer(client, email="casetest@test.com", name="CaseTestCo")
+    page = client.get("/employer/post")
+    client.post("/employer/post", data={
+        "csrf_token": _csrf_token(page.get_data(as_text=True)),
+        "title": "Developer Needed", "location": "Freetown", "duration": "1yr",
+        "required_skills": "Python, Flutter",
+    })
+    client.post("/employer/logout", data={"csrf_token": _csrf_token(page.get_data(as_text=True))})
+
+    a = register_user(client, email="casetestworker@test.com", phone="226999888")
+    client.post(
+        "/api/candidate", json={"email": "casetestworker@test.com", "skills": "python"},
+        headers=auth_headers(a["access_token"]),
+    )
+    with app_module.app.app_context():
+        candidate_id = app_module.Candidate.query.filter_by(email="casetestworker@test.com").first().id
+
+    resp = client.get(f"/api/match_jobs/{candidate_id}", headers=auth_headers(a["access_token"]))
+    jobs = {j["title"]: j for j in resp.get_json()["jobs"]}
+    assert jobs["Developer Needed"]["required_skills"] == "Python, Flutter"

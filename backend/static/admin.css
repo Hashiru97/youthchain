@@ -680,3 +680,14 @@ body.admin-shell-body {
 /* Table search, password-visibility toggle, section dividers, and
    focus-visible rules now live in shell_common.css (shared with the
    employer portal shell) -- see that file. */
+
+/* Pagination controls on the moderation queues (admin_reports.html,
+   admin_listing_reports.html, admin_rating_flags.html) -- same shape as
+   .portal-pagination in portal.css, this console just never needed
+   paginated results before those queues grew unbounded-open-list pages. */
+.admin-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}

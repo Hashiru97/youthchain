@@ -22,13 +22,13 @@ ANTHROPIC_API_VERSION = "2023-06-01"
 CLAUDE_MODEL = "claude-sonnet-5"
 
 REQUIRED_JOB_FIELDS = ("title",)
-JOB_FIELDS = ("title", "company_name", "location", "salary", "description", "apply_url", "external_id", "employment_type", "deadline")
+JOB_FIELDS = ("title", "company_name", "location", "salary", "description", "apply_url", "external_id", "employment_type", "deadline", "required_skills")
 # Fields extract_job_detail backfills from a job's own page — deliberately
 # a subset of JOB_FIELDS (no title/company_name/apply_url/external_id:
 # those are already trustworthy from the listing-page pass and re-scraping
 # a detail page isn't a more reliable source for identity fields, only for
 # the body text a listing index never carries).
-DETAIL_FIELDS = ("description", "salary", "employment_type", "location", "deadline")
+DETAIL_FIELDS = ("description", "salary", "employment_type", "location", "deadline", "required_skills")
 
 EXTRACTION_PROMPT = """You are extracting job listings from a scraped job-board web page. \
 Below is the page's content in markdown. Find every distinct job listing on the page and \
@@ -44,6 +44,7 @@ Each element must be an object with exactly these fields:
 - "external_id": a stable identifier for this specific listing — prefer its own detail-page URL if the content contains one, otherwise null
 - "employment_type": the employment type/work arrangement as stated on the page (e.g. "Full-time", "Part-time", "Contract", "Internship", "Temporary" — use the source's own wording, do not invent or infer one it doesn't state), or null if not stated
 - "deadline": the application deadline / closing date as stated on the page, formatted as "YYYY-MM-DD" (convert whatever format the page uses into this one — e.g. "23 August 2026" becomes "2026-08-23"), or null if no deadline is stated or you are not confident of the exact date. Never guess a year or day that isn't actually stated on the page.
+- "required_skills": a comma-separated list of specific skills, tools, qualifications, or experience explicitly stated as required or desired for this role (e.g. "Microsoft Excel, customer service, valid driver's license"), or null if the page states no such specifics. Only include what the page itself actually says — never infer or invent a skill just because it seems typical for this kind of role.
 
 If the page contains no real job listings at all, return an empty array: []
 
@@ -70,6 +71,7 @@ The object must have exactly these fields:
 - "employment_type": the employment type/work arrangement as stated on the page (e.g. "Full-time", "Part-time", "Contract", "Internship", "Temporary" — use the source's own wording, do not invent or infer one it doesn't state), or null if not stated
 - "location": the job's location (city/region) as stated on the page, or null if not stated
 - "deadline": the application deadline / closing date as stated on the page, formatted as "YYYY-MM-DD" (convert whatever format the page uses into this one), or null if no deadline is stated or you are not confident of the exact date. Never guess a year or day that isn't actually stated on the page.
+- "required_skills": a comma-separated list of specific skills, tools, qualifications, or experience explicitly stated as required or desired for this role (e.g. "Microsoft Excel, customer service, valid driver's license"), or null if the page states no such specifics. Only include what the page itself actually says — never infer or invent a skill just because it seems typical for this kind of role.
 
 If the page doesn't look like a job posting at all (e.g. it 404'd, redirected to an unrelated page), return every field as null.
 

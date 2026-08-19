@@ -70,18 +70,26 @@ def test_unrelated_accounts_do_not_create_a_flag(client):
         assert app_module.DuplicateFlag.query.count() == 0
 
 
-def test_phone_suffix_collision_across_country_code_formatting_creates_a_flag(client):
+def test_phone_suffix_collision_across_country_code_formatting_is_rejected_at_registration(client):
     """076123456 (local format: leading 0 + 8-digit subscriber number) and
     +23276123456 (international format: 232 + the same 8-digit subscriber
-    number) are the same real phone number written two ways."""
+    number) are the same real phone number written two ways -- previously
+    this only got caught by _check_duplicate_signals' softer, flag-for-
+    admin-review path, since the registration pre-check itself did an
+    exact `User.phone == phone` match and never recognized the two
+    strings as the same number. _phone_lookup_candidates (see its own
+    docstring) closes that gap at the pre-check itself, which is strictly
+    better: the second registration is rejected outright instead of
+    being allowed to create a second real account for a number someone
+    already has one for."""
     import app as app_module
 
     register_user(client, name="Fatmata Sesay", email="c@test.com", phone="076123456")
-    register_user(client, name="Someone Else", email="d@test.com", phone="+23276123456")
+    resp = register_user(client, name="Someone Else", email="d@test.com", phone="+23276123456")
 
+    assert resp.get("success") is False
     with app_module.app.app_context():
-        flags = app_module.DuplicateFlag.query.all()
-        assert any("phone" in f.reason for f in flags)
+        assert app_module.User.query.filter_by(email="d@test.com").first() is None
 
 
 def test_admin_can_view_and_dismiss_a_flag(client):

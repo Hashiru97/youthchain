@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -76,13 +77,13 @@ class PassportScreenState extends State<PassportScreen> {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Could not open verification page for $title")),
+          SnackBar(content: Text(context.l10n.couldNotOpenVerificationPage(title))),
         );
       }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Could not open verification page for $title")),
+        SnackBar(content: Text(context.l10n.couldNotOpenVerificationPage(title))),
       );
     }
   }
@@ -116,15 +117,15 @@ class PassportScreenState extends State<PassportScreen> {
               if (titleCtrl.text.trim().isEmpty ||
                   issuerCtrl.text.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Title and issuer are required."),
+                  SnackBar(
+                    content: Text(context.l10n.titleAndIssuerRequired),
                   ),
                 );
                 return;
               }
               if (file == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Select the certificate file.")),
+                  SnackBar(content: Text(context.l10n.selectCertificateFile)),
                 );
                 return;
               }
@@ -132,9 +133,9 @@ class PassportScreenState extends State<PassportScreen> {
               Navigator.of(ctx).pop();
               setState(() => _submitting = true);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Uploading certificate..."),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.uploadingCertificateSnackbar),
+                  duration: const Duration(seconds: 5),
                 ),
               );
 
@@ -182,22 +183,21 @@ class PassportScreenState extends State<PassportScreen> {
                     SnackBar(
                       content: Text(
                         onChainStatus == "confirmed"
-                            ? "Credential issued and verified on-chain"
-                            : "Credential issued — verifying on-chain in the background, "
-                                  "we'll notify you when it's confirmed",
+                            ? context.l10n.credentialIssuedVerified
+                            : context.l10n.credentialIssuedPendingVerification,
                       ),
                     ),
                   );
                   await fetchCredentials();
                 } else if (resp.statusCode == 413) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("File too large (max 16 MB)")),
+                    SnackBar(content: Text(context.l10n.fileTooLarge)),
                   );
                 } else {
                   final data = jsonDecodeSafe(body);
                   final msg =
                       (data?["error"] as String?) ??
-                      "Failed to issue credential";
+                      context.l10n.failedToIssueCredential;
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text(msg)));
@@ -205,8 +205,8 @@ class PassportScreenState extends State<PassportScreen> {
               } catch (_) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Network error issuing credential"),
+                  SnackBar(
+                    content: Text(context.l10n.networkErrorIssuingCredential),
                   ),
                 );
               } finally {
@@ -253,28 +253,27 @@ class PassportScreenState extends State<PassportScreen> {
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       Text(
-                        "Add a credential",
+                        context.l10n.addACredentialHeading,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    "Upload a certificate you already earned. YouthChain hashes it and "
-                    "registers the hash on-chain so employers can verify it hasn't been altered.",
+                    context.l10n.addCredentialExplainer,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: titleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Certificate title",
+                    decoration: InputDecoration(
+                      labelText: context.l10n.certificateTitleLabel,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   TextField(
                     controller: issuerCtrl,
-                    decoration: const InputDecoration(labelText: "Issued by"),
+                    decoration: InputDecoration(labelText: context.l10n.issuedByLabel),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Container(
@@ -294,14 +293,14 @@ class PassportScreenState extends State<PassportScreen> {
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
-                            file?.name ?? "No file selected",
+                            file?.name ?? context.l10n.noFileSelected,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
                         OutlinedButton(
                           onPressed: pickFile,
-                          child: const Text("Pick file"),
+                          child: Text(context.l10n.pickFileButton),
                         ),
                       ],
                     ),
@@ -312,7 +311,7 @@ class PassportScreenState extends State<PassportScreen> {
                     height: 50,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.upload_rounded, size: 18),
-                      label: const Text("Submit"),
+                      label: Text(context.l10n.submitButton),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: context.colors.passport,
                       ),
@@ -333,11 +332,11 @@ class PassportScreenState extends State<PassportScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Employment Passport"),
+        title: Text(context.l10n.employmentPassportTitle),
         backgroundColor: context.colors.passport,
         actions: [
           IconButton(
-            tooltip: "Refresh",
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: fetchCredentials,
           ),
@@ -355,7 +354,7 @@ class PassportScreenState extends State<PassportScreen> {
                 ),
               )
             : const Icon(Icons.add_rounded),
-        label: Text(_submitting ? "Uploading..." : "Add Credential"),
+        label: Text(_submitting ? context.l10n.uploadingButtonLabel : context.l10n.addCredentialFab),
         onPressed: _submitting ? null : _showAddCredentialSheet,
       ),
       body: Column(
@@ -370,7 +369,7 @@ class PassportScreenState extends State<PassportScreen> {
               ),
               child: Semantics(
                 liveRegion: true,
-                label: "You're offline. Showing previously loaded credentials.",
+                label: context.l10n.offlineShowingCredentials,
                 child: Row(
                   children: [
                     Icon(
@@ -381,7 +380,7 @@ class PassportScreenState extends State<PassportScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "You're offline. Showing previously loaded credentials.",
+                        context.l10n.offlineShowingCredentials,
                         style: TextStyle(
                           fontSize: 12,
                           color: context.colors.warning,
@@ -410,9 +409,8 @@ class PassportScreenState extends State<PassportScreen> {
                 const SizedBox(height: 120),
                 EmptyState(
                   icon: Icons.workspace_premium_outlined,
-                  title: "No credentials yet",
-                  subtitle:
-                      "Complete internships or training to earn verifiable certificates.",
+                  title: context.l10n.noCredentialsYetTitle,
+                  subtitle: context.l10n.noCredentialsYetSubtitle,
                 ),
               ],
             )
@@ -484,10 +482,10 @@ class PassportScreenState extends State<PassportScreen> {
                           child: Semantics(
                             button: true,
                             label: revoked
-                                ? "$title, revoked by a YouthChain administrator. Double tap to view verification details."
+                                ? context.l10n.credentialRevokedSemantics(title)
                                 : (onChain
-                                      ? "$title, verified on-chain. Double tap to view verification details."
-                                      : "$title, not yet confirmed on-chain. Double tap to view verification details."),
+                                      ? context.l10n.credentialVerifiedSemantics(title)
+                                      : context.l10n.credentialPendingSemantics(title)),
                             child: InkWell(
                               onTap: () => _openVerifyPage(credId, title),
                               child: Padding(

@@ -21,6 +21,7 @@ import base64
 import io
 import pyotp
 import qrcode
+from PIL import Image
 import eventlet
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
@@ -39,6 +40,7 @@ from flask_jwt_extended import (
 from dotenv import load_dotenv
 import scanner.pipeline as scanner_pipeline
 import scanner.poller as scanner_poller
+import cv_generator
 
 load_dotenv()
 
@@ -195,6 +197,19 @@ if _TWILIO_ACCOUNT_SID and _TWILIO_AUTH_TOKEN and _TWILIO_FROM_NUMBER:
             "TWILIO_* env vars were set but the Twilio client could not be "
             "initialized (%s) — SMS notifications will log-only.", e,
         )
+
+# WhatsApp reuses _twilio_client above (same Account SID/Auth Token — one
+# Twilio account, multiple channels) but needs two more pieces before
+# send_whatsapp() below will actually send anything: a WhatsApp-enabled
+# Twilio sender number, and an approved Content Template SID. Unlike SMS,
+# WhatsApp's Business API rejects any business-initiated freeform message
+# outside a 24h customer-service window — every message send_whatsapp()
+# makes has to reference a template Meta has already reviewed and
+# approved through Twilio's Content Template Builder (real, external
+# turnaround time, not a config flag). See .env.example for where to get
+# both. Neither is required for SMS or push to work.
+_TWILIO_WHATSAPP_FROM_NUMBER = _get_secret("TWILIO_WHATSAPP_FROM_NUMBER")
+_TWILIO_WHATSAPP_TEMPLATE_SID = _get_secret("TWILIO_WHATSAPP_TEMPLATE_SID")
 
 
 # ----------------- Secrets (SECRET_KEY / JWT_SECRET_KEY) -----------------
@@ -576,11 +591,34 @@ class User(db.Model):
     # public API exists to check one against, same reasoning as
     # Employer.verification_status and DuplicateFlag).
     ncra_id = db.Column(db.String(50), nullable=True)
+    # Opt-in: when true, a Saved Search or profile-skill job alert (see
+    # _dispatch_job_alerts_for_scan) also sends a real SMS via Twilio, not
+    # just an in-app/push notification. Explicit opt-in rather than
+    # inferred from having a phone number (every User already has one,
+    # required at registration — that's not a signal of consent) because,
+    # unlike push, each SMS is a real per-message Twilio cost. Default
+    # False, same "no existing account starts silently opted in" reasoning
+    # as Candidate.job_alerts_enabled.
+    sms_alerts_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    # Same opt-in shape and reasoning as sms_alerts_enabled directly above --
+    # a Saved Search / profile-skill job alert also sends a real WhatsApp
+    # message via Twilio (see send_whatsapp) when true. Kept as its own
+    # separate flag rather than reusing sms_alerts_enabled because they're
+    # genuinely different costs/channels a user might want independently
+    # (e.g. WhatsApp is free for the sender in many countries once a
+    # session is open, SMS never is; a user might have WhatsApp but not
+    # want SMS, or vice versa) -- same one-flag-per-real-choice principle
+    # as keeping this distinct from Candidate.job_alerts_enabled itself.
+    whatsapp_alerts_enabled = db.Column(db.Boolean, nullable=False, default=False)
 
     credentials = db.relationship("Credential", backref="user", lazy=True)
 
     def to_dict(self):
-        return {"id": self.id, "name": self.name, "email": self.email, "phone": self.phone, "ncra_id": self.ncra_id}
+        return {
+            "id": self.id, "name": self.name, "email": self.email, "phone": self.phone,
+            "ncra_id": self.ncra_id, "sms_alerts_enabled": self.sms_alerts_enabled,
+            "whatsapp_alerts_enabled": self.whatsapp_alerts_enabled,
+        }
 
 
 class UserSession(db.Model):
@@ -824,26 +862,139 @@ class Employer(db.Model):
         }
 
 
+# ----------------- Employer reputation score -----------------
+# Composite, transparent 0-100 score blending every real trust signal
+# this platform actually has for an employer: earned ratings,
+# document/ID verification, open trust-&-safety reports against them, and
+# whether they actually respond to applicants at all. Real gap found
+# reviewing the previous ratings-only version (still returned below as
+# avg_rating/rating_count, unchanged, for backward compatibility with
+# every existing caller): verification_status and EmployerReport were
+# already shown as separate, unconnected badges/admin-only data, and
+# outcome data wasn't tracked at all for employers despite
+# _worker_trust_summary() already doing exactly that (completed_gigs) for
+# the other side of the same transaction. Deliberately NOT a black-box/ML
+# score -- every component below is a plain, explainable rule anyone
+# could recompute by hand, same "no AI/ML matching this app doesn't
+# actually have" honesty already established for job matching (see
+# api_match_jobs' own docstring).
+
+# Ratings component (0-40 points): recency-weighted (a rating's influence
+# halves every ~6 months, so a 2-year-old rating doesn't count the same
+# as one from last week) and shrunk toward a neutral 3/5 prior, worth
+# _RATING_SHRINKAGE_WEIGHT "phantom" neutral ratings -- both close real
+# gaps in the plain-average version: a brand-new employer's very first
+# rating, good OR bad, no longer swings the score to the extremes the way
+# a raw average of one data point would.
+_RATING_HALF_LIFE_DAYS = 180
+_RATING_SHRINKAGE_PRIOR = 3.0
+_RATING_SHRINKAGE_WEIGHT = 3
+
+# Reports component (0-20 points, starts full and is docked): only OPEN
+# EmployerReport rows count against an employer -- a dismissed report (an
+# admin already determined was unfounded) costs nothing, and an
+# "actioned" one means the employer was already suspended via that same
+# report (see admin_resolve_report), which takes them out of the
+# active-employer pool this function is ever meaningfully called for.
+_REPORT_PENALTY_PER_OPEN = 4
+_REPORT_MAX_PENALTY = 20
+
+# Application-outcomes component (0-20 points): rewards actually
+# responding to applicants (moving an Application off "Pending") over any
+# particular hire/reject ratio -- a real employer rejecting 90% of
+# applicants for one role is normal hiring, not a trust problem; one who
+# lets every application sit unanswered forever is the actual "ghosting"
+# pattern this exists to catch. Needs a real sample before it means
+# anything, same reasoning the rating shrinkage above already applies --
+# an employer with one or two applications total gets the neutral default
+# instead of being punished by a tiny, noisy ratio.
+_MIN_APPLICATIONS_FOR_RESPONSE_RATE = 3
+
+_TRUST_SCORE_MAX = 40 + 20 + 20 + 20  # ratings + verification + reports + outcomes
+
+
 def _employer_trust_summary(employer_id: int) -> dict:
     """
     The employer-side mirror of _worker_trust_summary(): what a youth sees
-    about an employer built from *earned* history (past workers' ratings)
-    rather than a one-time document check. This is what actually lets an
-    informal individual employer (see Employer.verification_type) build
-    real, visible trust with zero paperwork -- the same trust philosophy
+    about an employer built from *earned* history rather than a one-time
+    document check alone. This is what actually lets an informal
+    individual employer (see Employer.verification_type) build real,
+    visible trust with zero paperwork -- the same trust philosophy
     already built for CV-less workers, just never extended to the other
-    side of the same transaction until now. The underlying Rating rows
-    were already being written on every worker_to_employer rating; this is
-    the first place that data is ever aggregated or shown to anyone.
+    side of the same transaction until now.
+
+    Returns avg_rating/rating_count unchanged (existing callers/UI keep
+    working exactly as before) plus two new fields: trust_score (0-100)
+    and trust_tier ("good" >= 70, "fair" >= 40, else "caution") -- see
+    the module-level comment just above for what each component means
+    and why the weights are what they are.
     """
-    avg_score, rating_count = (
-        db.session.query(func.avg(Rating.score), func.count(Rating.id))
-        .filter(Rating.employer_id == employer_id, Rating.direction == "worker_to_employer", Rating.hidden.is_(False))
-        .first()
-    )
+    employer = Employer.query.get(employer_id)
+
+    ratings = Rating.query.filter(
+        Rating.employer_id == employer_id, Rating.direction == "worker_to_employer", Rating.hidden.is_(False),
+    ).all()
+    rating_count = len(ratings)
+    avg_score = (sum(r.score for r in ratings) / rating_count) if rating_count else None
+
+    if ratings:
+        now = datetime.utcnow()
+        weighted_sum = 0.0
+        weight_total = 0.0
+        for r in ratings:
+            age_days = max((now - r.created_at).days, 0) if r.created_at else 0
+            weight = 0.5 ** (age_days / _RATING_HALF_LIFE_DAYS)
+            weighted_sum += r.score * weight
+            weight_total += weight
+        shrunk_rating = (
+            (weighted_sum + _RATING_SHRINKAGE_PRIOR * _RATING_SHRINKAGE_WEIGHT)
+            / (weight_total + _RATING_SHRINKAGE_WEIGHT)
+        )
+    else:
+        shrunk_rating = _RATING_SHRINKAGE_PRIOR
+    ratings_component = (shrunk_rating / 5.0) * 40
+
+    if employer and employer.verification_status == "verified":
+        verification_component = 20
+    elif employer and employer.verification_status == "rejected":
+        verification_component = 0
+    else:
+        verification_component = 10  # unverified/pending -- neutral, not punitive
+
+    open_report_count = EmployerReport.query.filter_by(employer_id=employer_id, status="open").count()
+    reports_component = max(0, _REPORT_MAX_PENALTY - open_report_count * _REPORT_PENALTY_PER_OPEN)
+
+    total_applications = (
+        db.session.query(func.count(Application.id))
+        .join(Job, Application.job_id == Job.id)
+        .filter(Job.employer_id == employer_id)
+        .scalar()
+    ) or 0
+    if total_applications >= _MIN_APPLICATIONS_FOR_RESPONSE_RATE:
+        responded = (
+            db.session.query(func.count(Application.id))
+            .join(Job, Application.job_id == Job.id)
+            .filter(Job.employer_id == employer_id, Application.status != "Pending")
+            .scalar()
+        ) or 0
+        outcomes_component = (responded / total_applications) * 20
+    else:
+        outcomes_component = 10  # not enough data yet -- neutral, not punitive
+
+    trust_score = round(ratings_component + verification_component + reports_component + outcomes_component)
+    trust_score = max(0, min(_TRUST_SCORE_MAX, trust_score))
+    if trust_score >= 70:
+        trust_tier = "good"
+    elif trust_score >= 40:
+        trust_tier = "fair"
+    else:
+        trust_tier = "caution"
+
     return {
         "avg_rating": round(avg_score, 1) if avg_score is not None else None,
-        "rating_count": rating_count or 0,
+        "rating_count": rating_count,
+        "trust_score": trust_score,
+        "trust_tier": trust_tier,
     }
 
 
@@ -1011,6 +1162,16 @@ class Job(db.Model):
     # treats as "never expires", so this column is a pure no-op for the
     # Home feed.
     application_deadline = db.Column(db.Date, nullable=True)
+    # Comma-separated scam-signal names from scanner.scam_signals'
+    # detect_scam_signals() -- any of "fee_request", "personal_email",
+    # "vague_pay" -- or null/empty when none fired. Scraped-job-only,
+    # same as description/salary/apply_url above; recomputed by
+    # scanner.pipeline every scan (listing pass and, if it ran, again
+    # after the detail backfill pass, since that can change the very
+    # fields this reads), not just once at creation, so a listing that's
+    # edited at the source to add/remove a red flag stays current rather
+    # than freezing whatever the first scan happened to see.
+    scam_signals = db.Column(db.String(200), nullable=True)
 
     def to_dict(self):
         employer_info = None
@@ -1065,6 +1226,7 @@ class Job(db.Model):
             "employment_type": self.employment_type,
             "application_deadline": self.application_deadline.isoformat() if self.application_deadline else None,
             "is_expired": bool(self.application_deadline and self.application_deadline < date.today()),
+            "scam_signals": self.scam_signals.split(",") if self.scam_signals else [],
         }
 
 
@@ -1351,6 +1513,36 @@ class SavedJob(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class SavedSearch(db.Model):
+    """
+    An explicit "alert me" filter over Discover (GET /api/discover_jobs's
+    q/location/skill params, same meaning here) — distinct from
+    Candidate.job_alerts_enabled below, which is an implicit alert driven
+    by the candidate's own profile skills rather than a one-off search.
+    Matched against a newly scraped Job exactly once, at scan time (see
+    _dispatch_job_alerts_for_scan) — a Job's external_id already makes
+    scanner.pipeline's upsert create each real listing only once, so
+    firing alerts only for scanner.pipeline.ScanOutcome.created_job_ids
+    is what keeps this naturally idempotent across rescans without a
+    separate seen/notified tracking table.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    q = db.Column(db.String(200), nullable=True)
+    location = db.Column(db.String(120), nullable=True)
+    skill = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "q": self.q,
+            "location": self.location,
+            "skill": self.skill,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Rating(db.Model):
     """
     The trust mechanism for the gig/informal-work lifecycle (see
@@ -1447,6 +1639,14 @@ class Candidate(db.Model):
     # exactly that, where inference would risk this codebase's existing
     # "no fake AI/smart-matching claims" discipline (BL-45).
     preferred_industries = db.Column(db.Text)
+
+    # Opt-in: when true, a newly scraped Discover job whose required_skills
+    # overlaps this candidate's own skills fires a notify_user() job alert
+    # (see _dispatch_job_alerts_for_scan). Default False so no existing
+    # profile starts silently getting notified the moment this column
+    # ships — same "opt-in, not retroactively on" reasoning as
+    # Candidate.preferred_industries starting empty rather than guessed.
+    job_alerts_enabled = db.Column(db.Boolean, nullable=False, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -2381,6 +2581,50 @@ def send_push_notification(user_id: int, title: str, body: str) -> bool:
         return False
 
 
+def _to_e164_sierra_leone(phone: str) -> str:
+    """
+    Normalizes a Sierra Leone phone number to E.164 (+232XXXXXXXX) before
+    it's handed to Twilio — required for both send_sms() and
+    send_whatsapp() below, since Twilio's API rejects any `to` number that
+    isn't E.164. Registration/profile screens never asked a user to type
+    a country code (a Sierra Leone youth doesn't say "+232" when giving
+    out their own number — see registration_screen.dart/
+    profile_cv_screen.dart, neither of which formats or validates beyond
+    "non-empty"), so User.phone in the database is a real mix of local
+    ("076123456" or "76123456") and already-international
+    ("+23276123456") formats. Same 8-digit-subscriber-number assumption
+    _normalize_phone_suffix above already documents for duplicate-account
+    detection — this is that same real-world shape, applied at the point
+    a number actually needs to be dialable rather than merely compared.
+
+    Confirmed gap, not a hypothetical: before this, send_sms()/
+    send_whatsapp() passed whatever format was on file straight through
+    to Twilio's `to=` — for any user who registered typing the natural
+    local format (the overwhelming majority, this being a Sierra
+    Leone-first platform), Twilio would reject the call outright, and
+    that failure was swallowed by send_sms/send_whatsapp's own
+    try/except, meaning notify_user() would report success upstream (the
+    in-app Notification row is created either way) while the SMS/WhatsApp
+    silently never sent.
+
+    Returns the input unchanged (never raises) if it doesn't match a
+    recognized Sierra Leone shape — e.g. a already-foreign number entered
+    with its own country code. Twilio's API remains the final validator;
+    this only fixes the specific, common, locally-typed-number case.
+    """
+    stripped = (phone or "").strip()
+    if stripped.startswith("+"):
+        return stripped
+    digits = re.sub(r"\D", "", stripped)
+    if digits.startswith("232") and len(digits) == 11:
+        return f"+{digits}"
+    if digits.startswith("0") and len(digits) == 9:
+        return f"+232{digits[1:]}"
+    if len(digits) == _PHONE_SUFFIX_LENGTH:
+        return f"+232{digits}"
+    return phone
+
+
 def send_sms(phone: str, body: str) -> bool:
     """
     Sends a real SMS via Twilio when TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/
@@ -2393,14 +2637,48 @@ def send_sms(phone: str, body: str) -> bool:
         return False
 
     try:
-        _twilio_client.messages.create(to=phone, from_=_TWILIO_FROM_NUMBER, body=body)
+        _twilio_client.messages.create(to=_to_e164_sierra_leone(phone), from_=_TWILIO_FROM_NUMBER, body=body)
         return True
     except Exception:
         logger.exception("Twilio SMS to %s failed", phone)
         return False
 
 
-def notify_user(user_id, ntype, title, body=None, push=True, **meta):
+def send_whatsapp(phone: str, job_title: str) -> bool:
+    """
+    Sends a real WhatsApp message via Twilio's WhatsApp Business API when
+    the Twilio client AND both TWILIO_WHATSAPP_FROM_NUMBER and
+    TWILIO_WHATSAPP_TEMPLATE_SID are configured (see the startup block
+    above). Degrades to the same log-and-return-False stub behavior as
+    send_sms() when any of the three isn't set yet.
+
+    Deliberately takes job_title, not an arbitrary body string like
+    send_sms() -- WhatsApp Business messaging requires a pre-approved
+    Content Template for any business-initiated message (see
+    TWILIO_WHATSAPP_TEMPLATE_SID's own comment), so the only thing this
+    function can actually vary per-send is that template's declared
+    variables, not freeform text. The template this was built against
+    has exactly one variable ("{{1}}" = the matching job's title) --
+    see .env.example for the exact template text to submit for approval.
+    """
+    if _twilio_client is None or not _TWILIO_WHATSAPP_FROM_NUMBER or not _TWILIO_WHATSAPP_TEMPLATE_SID:
+        logger.info("[WHATSAPP STUB] Would WhatsApp %s about: %s", phone, job_title)
+        return False
+
+    try:
+        _twilio_client.messages.create(
+            to=f"whatsapp:{_to_e164_sierra_leone(phone)}",
+            from_=f"whatsapp:{_TWILIO_WHATSAPP_FROM_NUMBER}",
+            content_sid=_TWILIO_WHATSAPP_TEMPLATE_SID,
+            content_variables=json.dumps({"1": job_title}),
+        )
+        return True
+    except Exception:
+        logger.exception("Twilio WhatsApp to %s failed", phone)
+        return False
+
+
+def notify_user(user_id, ntype, title, body=None, push=True, sms=False, whatsapp=False, **meta):
     """
     Creates an in-app Notification row, emits it over the existing
     Socket.IO connection for near-real-time delivery while the app is
@@ -2408,6 +2686,20 @@ def notify_user(user_id, ntype, title, body=None, push=True, **meta):
     send_push_notification() above (a real Firebase push when configured
     and the user has a registered token, otherwise a harmless log-only
     no-op — see that function).
+
+    sms=True / whatsapp=True mark this notification as *eligible* for that
+    channel — neither by itself means the message goes out. The actual
+    per-user opt-in checks (User.sms_alerts_enabled /
+    User.whatsapp_alerts_enabled) live inside this function, not at each
+    call site, for the same reason send_push_notification's own token
+    check lives inside it rather than in every caller: one place to get
+    the "did this user actually agree to this" decision right. Every
+    existing call site defaults to both False and is unaffected; only
+    _dispatch_job_alerts_for_scan's Saved Search / job-alert matches pass
+    sms=True, whatsapp=True today — this is deliberately not wired to
+    every notification type the way push is, since each SMS/WhatsApp send
+    is a real Twilio cost and most of the other 8 notification types
+    (logins, credentials, messages, ratings) don't warrant it.
     """
     try:
         row = Notification(
@@ -2432,6 +2724,13 @@ def notify_user(user_id, ntype, title, body=None, push=True, **meta):
     if push:
         send_push_notification(user_id, title, body or "")
 
+    if sms or whatsapp:
+        user = User.query.get(user_id)
+        if sms and user and user.sms_alerts_enabled:
+            send_sms(user.phone, f"{title} — {body}" if body else title)
+        if whatsapp and user and user.whatsapp_alerts_enabled:
+            send_whatsapp(user.phone, body or title)
+
 
 # Fuzzy duplicate-account detection thresholds. Both deliberately loose —
 # false positives just mean an admin dismisses a flag that turns out to be
@@ -2455,6 +2754,35 @@ _PHONE_SUFFIX_LENGTH = 8
 def _normalize_phone_suffix(phone: str) -> str:
     digits = re.sub(r"\D", "", phone or "")
     return digits[-_PHONE_SUFFIX_LENGTH:] if len(digits) >= _PHONE_SUFFIX_LENGTH else digits
+
+
+def _phone_lookup_candidates(identifier: str) -> set:
+    """
+    Real gap found alongside _to_e164_sierra_leone's own (see that
+    function's docstring): since User.phone has never been normalized at
+    write time, every phone-based account lookup in this file — login,
+    OTP request/verify, forgot-password, registration's duplicate
+    pre-check — was doing a plain `==` against whatever string is on
+    file. A user who registered typing "076123456" and later types
+    "76123456" or "+23276123456" at login couldn't be found at all, not
+    a delivery problem like the Twilio one, a "can't log in" problem.
+
+    Returns every Sierra Leone format the identifier as typed could
+    plausibly match against, always INCLUDING the identifier exactly as
+    given — so `User.phone.in_(_phone_lookup_candidates(x))` is always at
+    least as permissive as the `User.phone == x` it replaces, never less,
+    and safe to call with a non-phone-shaped identifier (an email — see
+    every combined email-or-phone call site) since a string with no
+    recognizable 8-digit Sierra Leone subscriber number inside it just
+    yields itself as the only candidate, identical to the old exact-match
+    behavior. No data migration needed: this fixes lookups against
+    already-stored numbers in ANY format without changing what's stored.
+    """
+    candidates = {identifier}
+    suffix = _normalize_phone_suffix(identifier)
+    if len(suffix) == _PHONE_SUFFIX_LENGTH:
+        candidates.update({suffix, f"0{suffix}", f"232{suffix}", f"+232{suffix}"})
+    return candidates
 
 
 def _check_duplicate_signals(new_user: "User") -> None:
@@ -2994,6 +3322,62 @@ def file_is_malware_free(file_storage) -> bool:
         return False
 
 
+# Real, if minor, gap found reviewing "lightweight image usage" against
+# every upload path sharing ALLOWED_EXTENSIONS (certificates, CV/
+# supporting documents, employer verification documents, message
+# attachments): a phone-camera photo of a paper certificate easily
+# arrives at 3-8MB, and nothing downscaled or recompressed it before
+# storage. Not high-impact (these are reviewed as forced downloads, not
+# rendered inline or re-fetched on every scroll — see download_certificate
+# below), but a real, free-to-fix gap once noticed. 2000px on the longest
+# side is comfortably more than needed to keep a scanned/photographed
+# document fully legible on any real review screen.
+_MAX_IMAGE_UPLOAD_DIMENSION = 2000
+
+
+def _compress_uploaded_image_if_needed(file_path: str) -> None:
+    """
+    Best-effort downscale + recompress, in place, for an already-saved
+    upload that turns out to be an oversized png/jpg/jpeg. PDFs/DOCs
+    (also allowed by ALLOWED_EXTENSIONS) are left completely untouched —
+    this only ever opens files with an image extension.
+
+    Deliberately fail-open, unlike file_is_malware_free()'s fail-closed
+    security gate above: if Pillow can't open or re-save a file for any
+    reason (corrupt-but-still-passed-content-sniffing image, an exotic
+    color mode, etc.), the original upload is left exactly as it was
+    rather than risking a real user's document over an optimization that
+    was never a correctness requirement.
+
+    Callers MUST call this before generate_file_hash() wherever the
+    result is hashed (today, only the credential-upload path does) — the
+    hash has to reflect the bytes actually stored/served afterward, or a
+    verifier re-hashing the downloaded file later would get a mismatch
+    against whatever was recorded (e.g. written on-chain).
+    """
+    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+    if ext not in ("png", "jpg", "jpeg"):
+        return
+
+    try:
+        with Image.open(file_path) as img:
+            if max(img.size) <= _MAX_IMAGE_UPLOAD_DIMENSION:
+                return
+            img.thumbnail((_MAX_IMAGE_UPLOAD_DIMENSION, _MAX_IMAGE_UPLOAD_DIMENSION), Image.LANCZOS)
+            if ext == "png":
+                img.save(file_path, format="PNG", optimize=True)
+            else:
+                # A JPEG can't carry an alpha channel -- converting to RGB
+                # only actually changes anything for the rare upload that
+                # has a .jpg/.jpeg extension but decodes to RGBA/P (a
+                # mislabeled PNG-as-JPEG would already have been rejected
+                # by content_matches_extension() above, so this is purely
+                # a defensive save-time safeguard, not the primary guard).
+                img.convert("RGB").save(file_path, format="JPEG", quality=85, optimize=True)
+    except Exception:
+        logger.exception("Best-effort image compression failed for %s — keeping the original upload as-is", file_path)
+
+
 def _rate_limited(key: str, max_attempts: int, window: timedelta) -> bool:
     """
     Generic sliding-window rate limiter — the same Redis-sorted-set-with-
@@ -3106,6 +3490,25 @@ def _record_report_attempt(identity: str) -> None:
     _record_attempt(f"report:{identity}", _REPORT_WINDOW)
 
 
+# AI-assisted CV generation (see cv_generator.polish_cv_content) spends a
+# real Anthropic API call — real per-call cost — every time it runs,
+# unlike everything else this endpoint does. No endpoint that spends real
+# money per call had any throttle before this; same generic
+# _rate_limited() mechanism as uploads/reports, keyed per-user. Loose
+# enough for genuine iterative use (edit the profile, regenerate, tweak,
+# regenerate again) but bounded against a client hammering the endpoint.
+_CV_GENERATION_MAX_ATTEMPTS = 10
+_CV_GENERATION_WINDOW = timedelta(hours=1)
+
+
+def _cv_generation_rate_limited(identity: str) -> bool:
+    return _rate_limited(f"cvgen:{identity}", _CV_GENERATION_MAX_ATTEMPTS, _CV_GENERATION_WINDOW)
+
+
+def _record_cv_generation_attempt(identity: str) -> None:
+    _record_attempt(f"cvgen:{identity}", _CV_GENERATION_WINDOW)
+
+
 # A suspended employer only needs to file one appeal to be reviewed — this
 # budget exists purely to stop the public, unauthenticated-by-session
 # /employer/appeal endpoint being hammered, not to legitimately allow
@@ -3165,6 +3568,9 @@ def _issue_credential_internal(user_id, title, issuer, file):
     filename = f"{ts}_{user_id}_{secure_filename(file.filename)}"
     file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     file.save(file_path)
+    # Must run before generate_file_hash() -- see this function's own
+    # docstring for why the hash has to reflect the final, stored bytes.
+    _compress_uploaded_image_if_needed(file_path)
     file_hash = generate_file_hash(file_path)
 
     # Scoped to THIS user — see Credential.__table_args__'s docstring for
@@ -3356,6 +3762,64 @@ def get_app():
     return render_template("get_app.html")
 
 
+@app.route("/manifest.json")
+def portal_manifest():
+    """
+    Makes the youth web portal installable (Chrome/Edge "Add to Home
+    Screen" on Android, the equivalent on desktop) -- served from the
+    root, not /static/, purely so the URL is a stable, conventional one a
+    browser's installability check expects; the file itself still lives
+    in static/img/ alongside the icons it references. start_url is
+    /portal, not /, since / is this backend's plain JSON API root (see
+    home() above) -- installing this manifest must launch straight into
+    the actual youth-facing app, not an API status message.
+
+    No offline JWT-session persistence or offline form submission is
+    implied by any of this (see get_app()'s own docstring on why that's
+    deliberately not attempted) -- this manifest plus sw.js below only
+    ever caches already-rendered GET pages for read access while offline,
+    the same "last known state, not a live app" contract a native app's
+    own cache would give for content it already fetched once.
+    """
+    return jsonify({
+        "name": "YouthChain",
+        "short_name": "YouthChain",
+        "description": "Connecting Sierra Leonean youth to verified jobs and trusted employment history.",
+        "start_url": "/portal",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#F5F3EE",
+        "theme_color": "#0F7A5C",
+        "icons": [
+            {"src": "/static/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/img/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+            {"src": "/static/img/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    })
+
+
+@app.route("/sw.js")
+def portal_service_worker():
+    """
+    Served from the root (not /static/sw.js) so its default scope covers
+    the whole origin, including every /portal/* route -- a service worker
+    can only ever control paths at or below its own URL unless the
+    Service-Worker-Allowed response header widens that, and this avoids
+    needing that header at all. The file itself lives in static/ like
+    every other JS asset; this route just re-serves it at the URL a
+    service worker needs to be registered from. no-store so a browser
+    checking for an updated worker never gets served a stale cached copy
+    of the thing whose entire job is managing that browser's cache --
+    see sw.js's own docstring for the update-detection mechanism this
+    enables.
+    """
+    return send_from_directory(
+        app.static_folder, "sw.js", mimetype="application/javascript",
+        max_age=0,
+    )
+
+
 # ----------- USER AUTH -----------
 @app.route("/register", methods=["POST"])
 def register():
@@ -3417,7 +3881,7 @@ def register():
         row.used = True
         db.session.commit()
 
-    if User.query.filter((User.phone == phone) | (User.email == email)).first():
+    if User.query.filter(User.phone.in_(_phone_lookup_candidates(phone)) | (User.email == email)).first():
         # Deliberately the same generic shape as a real validation error —
         # closes S-07 (user enumeration) alongside the /auth/otp/request fix.
         return jsonify({"success": False, "error": "Unable to register with the details provided"}), 400
@@ -3456,7 +3920,7 @@ def login():
     if phone_or_email:
         _record_login_attempt(phone_or_email)
 
-    user = User.query.filter((User.phone == phone_or_email) | (User.email == phone_or_email)).first()
+    user = User.query.filter(User.phone.in_(_phone_lookup_candidates(phone_or_email)) | (User.email == phone_or_email)).first()
     # Same error for "no such user" and "wrong password" — do not let a caller
     # distinguish account existence from credential correctness (S-07).
     if not user or not check_password_hash(user.password_hash, password or ""):
@@ -3518,54 +3982,79 @@ def logout():
 # ----------- EMAIL OTP AUTH (LOGIN) -----------
 @app.route("/auth/otp/request", methods=["POST"])
 def otp_request():
+    """
+    channel + identifier are channel-aware the same way
+    otp_request_for_registration()/otp_request_for_reset() already are
+    (see OTPCode's own docstring) — an old, not-yet-updated mobile client
+    sends {"email": "..."} with neither key, which still works exactly as
+    before: identifier falls back to email, channel defaults to "email".
+    channel="sms" looks the account up by User.phone instead, so a phone-
+    only-remembering user (Orange/Africell number, no email login flow
+    Sierra Leone users already leaned into for register/reset) can log in
+    without ever typing a password.
+    """
     data = request.json or {}
-    email = (data.get("email") or "").strip()
-    if not valid_email(email):
-        return jsonify({"success": False, "error": "Please enter a valid email address"}), 400
+    channel = data.get("channel") if data.get("channel") in ("email", "sms") else "email"
+    identifier = (data.get("identifier") or data.get("email") or "").strip()
+
+    if channel == "email":
+        if not valid_email(identifier):
+            return jsonify({"success": False, "error": "Please enter a valid email address"}), 400
+    elif not identifier:
+        return jsonify({"success": False, "error": "Please enter a phone number"}), 400
 
     # Rate-limited (and recorded) before the account-existence check, and
     # unconditionally regardless of whether the account exists — an
     # unauthenticated caller could otherwise spam this endpoint to
-    # email-bomb any registered user's inbox with unlimited OTP codes
+    # email-bomb (or, now, SMS-bomb -- a real per-message Twilio cost, not
+    # just an annoyance) any registered user with unlimited OTP codes
     # (found live: 30/30 rapid requests sent 30 real emails before this
     # fix). Checking before the `if user:` branch also keeps the
-    # anti-enumeration property below intact: a real and a fake email
-    # both see identical 200-then-429 behavior, so the rate-limit
-    # response itself can't be used to tell which emails have accounts.
-    if _otp_rate_limited(email):
+    # anti-enumeration property below intact: a real and a fake
+    # email/phone both see identical 200-then-429 behavior, so the
+    # rate-limit response itself can't be used to tell which accounts exist.
+    if _otp_rate_limited(identifier):
         return jsonify({"success": False, "error": "Too many attempts. Try again later."}), 429
-    _record_otp_attempt(email)
+    _record_otp_attempt(identifier)
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=identifier).first() if channel == "email" \
+        else User.query.filter(User.phone.in_(_phone_lookup_candidates(identifier))).first()
     # Same success-shaped response whether or not the account exists (S-07) —
-    # no OTP is actually sent for an unregistered email, but the caller can't
-    # tell the difference from the response alone.
+    # no OTP is actually sent for an unregistered email/phone, but the
+    # caller can't tell the difference from the response alone.
     if user:
         OTPCode.query.filter(OTPCode.expires_at < datetime.utcnow()).delete()
         code = _otp_code()
         expires = datetime.utcnow() + timedelta(minutes=10)
-        OTPCode.query.filter_by(identifier=email, purpose="login", used=False).update({"used": True})
-        db.session.add(OTPCode(identifier=email, channel="email", purpose="login", code=code, expires_at=expires, used=False))
+        OTPCode.query.filter_by(identifier=identifier, purpose="login", used=False).update({"used": True})
+        db.session.add(OTPCode(identifier=identifier, channel=channel, purpose="login", code=code, expires_at=expires, used=False))
         db.session.commit()
-        _send_email(email, "Your YouthChain OTP", f"Your login code is {code}. It expires in 10 minutes.")
+        body = f"Your login code is {code}. It expires in 10 minutes."
+        if channel == "sms":
+            send_sms(identifier, body)
+        else:
+            _send_email(identifier, "Your YouthChain OTP", body)
 
-    return jsonify({"message": "✅ If that email has an account, a code has been sent"}), 200
+    return jsonify({"message": "✅ If that account exists, a code has been sent"}), 200
 
 
 @app.route("/auth/otp/verify", methods=["POST"])
 def otp_verify():
     data = request.json or {}
-    email = (data.get("email") or "").strip()
+    channel = data.get("channel") if data.get("channel") in ("email", "sms") else "email"
+    identifier = (data.get("identifier") or data.get("email") or "").strip()
     code = (data.get("code") or "").strip()
 
-    if not valid_email(email) or len(code) != 6 or not code.isdigit():
+    if not identifier or len(code) != 6 or not code.isdigit():
+        return jsonify({"success": False, "error": "Invalid email or code"}), 400
+    if channel == "email" and not valid_email(identifier):
         return jsonify({"success": False, "error": "Invalid email or code"}), 400
 
-    if _otp_rate_limited(email):
+    if _otp_rate_limited(identifier):
         return jsonify({"success": False, "error": "Too many attempts. Try again later."}), 429
-    _record_otp_attempt(email)
+    _record_otp_attempt(identifier)
 
-    row = OTPCode.query.filter_by(identifier=email, code=code, purpose="login", used=False).first()
+    row = OTPCode.query.filter_by(identifier=identifier, channel=channel, code=code, purpose="login", used=False).first()
     if not row or row.expires_at < datetime.utcnow():
         if row:
             row.used = True
@@ -3575,7 +4064,8 @@ def otp_verify():
     row.used = True
     db.session.commit()
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=identifier).first() if channel == "email" \
+        else User.query.filter(User.phone.in_(_phone_lookup_candidates(identifier))).first()
     if not user:
         return jsonify({"success": False, "error": "Invalid or expired code"}), 400
     if not user.active:
@@ -3710,7 +4200,7 @@ def otp_request_for_reset():
     # Same anti-enumeration shape as /auth/otp/request (login OTP): identical
     # 200 whether or not an account exists at this identifier, and no code
     # is actually issued/sent for one that doesn't.
-    user = User.query.filter((User.email == identifier) | (User.phone == identifier)).first()
+    user = User.query.filter((User.email == identifier) | User.phone.in_(_phone_lookup_candidates(identifier))).first()
     if user:
         OTPCode.query.filter(OTPCode.expires_at < datetime.utcnow()).delete()
         code = _otp_code()
@@ -3773,7 +4263,7 @@ def otp_confirm_reset():
             db.session.commit()
         return jsonify({"success": False, "error": "Invalid or expired code"}), 400
 
-    user = User.query.filter((User.email == identifier) | (User.phone == identifier)).first()
+    user = User.query.filter((User.email == identifier) | User.phone.in_(_phone_lookup_candidates(identifier))).first()
     if not user:
         # The request step already proved this identifier belongs to a real
         # account (no code would exist otherwise) -- this branch is only
@@ -4026,25 +4516,69 @@ def api_discover_jobs():
     The mobile Discover tab's feed — real listings pulled in by the job
     scanner (scanner/pipeline.py) from configured external sources, kept
     entirely separate from Home's employer/gig feed (GET /jobs,
-    /api/match_jobs). Same bare-JSON-array shape as GET /jobs
-    (deliberately not /api/match_jobs's {"jobs":[...]} wrapper — Discover
-    has no per-candidate ranking, same reasoning /jobs itself has none).
+    /api/match_jobs). Same bare-JSON-array shape as GET /jobs.
 
     Query params (all optional, combinable): q, location, skill — same
     meaning as GET /jobs. job_type is not exposed here: scraped listings
     are all created as job_type="formal" (see pipeline.py), there's no
     gig/formal distinction to filter on yet.
+
+    Ranked by candidate skill-match when the caller has a saved profile
+    and isn't actively searching (q empty) — same scoring method and the
+    same "ranking and free-text search don't mix" rule /api/match_jobs
+    already applies to Home (BL-45: transparent skills-overlap only, no
+    claim of AI/ML matching this app doesn't have). No industry-alignment
+    bonus here, unlike Home — a scraped listing has no Employer account
+    with a tracked industry to compare against a candidate's preferred
+    ones, so there's nothing real to base that bonus on.
+
+    A job dict only gains a "score" key when ranking is actually active —
+    mirroring the mobile app's own existing convention for Home
+    (job_screen.dart's `hasScore = job.containsKey("score")`, which hides
+    the match badge entirely rather than showing a misleading "0% match"
+    on every card during a search or before a profile exists). When
+    ranking is active this bypasses _search_jobs()'s own SQL-level
+    pagination — sorting only within one already-paginated page would
+    mean a great match sitting just past the first page's cutoff could
+    never surface, the same reason /api/match_jobs doesn't paginate its
+    own ranked results at all — and instead paginates in Python after
+    sorting the full matching set by score.
     """
     limit, offset = _pagination_params()
-    jobs = _search_jobs(
-        q=request.args.get("q"),
-        location=request.args.get("location"),
-        skill=request.args.get("skill"),
-        limit=limit,
-        offset=offset,
-        source="scraped",
-    )
-    return jsonify([job.to_dict() for job in jobs])
+    q = (request.args.get("q") or "").strip()
+    location = (request.args.get("location") or "").strip()
+    skill = (request.args.get("skill") or "").strip()
+    candidate = Candidate.query.filter_by(user_id=_current_user_id()).first()
+
+    if candidate and not q:
+        cand_skills = {s.strip().lower() for s in (candidate.skills or "").split(",") if s.strip()}
+        today = date.today()
+        base_query = Job.query.filter(
+            Job.source == "scraped",
+            db.or_(Job.application_deadline.is_(None), Job.application_deadline >= today),
+        )
+        if location:
+            base_query = base_query.filter(Job.location.ilike(f"%{location}%"))
+        if skill:
+            base_query = base_query.filter(Job.required_skills.ilike(f"%{skill}%"))
+
+        def _score(job):
+            required = {s.strip().lower() for s in (job.required_skills or "").split(",") if s.strip()}
+            if not required or not cand_skills:
+                return 0
+            return int(100 * len(cand_skills & required) / len(required))
+
+        scored = sorted(
+            (( _score(j), j) for j in base_query.order_by(Job.id.desc()).all()),
+            key=lambda pair: pair[0], reverse=True,
+        )
+        page = scored[offset:offset + limit]
+        payload = [dict(job.to_dict(), score=score) for score, job in page]
+    else:
+        jobs = _search_jobs(q=q, location=location, skill=skill, limit=limit, offset=offset, source="scraped")
+        payload = [job.to_dict() for job in jobs]
+
+    return jsonify(payload)
 
 
 @app.route("/api/discover_jobs/old", methods=["GET"])
@@ -4126,6 +4660,72 @@ def api_saved_jobs():
     # doesn't -- a saved job that's since been deleted (job_ids has no
     # matching row) is silently skipped rather than erroring.
     return jsonify([jobs_by_id[jid].to_dict() for jid in job_ids if jid in jobs_by_id])
+
+
+# ----------- SAVED SEARCHES (Discover alerts) -----------
+# Small fixed cap, same defensive-posture reasoning as every other
+# per-user-growth limit in this file (rate limits on OTP/uploads/CV
+# generation) — an unbounded SavedSearch list is both DB bloat and a
+# notification-spam vector for whoever ends up on the other end of every
+# future scan's alert dispatch.
+_MAX_SAVED_SEARCHES_PER_USER = 20
+
+
+@app.route("/api/saved_searches", methods=["POST"])
+@jwt_required()
+def create_saved_search():
+    """
+    Creates a Discover alert filter for the current user (see
+    SavedSearch's own docstring). At least one of q/location/skill is
+    required — an all-empty filter would match every future scraped job,
+    which is really "alert me on everything" wearing a saved-search
+    costume and would swamp whoever created it by mistake.
+    """
+    data = request.get_json() or {}
+    user_id = _current_user_id()
+
+    existing_count = SavedSearch.query.filter_by(user_id=user_id).count()
+    if existing_count >= _MAX_SAVED_SEARCHES_PER_USER:
+        return jsonify({
+            "success": False,
+            "error": f"You can save up to {_MAX_SAVED_SEARCHES_PER_USER} searches. Delete one first.",
+        }), 400
+
+    q = (data.get("q") or "").strip() or None
+    location = (data.get("location") or "").strip() or None
+    skill = (data.get("skill") or "").strip() or None
+    if not (q or location or skill):
+        return jsonify({"success": False, "error": "At least one of q, location, skill is required"}), 400
+
+    row = SavedSearch(user_id=user_id, q=q, location=location, skill=skill)
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({"success": True, "saved_search": row.to_dict()}), 201
+
+
+@app.route("/api/saved_searches", methods=["GET"])
+@jwt_required()
+def list_saved_searches():
+    rows = (
+        SavedSearch.query.filter_by(user_id=_current_user_id())
+        .order_by(SavedSearch.created_at.desc())
+        .all()
+    )
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/saved_searches/<int:search_id>/delete", methods=["POST"])
+@jwt_required()
+def delete_saved_search(search_id):
+    # POST, not DELETE — this file uses no DELETE routes anywhere else
+    # (see save_job()/unsave_job()'s own comment on why), kept consistent
+    # rather than introducing the verb for just this one endpoint.
+    row = SavedSearch.query.get_or_404(search_id)
+    if row.user_id != _current_user_id():
+        return _forbidden()
+    db.session.delete(row)
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 # ----------- APPLICATIONS (Youth applies) -----------
@@ -4216,6 +4816,7 @@ def apply():
         cv_filename = f"{ts}_{user_id}_{cv_filename_orig}"
         cv_path = os.path.join(APPLICATION_FOLDER, cv_filename)
         cv_file.save(cv_path)
+        _compress_uploaded_image_if_needed(cv_path)
 
     support_filename = None
     if supporting_file and supporting_file.filename:
@@ -4223,6 +4824,7 @@ def apply():
         support_filename = f"{ts}_{user_id}_{support_orig}"
         support_path = os.path.join(APPLICATION_FOLDER, support_filename)
         supporting_file.save(support_path)
+        _compress_uploaded_image_if_needed(support_path)
 
     app_obj = Application(
         user_id=user_id,
@@ -4645,7 +5247,7 @@ def portal_register():
             else:
                 if not identifier:
                     return render_template("portal_register.html", error="Please enter a phone number.", step="contact", channel=channel)
-                exists = User.query.filter_by(phone=identifier).first()
+                exists = User.query.filter(User.phone.in_(_phone_lookup_candidates(identifier))).first()
 
             if exists:
                 # Same generic shape as the mobile /register enumeration fix
@@ -4742,7 +5344,7 @@ def portal_register():
             if _password_is_breached(password):
                 return _redo("This password has appeared in a known data breach. Please choose a different one.")
 
-            if User.query.filter((User.phone == phone) | (User.email == email)).first():
+            if User.query.filter(User.phone.in_(_phone_lookup_candidates(phone)) | (User.email == email)).first():
                 return _redo("Unable to register with the details provided.")
 
             new_user = User(
@@ -4780,7 +5382,7 @@ def portal_login():
         if identifier:
             _record_login_attempt(f"portal:{identifier}")
 
-        user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
+        user = User.query.filter(User.phone.in_(_phone_lookup_candidates(identifier)) | (User.email == identifier)).first()
         if not user or not check_password_hash(user.password_hash, password):
             log_event("user_login_failed", user_id=user.id if user else None, identifier=identifier)
             return render_template("portal_login.html", error="Incorrect phone/email or password.", suspended=False)
@@ -4831,7 +5433,7 @@ def portal_forgot_password():
             # Same anti-enumeration shape as the mobile /auth/otp/reset/request --
             # always advance to the "code" step, but only actually issue/send
             # one if the identifier belongs to a real account.
-            user = User.query.filter((User.email == identifier) | (User.phone == identifier)).first()
+            user = User.query.filter((User.email == identifier) | User.phone.in_(_phone_lookup_candidates(identifier))).first()
             if user:
                 OTPCode.query.filter(OTPCode.expires_at < datetime.utcnow()).delete()
                 code = _otp_code()
@@ -4898,7 +5500,7 @@ def portal_forgot_password():
                 session.pop("portal_reset_verified", None)
                 return render_template("portal_forgot_password.html", error="Your code expired. Please start again.", step="contact", channel="email")
 
-            user = User.query.filter((User.email == identifier) | (User.phone == identifier)).first()
+            user = User.query.filter((User.email == identifier) | User.phone.in_(_phone_lookup_candidates(identifier))).first()
             if not user:
                 return render_template("portal_forgot_password.html", error="Your code expired. Please start again.", step="contact", channel="email")
 
@@ -5154,12 +5756,16 @@ def portal_apply(job_id):
     cv_filename = None
     if cv_file and cv_file.filename:
         cv_filename = f"{ts}_{user_id}_{secure_filename(cv_file.filename)}"
-        cv_file.save(os.path.join(APPLICATION_FOLDER, cv_filename))
+        cv_path = os.path.join(APPLICATION_FOLDER, cv_filename)
+        cv_file.save(cv_path)
+        _compress_uploaded_image_if_needed(cv_path)
 
     support_filename = None
     if supporting_file and supporting_file.filename:
         support_filename = f"{ts}_{user_id}_{secure_filename(supporting_file.filename)}"
-        supporting_file.save(os.path.join(APPLICATION_FOLDER, support_filename))
+        support_path = os.path.join(APPLICATION_FOLDER, support_filename)
+        supporting_file.save(support_path)
+        _compress_uploaded_image_if_needed(support_path)
 
     app_obj = Application(user_id=user_id, job_id=job.id, cv_file=cv_filename, supporting_file=support_filename)
     db.session.add(app_obj)
@@ -5731,7 +6337,9 @@ def employer_verification():
 
         ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         filename = f"{ts}_{eid}_{secure_filename(file.filename)}"
-        file.save(os.path.join(EMPLOYER_VERIFICATION_FOLDER, filename))
+        verification_path = os.path.join(EMPLOYER_VERIFICATION_FOLDER, filename)
+        file.save(verification_path)
+        _compress_uploaded_image_if_needed(verification_path)
 
         employer.verification_document = filename
         employer.verification_type = verification_type
@@ -6165,6 +6773,31 @@ def admin_reinstate_user(user_id):
     return redirect(url_for("admin_users", q=request.form.get("q", "")))
 
 
+# Real gap found reviewing this queue rather than assuming it was
+# production-ready: open_reports/open_flags below render every open row
+# on one page with no cap at all — fine at the handful of rows this
+# feature launched with, a real problem once a source has been running
+# long enough to accumulate hundreds. Same page-size convention
+# _PORTAL_PAGE_SIZE already established for the youth-facing job feed.
+_ADMIN_QUEUE_PAGE_SIZE = 25
+
+
+def _paginate_admin_queue(rows: list, offset: int) -> tuple[list, bool, bool]:
+    """
+    Slices an already-fully-sorted list (see e.g. admin_reports()'s own
+    repeat-offender sort, which depends on seeing every open row before
+    it can rank them — this can't be pushed down into a SQL LIMIT/OFFSET
+    without losing that ordering) into one page. Returns
+    (page, has_next, has_prev) — the caller already has next_offset/
+    prev_offset's own values (offset ± page size), computing them here
+    too would just be a second source of truth for the same numbers.
+    """
+    page = rows[offset:offset + _ADMIN_QUEUE_PAGE_SIZE]
+    has_next = offset + _ADMIN_QUEUE_PAGE_SIZE < len(rows)
+    has_prev = offset > 0
+    return page, has_next, has_prev
+
+
 @app.route("/admin/reports")
 @admin_role_required("admin")
 def admin_reports():
@@ -6176,6 +6809,11 @@ def admin_reports():
     reviewing a report and acting on it is a materially higher-trust
     action than read-only analytics.
     """
+    try:
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except (TypeError, ValueError):
+        offset = 0
+
     open_reports = EmployerReport.query.filter_by(status="open").order_by(EmployerReport.created_at.asc()).all()
     reviewed = (
         EmployerReport.query.filter(EmployerReport.status.in_(["dismissed", "actioned"]))
@@ -6183,13 +6821,6 @@ def admin_reports():
         .limit(50)
         .all()
     )
-    # Pre-resolve the related rows the template needs, rather than
-    # querying per-row in Jinja (N+1 in a loop is exactly the kind of
-    # thing Phase 4 of the engineering review flagged elsewhere).
-    reporter_ids = {r.reporter_user_id for r in open_reports + reviewed}
-    employer_ids = {r.employer_id for r in open_reports + reviewed}
-    reporters = {u.id: u for u in User.query.filter(User.id.in_(reporter_ids)).all()} if reporter_ids else {}
-    employers = {e.id: e for e in Employer.query.filter(Employer.id.in_(employer_ids)).all()} if employer_ids else {}
 
     # Real gap found and closed after this feature first shipped: with
     # reports listed in plain chronological order, an employer reported 5
@@ -6198,10 +6829,30 @@ def admin_reports():
     # notice it by eye. Now: counted per employer and sorted so employers
     # with more open reports against them float to the top, not buried
     # wherever their oldest report happened to land chronologically.
+    # Computed from the FULL open list, before pagination below, so a
+    # count shown on any given page is always accurate regardless of
+    # which page a particular report happens to land on.
     open_report_counts: dict[int, int] = {}
     for r in open_reports:
         open_report_counts[r.employer_id] = open_report_counts.get(r.employer_id, 0) + 1
     open_reports.sort(key=lambda r: (-open_report_counts[r.employer_id], r.created_at))
+
+    total_open = len(open_reports)
+    open_reports, has_next, has_prev = _paginate_admin_queue(open_reports, offset)
+
+    # Pre-resolve the related rows the template needs, rather than
+    # querying per-row in Jinja (N+1 in a loop is exactly the kind of
+    # thing Phase 4 of the engineering review flagged elsewhere) — from
+    # just this page's open_reports + reviewed, not the full open list,
+    # now that pagination above has already trimmed it.
+    reporter_ids = {r.reporter_user_id for r in open_reports + reviewed}
+    employer_ids = {r.employer_id for r in open_reports + reviewed}
+    reporters = {u.id: u for u in User.query.filter(User.id.in_(reporter_ids)).all()} if reporter_ids else {}
+    employers = {e.id: e for e in Employer.query.filter(Employer.id.in_(employer_ids)).all()} if employer_ids else {}
+    # Same "who resolved this" lookup the reviewed table now needs — see
+    # this queue's own reviewed_by_admin_id docstring.
+    reviewer_ids = {r.reviewed_by_admin_id for r in reviewed if r.reviewed_by_admin_id}
+    reviewers = {a.id: a for a in Admin.query.filter(Admin.id.in_(reviewer_ids)).all()} if reviewer_ids else {}
 
     return render_template(
         "admin_reports.html",
@@ -6209,8 +6860,12 @@ def admin_reports():
         reviewed=reviewed,
         reporters=reporters,
         employers=employers,
+        reviewers=reviewers,
         open_report_counts=open_report_counts,
         active_page="reports",
+        total_open=total_open,
+        has_next=has_next, has_prev=has_prev,
+        next_offset=offset + _ADMIN_QUEUE_PAGE_SIZE, prev_offset=max(offset - _ADMIN_QUEUE_PAGE_SIZE, 0),
     )
 
 
@@ -6251,6 +6906,11 @@ def admin_listing_reports():
     page/table rather than merged into /admin/reports: differently
     shaped (no employer to suspend, just a listing that can be removed).
     """
+    try:
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except (TypeError, ValueError):
+        offset = 0
+
     open_reports = ScrapedListingReport.query.filter_by(status="open").order_by(ScrapedListingReport.created_at.asc()).all()
     reviewed = (
         ScrapedListingReport.query.filter(ScrapedListingReport.status.in_(["dismissed", "actioned"]))
@@ -6258,17 +6918,24 @@ def admin_listing_reports():
         .limit(50)
         .all()
     )
-    reporter_ids = {r.reporter_user_id for r in open_reports + reviewed}
-    job_ids = {r.job_id for r in open_reports + reviewed}
-    reporters = {u.id: u for u in User.query.filter(User.id.in_(reporter_ids)).all()} if reporter_ids else {}
-    jobs = {j.id: j for j in Job.query.filter(Job.id.in_(job_ids)).all()} if job_ids else {}
 
     # Same "float the repeatedly-reported one to the top" reasoning
-    # admin_reports() already established for employers.
+    # admin_reports() already established for employers. Computed from
+    # the FULL open list, before pagination below.
     open_report_counts: dict[int, int] = {}
     for r in open_reports:
         open_report_counts[r.job_id] = open_report_counts.get(r.job_id, 0) + 1
     open_reports.sort(key=lambda r: (-open_report_counts[r.job_id], r.created_at))
+
+    total_open = len(open_reports)
+    open_reports, has_next, has_prev = _paginate_admin_queue(open_reports, offset)
+
+    reporter_ids = {r.reporter_user_id for r in open_reports + reviewed}
+    job_ids = {r.job_id for r in open_reports + reviewed}
+    reporters = {u.id: u for u in User.query.filter(User.id.in_(reporter_ids)).all()} if reporter_ids else {}
+    jobs = {j.id: j for j in Job.query.filter(Job.id.in_(job_ids)).all()} if job_ids else {}
+    reviewer_ids = {r.reviewed_by_admin_id for r in reviewed if r.reviewed_by_admin_id}
+    reviewers = {a.id: a for a in Admin.query.filter(Admin.id.in_(reviewer_ids)).all()} if reviewer_ids else {}
 
     return render_template(
         "admin_listing_reports.html",
@@ -6276,8 +6943,12 @@ def admin_listing_reports():
         reviewed=reviewed,
         reporters=reporters,
         jobs=jobs,
+        reviewers=reviewers,
         open_report_counts=open_report_counts,
         active_page="listing_reports",
+        total_open=total_open,
+        has_next=has_next, has_prev=has_prev,
+        next_offset=offset + _ADMIN_QUEUE_PAGE_SIZE, prev_offset=max(offset - _ADMIN_QUEUE_PAGE_SIZE, 0),
     )
 
 
@@ -6330,6 +7001,11 @@ def admin_rating_flags():
     since both are "something a non-admin surfaced, an admin has to act
     on it" queues. Admin-only, same reasoning as reports/appeals.
     """
+    try:
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except (TypeError, ValueError):
+        offset = 0
+
     open_flags = RatingFlag.query.filter_by(status="open").order_by(RatingFlag.created_at.asc()).all()
     reviewed = (
         RatingFlag.query.filter(RatingFlag.status.in_(["dismissed", "actioned"]))
@@ -6337,12 +7013,17 @@ def admin_rating_flags():
         .limit(50)
         .all()
     )
+    total_open = len(open_flags)
+    open_flags, has_next, has_prev = _paginate_admin_queue(open_flags, offset)
+
     rating_ids = {f.rating_id for f in open_flags + reviewed}
     ratings = {r.id: r for r in Rating.query.filter(Rating.id.in_(rating_ids)).all()} if rating_ids else {}
     user_ids = {r.user_id for r in ratings.values()}
     employer_ids = {r.employer_id for r in ratings.values()}
     users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     employers = {e.id: e for e in Employer.query.filter(Employer.id.in_(employer_ids)).all()} if employer_ids else {}
+    reviewer_ids = {f.reviewed_by_admin_id for f in reviewed if f.reviewed_by_admin_id}
+    reviewers = {a.id: a for a in Admin.query.filter(Admin.id.in_(reviewer_ids)).all()} if reviewer_ids else {}
     # Which job/gig this rating was actually about -- without this an
     # admin sees "Bob, 1/5, Acme Corp" with no way to tell which of
     # potentially several gigs between that worker and employer the
@@ -6365,8 +7046,12 @@ def admin_rating_flags():
         ratings=ratings,
         users=users,
         employers=employers,
+        reviewers=reviewers,
         job_by_application_id=job_by_application_id,
         active_page="rating_flags",
+        total_open=total_open,
+        has_next=has_next, has_prev=has_prev,
+        next_offset=offset + _ADMIN_QUEUE_PAGE_SIZE, prev_offset=max(offset - _ADMIN_QUEUE_PAGE_SIZE, 0),
     )
 
 
@@ -6806,7 +7491,9 @@ def _save_message_attachment(file_storage, sender_label: str):
     ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
     orig = secure_filename(file_storage.filename)
     filename = f"{ts}_{sender_label}_{orig}"
-    file_storage.save(os.path.join(MESSAGE_ATTACHMENT_FOLDER, filename))
+    attachment_path = os.path.join(MESSAGE_ATTACHMENT_FOLDER, filename)
+    file_storage.save(attachment_path)
+    _compress_uploaded_image_if_needed(attachment_path)
     return filename, None
 
 
@@ -7164,6 +7851,52 @@ def api_register_push_token():
     user.push_token = token
     db.session.commit()
     return jsonify({"success": True})
+
+
+@app.route("/api/me", methods=["GET"])
+@jwt_required()
+def api_me():
+    """
+    Resolves the authenticated user's own account fields — same
+    "let the app read its own current state back on open" purpose GET
+    /api/candidate/me already serves for the Candidate profile, needed
+    now that User itself has a real toggle (sms_alerts_enabled) the
+    mobile app has to be able to read, not just blindly overwrite the
+    way it already does for push_token.
+    """
+    user = User.query.get(_current_user_id())
+    return jsonify({"success": True, "user": user.to_dict()}), 200
+
+
+@app.route("/api/sms_alerts", methods=["PUT"])
+@jwt_required()
+def api_set_sms_alerts():
+    """
+    Sets User.sms_alerts_enabled (see its own docstring) — the opt-in
+    that lets a Saved Search / profile-skill job alert (see
+    _dispatch_job_alerts_for_scan) also go out as a real SMS via Twilio,
+    on top of the in-app/push notification every alert already gets.
+    """
+    user = User.query.get(_current_user_id())
+    data = request.get_json(silent=True) or {}
+    user.sms_alerts_enabled = bool(data.get("enabled"))
+    db.session.commit()
+    return jsonify({"success": True, "sms_alerts_enabled": user.sms_alerts_enabled})
+
+
+@app.route("/api/whatsapp_alerts", methods=["PUT"])
+@jwt_required()
+def api_set_whatsapp_alerts():
+    """
+    Sets User.whatsapp_alerts_enabled (see its own docstring) — mirrors
+    api_set_sms_alerts above exactly, just gating send_whatsapp() instead
+    of send_sms() inside notify_user().
+    """
+    user = User.query.get(_current_user_id())
+    data = request.get_json(silent=True) or {}
+    user.whatsapp_alerts_enabled = bool(data.get("enabled"))
+    db.session.commit()
+    return jsonify({"success": True, "whatsapp_alerts_enabled": user.whatsapp_alerts_enabled})
 
 
 _REPORT_CATEGORIES = {"scam", "harassment", "fake_job", "inappropriate", "other"}
@@ -8239,6 +8972,9 @@ def upsert_candidate():
 
     candidate.bio = data.get("bio", candidate.bio)
 
+    if "job_alerts_enabled" in data:
+        candidate.job_alerts_enabled = bool(data.get("job_alerts_enabled"))
+
     db.session.add(candidate)
     db.session.commit()
 
@@ -8270,17 +9006,26 @@ def get_my_candidate():
             "skills": candidate.skills,
             "bio": candidate.bio,
             "preferred_industries": candidate.preferred_industries,
+            "job_alerts_enabled": candidate.job_alerts_enabled,
         },
     }), 200
 
 
-# ----------- Rule-based CV generation -----------
+# ----------- CV generation (rule-based text + AI-polished HTML) -----------
 @app.route("/api/generate_cv/<int:candidate_id>", methods=["GET"])
 @jwt_required()
 def generate_cv(candidate_id):
     """
-    Generate a structured CV text for the candidate.
-    This is a rule-based generator that the mobile app can display or export.
+    Generates a CV in two forms: the original plain-text version
+    (unchanged output, kept for backward compatibility) and a formatted,
+    AI-polished HTML version (cv_html) the mobile app renders natively
+    and exports to PDF — see cv_generator.py's own docstring for the full
+    three-layer security model behind cv_html (the AI never authors HTML,
+    every value is escaped, and a bleach allowlist pass runs on top of
+    that). The AI-polish step is best-effort and silently optional: if
+    ANTHROPIC_API_KEY isn't configured or the call fails for any reason,
+    cv_html still renders — just from the candidate's own unpolished text
+    — rather than the whole endpoint failing over an enhancement step.
     """
     c = Candidate.query.get(candidate_id)
     if not c:
@@ -8288,10 +9033,18 @@ def generate_cv(candidate_id):
     if c.user_id != _current_user_id():
         return _forbidden()
 
-    # Link credentials via user_id if available
+    if _cv_generation_rate_limited(f"user:{_current_user_id()}"):
+        return jsonify({"success": False, "error": "Too many CV generations. Try again later."}), 429
+    _record_cv_generation_attempt(f"user:{_current_user_id()}")
+
+    # Link credentials via user_id if available. Excludes revoked ones —
+    # real pre-existing gap found while rebuilding this endpoint: a
+    # revoked credential (see Credential.revoked_at) was still being
+    # listed as "verified" on the generated CV, which is exactly the
+    # kind of integrity problem a trust platform can't afford.
     creds = []
     if c.user_id:
-        creds = Credential.query.filter_by(user_id=c.user_id).all()
+        creds = Credential.query.filter_by(user_id=c.user_id, revoked_at=None).all()
 
     educations = Education.query.filter_by(candidate_id=candidate_id).all()
 
@@ -8306,10 +9059,11 @@ def generate_cv(candidate_id):
     summary = c.bio or "Motivated youth eager to apply practical skills in real-world opportunities."
     lines.append(summary)
     lines.append("")
-    if c.skills:
+    skills_list = [s.strip() for s in (c.skills or "").split(",") if s.strip()]
+    if skills_list:
         lines.append("KEY SKILLS")
         lines.append("----------")
-        lines.append(", ".join([s.strip() for s in c.skills.split(",") if s.strip()]))
+        lines.append(", ".join(skills_list))
         lines.append("")
 
     if educations:
@@ -8327,7 +9081,30 @@ def generate_cv(candidate_id):
         lines.append("")
 
     cv_text = "\n".join(lines)
-    return jsonify({"success": True, "candidate_id": candidate_id, "cv": cv_text}), 200
+
+    industries_list = [i.strip() for i in (c.preferred_industries or "").split(",") if i.strip()]
+    polished = cv_generator.polish_cv_content(
+        name=c.name, location=c.location, bio=c.bio, skills=skills_list,
+        industries=industries_list, api_key=_get_secret("ANTHROPIC_API_KEY"),
+    )
+    cv_html_raw = cv_generator.render_cv_html(
+        candidate={
+            "name": c.name, "email": c.email, "location": c.location,
+            "skills": skills_list, "preferred_industries": industries_list, "bio": c.bio,
+        },
+        educations=[{"degree": e.degree, "school": e.school, "year": e.year} for e in educations],
+        credentials=[{"title": cr.title, "issuer": cr.issuer, "year": cr.year} for cr in creds],
+        polished=polished,
+    )
+    cv_html = cv_generator.sanitize_cv_html(cv_html_raw)
+
+    return jsonify({
+        "success": True,
+        "candidate_id": candidate_id,
+        "cv": cv_text,
+        "cv_html": cv_html,
+        "ai_generated": polished is not None,
+    }), 200
 
 
 # ----------- Job matching -----------
@@ -8355,32 +9132,22 @@ def api_match_jobs(candidate_id):
         jobs = Job.query.filter(Job.source == "employer").order_by(Job.id.desc()).all()
         payload = []
         for j in jobs:
-            # be defensive in case required_skills column is missing/empty
-            rs = getattr(j, "required_skills", "") or ""
+            # Full to_dict(), not a hand-built subset -- this used to
+            # cherry-pick fields and silently drop job_type/category (a
+            # real, serious gap: this is the mobile app's DEFAULT job
+            # feed for any user with a candidate profile, so most real
+            # users hit a gig job here with no job_type at all, which
+            # broke the "no CV needed for gig work" logic in
+            # _showApplySheet -- job["job_type"] != "gig" defaults true
+            # when the key is simply missing). Then it ALSO dropped
+            # employer_id, silently hiding JobDetailScreen's "Report this
+            # job" button for anyone on this path. Spreading the same
+            # to_dict() every other job-serving endpoint already uses
+            # closes that whole class of bug instead of patching one
+            # missing field at a time.
             job_dict = j.to_dict()
-            payload.append({
-                "id": j.id,
-                "title": j.title,
-                "location": j.location,
-                "duration": j.duration,
-                "required_skills": rs,
-                # Real, serious gap found and closed after this feature
-                # first shipped: this hand-built dict cherry-picked fields
-                # from job_dict and silently dropped job_type/category --
-                # /api/match_jobs is the mobile app's DEFAULT job feed for
-                # any user with a candidate profile (fetchJobs() only
-                # falls back to /jobs when no profile exists yet, or a
-                # search/filter is active), so for most real users a gig
-                # job fetched through this path had no job_type at all,
-                # which silently broke the "no CV needed for gig work"
-                # logic in _showApplySheet -- job["job_type"] != "gig"
-                # defaults true when the key is simply missing, so the CV
-                # picker showed as required even for gig jobs.
-                "job_type": job_dict.get("job_type"),
-                "category": job_dict.get("category"),
-                "employer": job_dict.get("employer"),
-                "score": 0,   # un-ranked
-            })
+            job_dict["score"] = 0  # un-ranked
+            payload.append(job_dict)
         return jsonify({
             "success": True,
             "candidate_id": candidate_id,
@@ -8418,20 +9185,15 @@ def api_match_jobs(candidate_id):
         industry_match = bool(job_industry and job_industry in cand_industries)
         score = min(100, skills_score + (INDUSTRY_MATCH_BONUS if industry_match else 0))
 
-        results.append({
-            "id": j.id,
-            "title": j.title,
-            "location": j.location,
-            "duration": j.duration,
-            "required_skills": ", ".join(required),
-            # See the identical fix + comment in the no-candidate fallback
-            # branch above -- same missing-field bug, same real impact.
-            "job_type": job_dict.get("job_type"),
-            "category": job_dict.get("category"),
-            "employer": employer_info,
-            "industry_match": industry_match,
-            "score": score,
-        })
+        # Full to_dict(), not a hand-built subset -- see the identical fix
+        # + comment in the no-candidate fallback branch above for why.
+        # (Also quietly fixes a display inconsistency this hand-built
+        # dict introduced: it showed required_skills lowercased, since it
+        # reused the `required` list built for scoring, while every other
+        # job-serving endpoint shows the original casing.)
+        job_dict["industry_match"] = industry_match
+        job_dict["score"] = score
+        results.append(job_dict)
 
     # highest score first
     results.sort(key=lambda x: x["score"], reverse=True)
@@ -8502,6 +9264,77 @@ def _json_500(e):
     return e
 
 
+# ----------------- Job alert dispatch (Saved Search + profile skills) -----------------
+def _job_matches_saved_search(job, search) -> bool:
+    """Same substring-match semantics GET /api/discover_jobs's own
+    q/location/skill query params already use via _search_jobs() — a
+    SavedSearch is just those same filters, persisted."""
+    if search.q:
+        haystack = f"{job.title} {job.description or ''} {job.company_name or ''}".lower()
+        if search.q.lower() not in haystack:
+            return False
+    if search.location and search.location.lower() not in (job.location or "").lower():
+        return False
+    if search.skill and search.skill.lower() not in (job.required_skills or "").lower():
+        return False
+    return True
+
+
+def _dispatch_job_alerts_for_scan(outcome):
+    """
+    Fires Saved Search and profile-skill job alerts for a just-completed
+    scan (see scanner.pipeline.ScanOutcome.created_job_ids) — called once
+    per real scan, from both scanner.poller's on_scan_complete callback
+    (production/pg_cron path) and scripts/run_scan.py (manual/local
+    path). Deliberately only ever looks at created_job_ids, never every
+    job the scan touched — see that field's own docstring for why that's
+    what keeps this idempotent across rescans with no extra dedup table.
+
+    Best-effort per match, same "one bad row can't sink the batch"
+    posture as run_scan_for_source's own per-job try/except: a failure
+    notifying one saved search or one candidate must never stop the rest
+    of this scan's matches from going out.
+    """
+    if not outcome.success or not outcome.created_job_ids:
+        return
+
+    jobs = Job.query.filter(Job.id.in_(outcome.created_job_ids)).all()
+    if not jobs:
+        return
+
+    saved_searches = SavedSearch.query.all()
+    alert_candidates = Candidate.query.filter(
+        Candidate.job_alerts_enabled.is_(True), Candidate.user_id.isnot(None),
+    ).all()
+
+    for job in jobs:
+        job_skills = {s.strip().lower() for s in (job.required_skills or "").split(",") if s.strip()}
+
+        for search in saved_searches:
+            try:
+                if _job_matches_saved_search(job, search):
+                    notify_user(
+                        search.user_id, "saved_search_match", "New job matches your saved search",
+                        job.title, sms=True, whatsapp=True, job_id=job.id, saved_search_id=search.id,
+                    )
+            except Exception:
+                logger.exception("saved search alert failed for search %s, job %s", search.id, job.id)
+
+        if not job_skills:
+            continue
+        for candidate in alert_candidates:
+            cand_skills = {s.strip().lower() for s in (candidate.skills or "").split(",") if s.strip()}
+            if not cand_skills or not (cand_skills & job_skills):
+                continue
+            try:
+                notify_user(
+                    candidate.user_id, "job_alert_match", "New job matches your skills",
+                    job.title, sms=True, whatsapp=True, job_id=job.id,
+                )
+            except Exception:
+                logger.exception("job alert failed for candidate %s, job %s", candidate.id, job.id)
+
+
 # ----------------- Job scanner poller (opt-in, module scope) -----------------
 # Runs at true module scope (not inside `if __name__ == "__main__"` below)
 # because production serves this app via `gunicorn ... app:app`
@@ -8545,6 +9378,7 @@ def _run_scanner_poller_forever():
             anthropic_key_fn=lambda: _get_secret("ANTHROPIC_API_KEY"),
             logger=logger,
             interval_seconds=int(os.getenv("SCANNER_POLL_INTERVAL_SECONDS", "30")),
+            on_scan_complete=_dispatch_job_alerts_for_scan,
         )
 
 

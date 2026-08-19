@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
@@ -59,7 +60,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _sendCode() async {
     final identifier = identifierController.text.trim();
     if (identifier.isEmpty) {
-      setState(() => _error = _isEmail ? 'Please enter your email address' : 'Please enter your phone number');
+      setState(() => _error = _isEmail ? context.l10n.pleaseEnterEmail : context.l10n.pleaseEnterPhone);
       return;
     }
 
@@ -78,11 +79,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (res.statusCode == 200) {
         setState(() => _step = _ResetStep.code);
       } else {
-        setState(() => _error = data?['error'] ?? 'Failed to send code (${res.statusCode})');
+        setState(() => _error = data?['error'] ?? context.l10n.failedToSendCode(res.statusCode));
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error. Check your connection and try again.');
+      setState(() => _error = context.l10n.networkErrorGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -91,7 +92,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _verifyCode() async {
     final code = otpController.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Enter the 6-digit code');
+      setState(() => _error = context.l10n.enterSixDigitCode);
       return;
     }
 
@@ -114,11 +115,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (res.statusCode == 200 && data?['success'] == true) {
         setState(() => _step = _ResetStep.confirm);
       } else {
-        setState(() => _error = data?['error'] ?? 'Invalid or expired code');
+        setState(() => _error = data?['error'] ?? context.l10n.invalidOrExpiredCode);
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error. Check your connection and try again.');
+      setState(() => _error = context.l10n.networkErrorGeneric);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -126,15 +127,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _confirmReset() async {
     if (passwordController.text.isEmpty || confirmPasswordController.text.isEmpty) {
-      setState(() => _error = 'Please complete both password fields');
+      setState(() => _error = context.l10n.pleaseCompleteBothPasswordFields);
       return;
     }
     if (passwordController.text != confirmPasswordController.text) {
-      setState(() => _error = 'Passwords do not match');
+      setState(() => _error = context.l10n.passwordsDoNotMatch);
       return;
     }
     if (passwordController.text.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters');
+      setState(() => _error = context.l10n.passwordMinLength);
       return;
     }
 
@@ -156,13 +157,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       final data = _tryJson(res.body);
       if (!mounted) return;
       if (res.statusCode == 200) {
-        setState(() => _success = 'Your password was changed. Log in with your new password.');
+        setState(() => _success = context.l10n.passwordChangedSuccess);
       } else {
-        setState(() => _error = data?['error'] ?? 'Reset failed (${res.statusCode})');
+        setState(() => _error = data?['error'] ?? context.l10n.resetFailedGeneric(res.statusCode));
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Network error during reset');
+      setState(() => _error = context.l10n.networkErrorDuringReset);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -170,6 +171,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -203,9 +205,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  const Text(
-                    "Reset your password",
-                    style: TextStyle(
+                  Text(
+                    l10n.resetPasswordHeading,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
@@ -214,7 +216,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    "We'll verify it's really you before you set a new one.",
+                    l10n.resetPasswordSubtitle,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 13,
@@ -241,7 +243,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_success != null) ..._buildSuccess() else ...[
+                        if (_success != null) ..._buildSuccess(l10n) else ...[
                           if (_error != null) ...[
                             Container(
                               width: double.infinity,
@@ -258,9 +260,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ),
                             const SizedBox(height: AppSpacing.sm),
                           ],
-                          if (_step == _ResetStep.contact) ..._buildContactStep(),
-                          if (_step == _ResetStep.code) ..._buildCodeStep(),
-                          if (_step == _ResetStep.confirm) ..._buildConfirmStep(),
+                          if (_step == _ResetStep.contact) ..._buildContactStep(l10n),
+                          if (_step == _ResetStep.code) ..._buildCodeStep(l10n),
+                          if (_step == _ResetStep.confirm) ..._buildConfirmStep(l10n),
                         ],
                       ],
                     ),
@@ -274,7 +276,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  List<Widget> _buildSuccess() {
+  List<Widget> _buildSuccess(AppLocalizations l10n) {
     return [
       Icon(Icons.check_circle_rounded, color: context.colors.success, size: 40),
       const SizedBox(height: AppSpacing.sm),
@@ -285,21 +287,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         height: 50,
         child: ElevatedButton(
           onPressed: () => Navigator.of(context).pushReplacementNamed('/login'),
-          child: const Text('Back to login'),
+          child: Text(l10n.backToLoginButton),
         ),
       ),
     ];
   }
 
-  List<Widget> _buildContactStep() {
+  List<Widget> _buildContactStep(AppLocalizations l10n) {
     return [
-      const Text('Where should we send your reset code?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      Text(l10n.whereSendResetCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
       const SizedBox(height: AppSpacing.sm),
       Row(
         children: [
           Expanded(
             child: _ChannelChoiceCard(
-              label: 'Email',
+              label: l10n.channelEmail,
               icon: Icons.email_outlined,
               selected: _isEmail,
               onTap: () => setState(() => _channel = 'email'),
@@ -308,7 +310,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: _ChannelChoiceCard(
-              label: 'Phone (SMS)',
+              label: l10n.channelPhoneSms,
               icon: Icons.sms_outlined,
               selected: !_isEmail,
               onTap: () => setState(() => _channel = 'sms'),
@@ -322,31 +324,31 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         controller: identifierController,
         keyboardType: _isEmail ? TextInputType.emailAddress : TextInputType.phone,
         decoration: InputDecoration(
-          labelText: _isEmail ? 'Email Address' : 'Phone Number',
+          labelText: _isEmail ? l10n.emailAddressLabel : l10n.phoneNumberLabel,
           prefixIcon: Icon(_isEmail ? Icons.email_outlined : Icons.phone_outlined),
         ),
       ),
       const SizedBox(height: 4),
       Text(
-        "We'll send a 6-digit code to verify it's really you.",
+        l10n.registrationSendCodeHint,
         style: Theme.of(context).textTheme.bodySmall,
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Send reset code', _sendCode),
+      _primaryButton(l10n.sendResetCodeButton, _sendCode),
       const SizedBox(height: 4),
       Center(
         child: TextButton(
           onPressed: () => Navigator.of(context).pushReplacementNamed('/login'),
-          child: const Text('Remembered it after all? Login'),
+          child: Text(l10n.rememberedPasswordLink),
         ),
       ),
     ];
   }
 
-  List<Widget> _buildCodeStep() {
+  List<Widget> _buildCodeStep(AppLocalizations l10n) {
     return [
       Text(
-        'If an account exists for ${identifierController.text.trim()}, a 6-digit code was sent to it.',
+        l10n.accountCodeSentTo(identifierController.text.trim()),
         style: Theme.of(context).textTheme.bodyMedium,
       ),
       const SizedBox(height: AppSpacing.sm),
@@ -357,10 +359,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         textAlign: TextAlign.center,
         autofocus: true,
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 8),
-        decoration: const InputDecoration(labelText: 'Reset Code', counterText: ''),
+        decoration: InputDecoration(labelText: l10n.resetCodeLabel, counterText: ''),
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Verify', _verifyCode),
+      _primaryButton(l10n.verifyButton, _verifyCode),
       const SizedBox(height: 4),
       Center(
         child: TextButton(
@@ -371,21 +373,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     _error = null;
                     otpController.clear();
                   }),
-          child: const Text('Use a different email/phone'),
+          child: Text(l10n.useDifferentEmailPhone),
         ),
       ),
     ];
   }
 
-  List<Widget> _buildConfirmStep() {
+  List<Widget> _buildConfirmStep(AppLocalizations l10n) {
     return [
-      Text('✅ ${identifierController.text.trim()} is verified. Choose a new password.', style: Theme.of(context).textTheme.bodyMedium),
+      Text(l10n.verifiedChooseNewPassword(identifierController.text.trim()), style: Theme.of(context).textTheme.bodyMedium),
       const SizedBox(height: AppSpacing.sm),
       TextField(
         controller: passwordController,
         obscureText: _obscurePassword,
         decoration: InputDecoration(
-          labelText: "New Password",
+          labelText: l10n.newPasswordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
             icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
@@ -398,7 +400,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         controller: confirmPasswordController,
         obscureText: _obscureConfirm,
         decoration: InputDecoration(
-          labelText: "Confirm New Password",
+          labelText: l10n.confirmNewPasswordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
             icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
@@ -407,7 +409,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
-      _primaryButton('Change Password', _confirmReset),
+      _primaryButton(l10n.changePasswordButton, _confirmReset),
     ];
   }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -65,11 +66,11 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text("Work History"),
+        title: Text(context.l10n.workHistoryFab),
         backgroundColor: context.colors.secondary,
         actions: [
           IconButton(
-            tooltip: "Refresh",
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetch,
           ),
@@ -87,8 +88,7 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
               ),
               child: Semantics(
                 liveRegion: true,
-                label:
-                    "You're offline. Showing previously loaded work history.",
+                label: context.l10n.offlineShowingWorkHistory,
                 child: Row(
                   children: [
                     Icon(
@@ -99,7 +99,7 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "You're offline. Showing previously loaded work history.",
+                        context.l10n.offlineShowingWorkHistory,
                         style: TextStyle(
                           fontSize: 12,
                           color: context.colors.warning,
@@ -131,12 +131,12 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
       return RefreshIndicator(
         onRefresh: _fetch,
         child: ListView(
-          children: const [
-            SizedBox(height: 120),
+          children: [
+            const SizedBox(height: 120),
             EmptyState(
               icon: Icons.star_outline_rounded,
-              title: "Couldn't load your work history",
-              subtitle: "Pull down to try again.",
+              title: context.l10n.couldNotLoadWorkHistoryTitle,
+              subtitle: context.l10n.pullDownToTryAgain,
             ),
           ],
         ),
@@ -155,16 +155,15 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
         children: [
           _buildSummaryCard(completedGigs, avgRating, ratingCount),
           const SizedBox(height: AppSpacing.lg),
-          Text("Rated gigs", style: Theme.of(context).textTheme.titleMedium),
+          Text(context.l10n.ratedGigsHeading, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AppSpacing.sm),
           if (ratedGigs.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
               child: EmptyState(
                 icon: Icons.handshake_outlined,
-                title: "No rated gigs yet",
-                subtitle:
-                    "Apply to gig/hire-based jobs and complete them to start building your trust record — no CV needed.",
+                title: context.l10n.noRatedGigsYetTitle,
+                subtitle: context.l10n.noRatedGigsYetSubtitle,
               ),
             )
           else
@@ -191,7 +190,7 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
                 Text(
                   ratingCount > 0
                       ? "★ ${avgRating?.toStringAsFixed(1)}"
-                      : "No ratings yet",
+                      : context.l10n.noRatingsYetLabel,
                   style: Theme.of(
                     context,
                   ).textTheme.headlineSmall?.copyWith(color: Colors.white),
@@ -199,8 +198,8 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
                 const SizedBox(height: 4),
                 Text(
                   ratingCount > 0
-                      ? "from $ratingCount rating${ratingCount == 1 ? '' : 's'}"
-                      : "Complete a gig to earn your first rating",
+                      ? context.l10n.fromRatingsCountLabel(ratingCount)
+                      : context.l10n.completeGigToEarnFirstRating,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.85),
                   ),
@@ -218,7 +217,7 @@ class WorkHistoryScreenState extends State<WorkHistoryScreen> {
                 ).textTheme.headlineSmall?.copyWith(color: Colors.white),
               ),
               Text(
-                "completed gig${completedGigs == 1 ? '' : 's'}",
+                context.l10n.completedGigsCountLabel(completedGigs),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.85),
                 ),

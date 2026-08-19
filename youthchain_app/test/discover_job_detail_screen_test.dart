@@ -5,6 +5,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/discover_job_detail_screen.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +44,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DiscoverJobDetailScreen(job: fullJob),
       ),
     );
@@ -57,48 +61,73 @@ void main() {
     expect(find.text('Apply'), findsOneWidget);
   });
 
-  testWidgets('degrades gracefully with only a title, no crash on null fields', (tester) async {
+  testWidgets('degrades gracefully with only a title, no crash on null fields', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DiscoverJobDetailScreen(job: minimalJob),
       ),
     );
 
     expect(find.text('Mystery Listing'), findsOneWidget);
-    expect(find.text('Scraped listing'), findsOneWidget); // source_name fallback
+    expect(
+      find.text('Scraped listing'),
+      findsOneWidget,
+    ); // source_name fallback
     expect(find.text('Verified'), findsNothing);
-    expect(find.text('Full-time'), findsNothing); // employment_type absent -- no row, no crash
+    expect(
+      find.text('Full-time'),
+      findsNothing,
+    ); // employment_type absent -- no row, no crash
     // No apply_url -- no Apply button, and no crash building the bottomNavigationBar.
     expect(find.text('Apply'), findsNothing);
   });
 
-  testWidgets('shows no company card at all when company_name is absent', (tester) async {
+  testWidgets('shows no company card at all when company_name is absent', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DiscoverJobDetailScreen(job: minimalJob),
       ),
     );
     expect(find.text('Company'), findsNothing);
   });
 
-  testWidgets('shows the safety-notes banner for an unverified employer', (tester) async {
+  testWidgets('shows the safety-notes banner for an unverified employer', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DiscoverJobDetailScreen(job: minimalJob),
       ),
     );
-    expect(find.text("This employer isn't verified — stay safe"), findsOneWidget);
+    expect(
+      find.text("This employer isn't verified — stay safe"),
+      findsOneWidget,
+    );
     expect(find.textContaining("Never pay to apply"), findsOneWidget);
     expect(find.textContaining("meet in a public place"), findsOneWidget);
   });
 
-  testWidgets('hides the safety-notes banner once the employer is verified', (tester) async {
+  testWidgets('hides the safety-notes banner once the employer is verified', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DiscoverJobDetailScreen(job: fullJob),
       ),
     );
@@ -106,27 +135,55 @@ void main() {
   });
 
   testWidgets('shows an upcoming deadline as "Apply by ..."', (tester) async {
-    final job = {...fullJob, "application_deadline": "2026-09-01", "is_expired": false};
+    final job = {
+      ...fullJob,
+      "application_deadline": "2026-09-01",
+      "is_expired": false,
+    };
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: DiscoverJobDetailScreen(job: job)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DiscoverJobDetailScreen(job: job),
+      ),
     );
     expect(find.text('Apply by 1 Sep 2026'), findsOneWidget);
     expect(find.text('Expired'), findsNothing);
   });
 
-  testWidgets('shows a passed deadline as expired, with a flag not "Apply by"', (tester) async {
-    final job = {...fullJob, "application_deadline": "2026-01-01", "is_expired": true};
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: DiscoverJobDetailScreen(job: job)),
-    );
-    expect(find.text('Deadline was 1 Jan 2026'), findsOneWidget);
-    expect(find.text('Expired'), findsOneWidget);
-    expect(find.text('Apply by 1 Jan 2026'), findsNothing);
-  });
+  testWidgets(
+    'shows a passed deadline as expired, with a flag not "Apply by"',
+    (tester) async {
+      final job = {
+        ...fullJob,
+        "application_deadline": "2026-01-01",
+        "is_expired": true,
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiscoverJobDetailScreen(job: job),
+        ),
+      );
+      expect(find.text('Deadline was 1 Jan 2026'), findsOneWidget);
+      expect(find.text('Expired'), findsOneWidget);
+      expect(find.text('Apply by 1 Jan 2026'), findsNothing);
+    },
+  );
 
-  testWidgets('the report icon opens the listing-report sheet for this job', (tester) async {
+  testWidgets('the report icon opens the listing-report sheet for this job', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: DiscoverJobDetailScreen(job: fullJob)),
+      MaterialApp(
+        theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DiscoverJobDetailScreen(job: fullJob),
+      ),
     );
     await tester.tap(find.byIcon(Icons.flag_outlined));
     await tester.pumpAndSettle();

@@ -84,6 +84,36 @@ def test_extract_job_detail_extracts_a_deadline_field(monkeypatch):
     assert detail["deadline"] == "2026-09-01"
 
 
+def test_extracts_a_required_skills_field(monkeypatch):
+    payload = _messages_payload([
+        {"type": "text", "text": '[{"title": "Cashier", "company_name": null, "location": null, "salary": null, "description": null, "apply_url": null, "external_id": null, "employment_type": null, "deadline": null, "required_skills": "Microsoft Excel, customer service"}]'},
+    ])
+    monkeypatch.setattr(claude_extractor.requests, "post", lambda *a, **k: _FakeResponse(200, payload))
+
+    jobs = extract_jobs("some markdown", api_key="fake-key")
+    assert jobs[0]["required_skills"] == "Microsoft Excel, customer service"
+
+
+def test_required_skills_defaults_to_null_when_the_field_is_absent(monkeypatch):
+    payload = _messages_payload([
+        {"type": "text", "text": '[{"title": "Job With No Skills Key", "company_name": null, "location": null, "salary": null, "description": null, "apply_url": null, "external_id": null}]'},
+    ])
+    monkeypatch.setattr(claude_extractor.requests, "post", lambda *a, **k: _FakeResponse(200, payload))
+
+    jobs = extract_jobs("some markdown", api_key="fake-key")
+    assert jobs[0]["required_skills"] is None
+
+
+def test_extract_job_detail_extracts_a_required_skills_field(monkeypatch):
+    payload = _messages_payload([
+        {"type": "text", "text": '{"description": null, "salary": null, "employment_type": null, "location": null, "deadline": null, "required_skills": "Valid driver\'s license"}'},
+    ])
+    monkeypatch.setattr(claude_extractor.requests, "post", lambda *a, **k: _FakeResponse(200, payload))
+
+    detail = extract_job_detail("some markdown", api_key="fake-key")
+    assert detail["required_skills"] == "Valid driver's license"
+
+
 def test_extracts_jobs_when_text_is_the_only_block(monkeypatch):
     """The common case (no extended thinking) still works — the fix
     isn't position-dependent in either direction."""
@@ -184,7 +214,10 @@ def test_extract_job_detail_handles_a_thinking_block_too(monkeypatch):
     monkeypatch.setattr(claude_extractor.requests, "post", lambda *a, **k: _FakeResponse(200, payload))
 
     detail = extract_job_detail("some markdown", api_key="fake-key")
-    assert detail == {"description": None, "salary": None, "employment_type": None, "location": None, "deadline": None}
+    assert detail == {
+        "description": None, "salary": None, "employment_type": None, "location": None,
+        "deadline": None, "required_skills": None,
+    }
 
 
 def test_extract_job_detail_strips_markdown_code_fence(monkeypatch):

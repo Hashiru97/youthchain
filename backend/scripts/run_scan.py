@@ -49,6 +49,7 @@ def main():
             anthropic_key=app_module._get_secret("ANTHROPIC_API_KEY"),
             logger=app_module.logger,
         )
+        app_module._dispatch_job_alerts_for_scan(outcome)
         if outcome.success:
             print(
                 f"Scan succeeded: found={outcome.jobs_found} created={outcome.jobs_created} "

@@ -14,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/job_detail_screen.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -66,6 +68,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: JobDetailScreen(
           job: unownedJob,
           alreadyApplied: false,
@@ -89,6 +93,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: JobDetailScreen(
             job: ownedJob,
             alreadyApplied: false,
@@ -128,6 +134,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: JobDetailScreen(
             job: ownedJob,
             alreadyApplied: false,
@@ -186,6 +194,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: JobDetailScreen(
             job: ownedJob,
             alreadyApplied: false,
@@ -228,34 +238,47 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
-          home: JobDetailScreen(job: job, alreadyApplied: false, onApply: () {}),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: JobDetailScreen(
+            job: job,
+            alreadyApplied: false,
+            onApply: () {},
+          ),
         ),
       );
       expect(find.text('Verified Business'), findsOneWidget);
       expect(find.text('Verified Individual'), findsNothing);
     });
 
-    testWidgets('shows "Verified Individual" for an individual-track employer', (
-      tester,
-    ) async {
-      final job = {
-        ...ownedJob,
-        "employer": {
-          "name": "Mama Kadi",
-          "verification_status": "verified",
-          "verification_type": "individual",
-          "industry": null,
-        },
-      };
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: JobDetailScreen(job: job, alreadyApplied: false, onApply: () {}),
-        ),
-      );
-      expect(find.text('Verified Individual'), findsOneWidget);
-      expect(find.text('Verified Business'), findsNothing);
-    });
+    testWidgets(
+      'shows "Verified Individual" for an individual-track employer',
+      (tester) async {
+        final job = {
+          ...ownedJob,
+          "employer": {
+            "name": "Mama Kadi",
+            "verification_status": "verified",
+            "verification_type": "individual",
+            "industry": null,
+          },
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: JobDetailScreen(
+              job: job,
+              alreadyApplied: false,
+              onApply: () {},
+            ),
+          ),
+        );
+        expect(find.text('Verified Individual'), findsOneWidget);
+        expect(find.text('Verified Business'), findsNothing);
+      },
+    );
 
     testWidgets('shows the earned rating from past workers when present', (
       tester,
@@ -274,13 +297,16 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
-          home: JobDetailScreen(job: job, alreadyApplied: false, onApply: () {}),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: JobDetailScreen(
+            job: job,
+            alreadyApplied: false,
+            onApply: () {},
+          ),
         ),
       );
-      expect(
-        find.text('4.6 · 11 ratings from past workers'),
-        findsOneWidget,
-      );
+      expect(find.text('4.6 · 11 ratings from past workers'), findsOneWidget);
     });
 
     testWidgets('shows nothing when there are no ratings yet', (tester) async {
@@ -298,10 +324,77 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
-          home: JobDetailScreen(job: job, alreadyApplied: false, onApply: () {}),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: JobDetailScreen(
+            job: job,
+            alreadyApplied: false,
+            onApply: () {},
+          ),
         ),
       );
       expect(find.textContaining('ratings from past workers'), findsNothing);
+    });
+
+    testWidgets(
+      'shows the employer trust badge even with zero ratings yet',
+      (tester) async {
+        final job = {
+          ...ownedJob,
+          "employer": {
+            "name": "Mama Kadi",
+            "verification_status": "unverified",
+            "verification_type": "individual",
+            "industry": null,
+            "avg_rating": null,
+            "rating_count": 0,
+            "trust_tier": "fair",
+          },
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: JobDetailScreen(
+              job: job,
+              alreadyApplied: false,
+              onApply: () {},
+            ),
+          ),
+        );
+        expect(find.text('Fair standing'), findsOneWidget);
+      },
+    );
+
+    testWidgets('shows a caution trust badge for a low-trust employer', (
+      tester,
+    ) async {
+      final job = {
+        ...ownedJob,
+        "employer": {
+          "name": "Risky Co",
+          "verification_status": "rejected",
+          "verification_type": "business",
+          "industry": null,
+          "avg_rating": null,
+          "rating_count": 0,
+          "trust_tier": "caution",
+        },
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: JobDetailScreen(
+            job: job,
+            alreadyApplied: false,
+            onApply: () {},
+          ),
+        ),
+      );
+      expect(find.text('Use caution'), findsOneWidget);
     });
   });
 }

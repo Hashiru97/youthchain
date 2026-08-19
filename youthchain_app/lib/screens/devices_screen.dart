@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -46,14 +47,14 @@ class _DevicesScreenState extends State<DevicesScreen> {
         });
       } else {
         setState(() {
-          _error = 'Could not load your devices.';
+          _error = context.l10n.couldNotLoadDevices;
           _isLoading = false;
         });
       }
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Network error loading your devices.';
+        _error = context.l10n.networkErrorLoadingDevices;
         _isLoading = false;
       });
     }
@@ -62,24 +63,27 @@ class _DevicesScreenState extends State<DevicesScreen> {
   Future<void> _confirmAndRevoke(Map session) async {
     final bool isCurrent = session['is_current'] == true;
     final int id = (session['id'] as num).toInt();
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Revoke this device?'),
+        title: Text(l10n.revokeThisDeviceTitle),
         content: Text(
           isCurrent
-              ? 'This is the device you\'re using right now. Revoking it will sign you out immediately.'
-              : '${session['device_label'] ?? 'This device'} will be signed out immediately.',
+              ? l10n.revokeCurrentDeviceWarning
+              : l10n.revokeOtherDeviceWarning(
+                  session['device_label'] ?? l10n.thisDeviceLabel,
+                ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancelButton),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.colors.error),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Revoke'),
+            child: Text(l10n.revokeButton),
           ),
         ],
       ),
@@ -105,18 +109,18 @@ class _DevicesScreenState extends State<DevicesScreen> {
         }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Device revoked')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.deviceRevoked)));
         await _fetch();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not revoke that device')),
+          SnackBar(content: Text(context.l10n.couldNotRevokeDevice)),
         );
       }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Network error')));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.networkErrorGeneric)));
     } finally {
       if (mounted) setState(() => _revoking.remove(id));
     }
@@ -127,10 +131,10 @@ class _DevicesScreenState extends State<DevicesScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text('Devices'),
+        title: Text(context.l10n.devicesMenuItem),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetch,
           ),
@@ -158,7 +162,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             const SizedBox(height: 120),
             EmptyState(
               icon: Icons.error_outline_rounded,
-              title: 'Something went wrong',
+              title: context.l10n.somethingWentWrong,
               subtitle: _error!,
             ),
           ],
@@ -169,11 +173,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
       return RefreshIndicator(
         onRefresh: _fetch,
         child: ListView(
-          children: const [
-            SizedBox(height: 120),
+          children: [
+            const SizedBox(height: 120),
             EmptyState(
               icon: Icons.devices_other_rounded,
-              title: 'No active sessions',
+              title: context.l10n.noActiveSessions,
             ),
           ],
         ),
@@ -194,7 +198,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final bool isCurrent = session['is_current'] == true;
     final bool isApp = session['channel'] == 'app';
     final int id = (session['id'] as num).toInt();
-    final String label = (session['device_label'] as String?) ?? 'Unknown device';
+    final String label = (session['device_label'] as String?) ?? context.l10n.unknownDeviceLabel;
     final String? lastSeenRaw = session['last_seen_at'] as String?;
     final lastSeen = lastSeenRaw != null ? DateTime.tryParse(lastSeenRaw) : null;
     final bool isRevoking = _revoking.contains(id);
@@ -250,7 +254,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text(
-                          'This device',
+                          context.l10n.thisDeviceLabel,
                           style: TextStyle(
                             color: context.colors.success,
                             fontSize: 11,
@@ -264,8 +268,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 const SizedBox(height: 2),
                 Text(
                   lastSeen != null
-                      ? '${isApp ? "Mobile app" : "Web browser"} · last active ${_formatWhen(lastSeen)}'
-                      : (isApp ? "Mobile app" : "Web browser"),
+                      ? context.l10n.deviceLastActive(
+                          isApp ? context.l10n.mobileAppLabel : context.l10n.webBrowserLabel,
+                          _formatWhen(context, lastSeen),
+                        )
+                      : (isApp ? context.l10n.mobileAppLabel : context.l10n.webBrowserLabel),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -279,7 +286,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : IconButton(
-                  tooltip: 'Revoke',
+                  tooltip: context.l10n.revokeButton,
                   icon: const Icon(Icons.logout_rounded, size: 20),
                   color: context.colors.error,
                   onPressed: () => _confirmAndRevoke(session),
@@ -289,14 +296,14 @@ class _DevicesScreenState extends State<DevicesScreen> {
     );
   }
 
-  String _formatWhen(DateTime dt) {
+  String _formatWhen(BuildContext context, DateTime dt) {
     final local = dt.toLocal();
     final now = DateTime.now();
     final diff = now.difference(local);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    if (diff.inMinutes < 1) return context.l10n.justNowLabel;
+    if (diff.inMinutes < 60) return context.l10n.minutesAgoLabel(diff.inMinutes);
+    if (diff.inHours < 24) return context.l10n.hoursAgoLabel(diff.inHours);
+    if (diff.inDays < 7) return context.l10n.daysAgoLabel(diff.inDays);
     return '${local.day}/${local.month}/${local.year}';
   }
 }

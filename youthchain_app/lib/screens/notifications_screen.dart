@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state.dart';
@@ -169,10 +170,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(context.l10n.notificationsTooltip),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: context.l10n.refreshTooltip,
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _fetch,
           ),
@@ -184,13 +185,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ? const SkeletonListView()
             : notifications.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 120),
+                children: [
+                  const SizedBox(height: 120),
                   EmptyState(
                     icon: Icons.notifications_none_rounded,
-                    title: 'No notifications yet',
-                    subtitle:
-                        "You'll see updates about your applications and messages here.",
+                    title: context.l10n.noNotificationsYetTitle,
+                    subtitle: context.l10n.noNotificationsYetSubtitle,
                   ),
                 ],
               )
@@ -203,8 +203,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   final n = notifications[index];
                   final bool isRead = n['read'] == true;
                   return Semantics(
-                    label:
-                        "${n['title']}${isRead ? '' : ', unread'}. ${n['body'] ?? ''}",
+                    label: isRead
+                        ? context.l10n.notificationSemantics(n['title'] ?? '', n['body'] ?? '')
+                        : context.l10n.notificationSemanticsUnread(n['title'] ?? '', n['body'] ?? ''),
                     // Material (colored) + InkWell, not InkWell wrapping an
                     // opaque Container -- real gap found via user feedback
                     // ("can't tell the tap registered"): Material paints ink

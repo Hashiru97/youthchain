@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/screens/notifications_screen.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
@@ -75,7 +77,12 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: NotificationsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: NotificationsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Application accepted'), findsOneWidget);
@@ -87,7 +94,12 @@ void main() {
       return http.Response(jsonEncode({'notifications': [], 'unread_count': 0}), 200);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: NotificationsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: NotificationsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('No notifications yet'), findsOneWidget);
@@ -114,7 +126,12 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: NotificationsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: NotificationsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('You were rated'));
@@ -147,7 +164,12 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: NotificationsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: NotificationsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Gig marked complete'));
@@ -186,7 +208,12 @@ void main() {
       return http.Response('not found', 404);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: NotificationsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: NotificationsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('New message'));
