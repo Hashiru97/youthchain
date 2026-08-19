@@ -13,9 +13,17 @@
 # have been a compose file that started multiple processes with silently
 # broken security properties, not a real scaling story.
 #
-# Usage:
+# Usage (local/dev, no TLS):
 #   docker compose -f docker-compose.scale.yml up -d --build
-#   curl http://localhost:8080/healthz   # via nginx, not a direct backend port
+#   curl http://localhost:8080/healthz   # via nginx directly, not a caddy/TLS path
+#
+# Usage (production, real domain with DNS already pointed at this host):
+#   1. Edit Caddyfile.scale: replace "your-domain.example" with your real domain.
+#   2. docker compose -f docker-compose.scale.yml --profile production up -d --build
+#   Caddy (the `caddy` service, gated behind the `production` profile so it
+#   never starts for plain local/dev use) terminates TLS the same way
+#   docker-compose.tls.yml's does, then fronts nginx instead of a single
+#   backend instance.
 #
 # Two real bugs found and fixed getting this to actually work, not
 # guessed: (1) plain `depends_on: [postgres]` only waits for the container
@@ -36,23 +44,24 @@
 # check tripped via one replica is correctly seen by the others (Redis
 # shared state, not per-process).
 #
-# THIRD REAL GAP FOUND, NOT YET FIXED -- this stack terminates no TLS
-# anywhere, but sets FLASK_ENV=production on every backend, which makes
-# app.py mark the session cookie Secure (see app.py's own comment on
-# SESSION_COOKIE_SECURE: "deploy behind TLS ... for any real environment").
-# A Secure-flagged cookie sent over plain HTTP is silently dropped by the
-# browser -- employer login and the job-seeker portal login (both real
-# session-cookie auth, not JWT) will appear to succeed (200, Set-Cookie
-# sent) but no session will ever actually persist, on this stack exactly
-# as shipped. This is NOT fixed by adding a TLS-terminating load balancer
-# in front of this stack either: loadbalancer/nginx.conf unconditionally
-# sets `proxy_set_header X-Forwarded-Proto $scheme;`, and $scheme here is
-# always "http" (nginx itself only ever `listen`s on 80) -- it overwrites
-# whatever a real upstream terminator already set, so Flask's ProxyFix
-# would still see request.is_secure == False regardless of what's in
-# front. DO NOT expose this stack to real users until TLS termination is
-# added INSIDE nginx.conf itself (cert + `listen 443 ssl` + redirect from
-# 80), since nginx is this topology's actual internet-facing edge.
+# THIRD REAL GAP, FOUND AND NOW CLOSED -- this stack sets
+# FLASK_ENV=production on every backend, which makes app.py mark the
+# session cookie Secure, so it needs a real TLS-terminating edge in front
+# or every session-cookie login (employer, job-seeker portal) silently
+# fails to persist. Fixing this inside nginx.conf itself would mean
+# hand-rolling certificate provisioning/renewal (certbot + a cron job)
+# nginx has no built-in machinery for — instead this stack reuses the
+# already-built, already-verified Caddy edge from docker-compose.tls.yml:
+# the `caddy` service below terminates TLS with automatic Let's Encrypt
+# certs and reverse-proxies to nginx, which keeps doing exactly what it
+# already did (round-robin across backend1/2/3). The half of this bug that
+# was actually inside nginx.conf -- it unconditionally overwrote
+# X-Forwarded-Proto with its own always-"http" $scheme, silently
+# discarding whatever a real upstream terminator had already set -- is
+# fixed there directly (see nginx.conf's own comment on
+# $proxy_x_forwarded_proto). DO NOT expose the plain :8080 nginx port
+# (below) to real users; only the `caddy` service is meant to be
+# internet-facing.
 
 services:
   postgres:
@@ -192,7 +201,28 @@ services:
       - backend3
     restart: unless-stopped
 
+  # TLS-terminating edge for production use — see this file's header
+  # comment. Gated behind the `production` profile so a plain `docker
+  # compose -f docker-compose.scale.yml up` (local/dev, no real domain)
+  # never tries to start it: Caddy would otherwise sit there failing to
+  # get a certificate for the placeholder domain in Caddyfile.scale.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["production"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.scale:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   uploads-data:
   backups-data:
+  caddy-data:
+  caddy-config:

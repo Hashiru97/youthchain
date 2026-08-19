@@ -113,6 +113,23 @@ jobs:
         # services above) rather than a separate job, to keep this one
         # simple.
         run: pip-audit -r requirements.txt
+      - name: Static analysis (SAST) of this codebase's own Python source
+        # Real value, not boilerplate: this scans code THIS project wrote
+        # (app.py, scripts/, scanner/) for insecure patterns -- pip-audit
+        # above only ever checks for known CVEs in third-party packages,
+        # so a real coding mistake made in this repo (a hardcoded bind
+        # address, a weak hash used the wrong way, unsafe subprocess/SQL
+        # construction) would sail through pip-audit undetected. Threshold
+        # (-ll -ii = medium+ severity AND medium+ confidence) picked only
+        # after actually running bandit against this exact codebase, not
+        # guessed -- see requirements-dev.txt's own comment on the pinned
+        # `bandit` version for the full before/after finding counts and
+        # why the two real medium+/medium+ hits it found
+        # (_password_is_breached's SHA-1 use, socketio.run's 0.0.0.0 bind)
+        # are each suppressed inline with a `# nosec BXXX` + explanation
+        # rather than raising this threshold to hide them. Runs on both
+        # matrix legs, same accepted redundancy as pip-audit above.
+        run: bandit -r . -x ./tests,./migrations,./venv -ll -ii
       - run: python -m pytest tests/ -v
 
   blockchain:
@@ -176,7 +193,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - run: docker build -t youthchain-backend:ci ./backend
+      # Context must be the repo root, not ./backend -- backend/Dockerfile
+      # COPYs a sibling blockchain/ directory (see its own comment on why:
+      # app.py's _run_hardhat_script() shells out to Hardhat CLI scripts
+      # that live there). Real, currently-broken bug found while adding
+      # the Trivy scan below: `./backend` as context makes that COPY fail
+      # every time, so this build step -- and everything after it in this
+      # job -- has never actually succeeded in CI. docker-compose.yml's
+      # own backend service already gets this right (context: .,
+      # dockerfile: backend/Dockerfile); this line just hadn't matched it.
+      - run: docker build -t youthchain-backend:ci -f backend/Dockerfile .
+      - name: Scan backend image for OS/dependency CVEs (Trivy)
+        # Real gap this closes: pip-audit (backend job, above) only ever
+        # sees requirements.txt -- it has no visibility into the apt
+        # packages this image layers on top of python:3.11-slim
+        # (build-essential, postgresql-client, curl, gnupg, nodejs -- see
+        # backend/Dockerfile) or into vulnerabilities in the base image
+        # itself. A built image can be fully clean per pip-audit and still
+        # ship a known-vulnerable glibc/openssl/nodejs from the OS layer,
+        # with nothing in this pipeline that would ever notice. vuln-type
+        # os,library (Trivy's default) is left in place rather than
+        # narrowed to os-only -- redundant with pip-audit for the Python
+        # dependency half, same accepted trade-off as this job's own
+        # Redis/Postgres services running on both matrix legs.
+        #
+        # ignore-unfixed: true -- deliberately, not to weaken the gate but
+        # to keep it meaningful: unlike pip-audit's PyPI advisory feed
+        # (which only lists an advisory once a fixed version exists),
+        # Trivy's OS-package feeds routinely carry CVEs Debian/the
+        # upstream vendor has triaged but not yet patched. Failing CI on
+        # those would block every build on something no change in this
+        # repo could fix, which trains reviewers to reflexively rerun/
+        # ignore red CI instead of investigating it -- worse for real
+        # security posture than only gating on the CVEs that have an
+        # actual upgrade path today.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: youthchain-backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "HIGH,CRITICAL"
       - name: Run container and verify /healthz
         run: |
           docker run -d --name ci-backend -p 5000:5000 \
@@ -191,7 +248,7 @@ jobs:
           echo "Container never became healthy:"
           docker logs ci-backend
           exit 1
-      - name: Build pg_cron Postgres image and verify the extension actually loads
+      - name: Build pg_cron Postgres image
         # The one place pg_cron itself is verified in CI — the backend
         # job's own Postgres *service* container (below) stays plain
         # postgres:16-alpine (GH Actions services can't build inline from
@@ -201,8 +258,26 @@ jobs:
         # backend/tests/test_scanner_pipeline.py). This is cheap enough
         # to do for real instead: build the image, start it, and confirm
         # CREATE EXTENSION + cron.schedule actually succeed against it.
+        # Split into its own build-only step (Trivy scans the built image
+        # next, before it's ever started) rather than one combined
+        # build-and-run step as before.
         run: |
           docker build -t youthchain-postgres-cron:ci ./infra/postgres-cron
+      - name: Scan postgres-cron image for OS/dependency CVEs (Trivy)
+        # Same gap and same reasoning as the backend image's Trivy step
+        # above, applied to this image's own apt layer (postgresql-16-cron
+        # on top of FROM postgres:16 -- see infra/postgres-cron/Dockerfile)
+        # -- nothing else in this pipeline ever looks at this image at
+        # all, pip-audit only runs against backend/requirements.txt.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: youthchain-postgres-cron:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "HIGH,CRITICAL"
+      - name: Start postgres-cron and verify pg_cron actually loads
+        run: |
           docker run -d --name ci-postgres-cron \
             -e POSTGRES_PASSWORD=ci-test \
             -e POSTGRES_DB=youthchain \
@@ -215,3 +290,58 @@ jobs:
           docker exec ci-postgres-cron psql -U postgres -d youthchain -c "CREATE EXTENSION pg_cron;"
           docker exec ci-postgres-cron psql -U postgres -d youthchain -c "SELECT cron.schedule('ci-smoke-test', '*/5 * * * *', \$\$SELECT 1\$\$);"
           docker exec ci-postgres-cron psql -U postgres -d youthchain -c "SELECT jobname FROM cron.job WHERE jobname = 'ci-smoke-test';" | grep -q ci-smoke-test
+
+  secrets-scan:
+    name: Full-repo secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # fetch-depth: 0, deliberately unlike every other checkout in this
+      # file -- every other job only ever needs the current tree, but a
+      # secret committed once and later deleted is still a live secret
+      # (still sitting in git history, pullable by anyone with clone
+      # access) and a shallow checkout would make gitleaks blind to it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned release tarball, checksum-verified)
+        # Deliberately the plain gitleaks CLI via a pinned+checksummed
+        # GitHub Release, NOT the `gitleaks/gitleaks-action` Marketplace
+        # action every other third-party tool in this file is consumed
+        # as (a `uses:` step pinned to a commit SHA, see this file's own
+        # header comment) -- considered and rejected specifically because
+        # it's a different kind of dependency than everything else here.
+        # gitleaks-action ships as a closed-source, commercially-licensed
+        # (not MIT) bundled dist/index.js -- unlike a SHA-pinned checkout/
+        # setup-python/etc, its actual scanning behavior can't be read or
+        # audited from source, and free usage is conditional on this
+        # staying a personal-account repo (github.com/Hashiru97/youthchain
+        # today): the exact same action would start silently demanding a
+        # paid GITLEAKS_LICENSE the moment this repo ever moves under a
+        # GitHub organization, with no CI-time warning beforehand -- a
+        # "correct only if the org/personal split never changes" trap,
+        # the same class of fragility BL/Phase-3's remote-backup-retention
+        # finding calls out elsewhere (see backend/scripts/backup.py).
+        # gitleaks itself (the scanner, MIT-licensed, github.com/gitleaks/
+        # gitleaks) has no such license gate ever, for anyone -- so this
+        # downloads that CLI directly, pinned to an exact release version
+        # with its SHA-256 verified against the checksum GitHub itself
+        # publishes for that release (the closest binary-artifact
+        # equivalent of this file's SHA-pinning-over-tags policy for
+        # Actions).
+        run: |
+          set -euo pipefail
+          curl -fsSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+      - name: Scan full repo (working tree + history) for committed secrets
+        # --redact: the whole point of this job is to keep this pipeline's
+        # own logs (world-readable on a public repo, or at minimum
+        # broadly readable inside a private one) from becoming a second
+        # place a real leaked secret ends up printed in full. A non-zero
+        # exit (a real finding) fails the build, same gate semantics as
+        # pip-audit/npm audit/Trivy elsewhere in this file.
+        run: ./gitleaks detect --source . --redact --verbose

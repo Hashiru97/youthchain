@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:youthchain_app/l10n/app_localizations.dart';
 import 'package:youthchain_app/l10n/kri_material_fallback.dart';
@@ -28,6 +29,14 @@ void main() {
       .setMockMethodCallHandler(secureChannel, (call) async => null);
 
   setUp(() {
+    // _loadExistingProfile() now reads /api/candidate/me via
+    // ApiClient.getWithCache (BL-37 offline read caching, extended to this
+    // screen), which writes through SharedPreferences on every successful
+    // fetch -- without a mocked plugin instance that call never resolves
+    // under flutter_test, hanging every pumpAndSettle() below. Same fix
+    // job_screen_language_menu_test.dart and saved_jobs_screen_test.dart
+    // already needed for the same reason.
+    SharedPreferences.setMockInitialValues({});
     ApiClient.baseUrl = 'http://127.0.0.1:5000';
     ApiClient.testClient = null;
   });
@@ -584,6 +593,85 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Export as PDF'), findsOneWidget);
+    },
+  );
+
+  // ---------------------------------------------------------------------
+  // BL-37 follow-up: this screen previously called
+  // ApiClient.instance.get('/api/candidate/me') directly, with no offline
+  // fallback -- a network failure meant the form just started blank, even
+  // for a user re-opening their own already-saved profile. Now on
+  // getWithCache (see saved_jobs_screen_test.dart / passport_screen.dart
+  // for the same pattern), reopening the screen offline should restore
+  // the last successfully loaded profile instead.
+
+  testWidgets(
+    'falls back to the last loaded profile and shows an offline banner when the network fails',
+    (tester) async {
+      ApiClient.testClient = MockClient(
+        (request) async => route(
+          request,
+          candidate: {"name": "Zeus", "email": "zeus@test.com"},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ProfileCvScreen(userId: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Zeus'), findsOneWidget);
+
+      // Go offline and reopen the screen (e.g. navigating back into it) --
+      // getWithCache should fall back to the copy cached by the successful
+      // load above instead of showing a blank form. A fresh Key forces a
+      // real remount (initState rerun) rather than Flutter just updating
+      // the already-mounted State in place, which a same-config pumpWidget
+      // would otherwise do.
+      ApiClient.testClient = MockClient((request) async {
+        throw Exception('connection refused');
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ProfileCvScreen(key: UniqueKey(), userId: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Zeus'), findsOneWidget);
+      expect(find.textContaining("You're offline"), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'starts with a blank form when offline with no profile ever cached',
+    (tester) async {
+      ApiClient.testClient = MockClient((request) async {
+        throw Exception('connection refused');
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ProfileCvScreen(userId: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Zeus'), findsNothing);
+      expect(find.textContaining("You're offline"), findsNothing);
+      expect(find.text('Tell us about you'), findsOneWidget);
     },
   );
 }

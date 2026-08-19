@@ -171,3 +171,274 @@ def test_write_status_file_never_raises_even_if_the_directory_is_unwritable(back
 
     # Must not raise.
     backup_module._write_status_file(str(tmp_path / "unwritable"), success=True)
+
+
+# --- Encryption (BACKUP_ENCRYPTION_RECIPIENT / age) ----------------------
+#
+# encrypt_backup() itself was also live-verified for real, not just here:
+# downloaded the real `age`/`age-keygen` v1.3.1 Windows binaries, generated
+# a real keypair, ran create_backup() -> encrypt_backup() -> (restore.py's)
+# _decrypt_archive() end to end against a throwaway tmp tree, and confirmed
+# the decrypted instance/youthchain.db content matched the original
+# byte-for-byte and that the plaintext .tar.gz no longer existed on disk
+# after encryption. These tests below mock the `age` subprocess call
+# instead (same reasoning as the pg_dump-missing-from-path test above --
+# CI's plain `pytest tests/` leg runs on a bare ubuntu-latest runner with
+# no `age` installed; only the built backend Docker image has it, via
+# backend/Dockerfile's apt-get) so this suite doesn't depend on a real
+# `age` binary being on PATH to pass.
+
+def test_prune_old_backups_also_prunes_encrypted_age_archives(backup_module, tmp_path):
+    """.tar.gz.age (age-encrypted) archives must age out under --keep the
+    same as plain .tar.gz ones -- a host can accumulate a mix of both if
+    BACKUP_ENCRYPTION_RECIPIENT was only added partway through its
+    history."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    for i in range(3):
+        (backup_dir / f"youthchain_backup_2026080{i}T000000Z.tar.gz.age").write_text("x")
+    for i in range(3, 5):
+        (backup_dir / f"youthchain_backup_2026080{i}T000000Z.tar.gz").write_text("x")
+
+    backup_module.prune_old_backups(str(backup_dir), keep=2)
+
+    remaining = sorted(os.listdir(backup_dir))
+    assert remaining == [
+        "youthchain_backup_20260803T000000Z.tar.gz",
+        "youthchain_backup_20260804T000000Z.tar.gz",
+    ]
+
+
+def test_encrypt_backup_fails_loudly_when_recipient_unset(backup_module, monkeypatch, tmp_path):
+    monkeypatch.delenv("BACKUP_ENCRYPTION_RECIPIENT", raising=False)
+    fake_archive = tmp_path / "youthchain_backup_x.tar.gz"
+    fake_archive.write_text("plaintext archive content")
+
+    with pytest.raises(RuntimeError, match="BACKUP_ENCRYPTION_RECIPIENT is not set"):
+        backup_module.encrypt_backup(str(fake_archive))
+
+    # Must not have touched the plaintext archive on a config error.
+    assert fake_archive.exists()
+
+
+def test_encrypt_backup_fails_loudly_when_age_binary_missing(backup_module, monkeypatch, tmp_path):
+    monkeypatch.setenv("BACKUP_ENCRYPTION_RECIPIENT", "age1fakerecipientforthistest0000000000000000000000000000")
+    monkeypatch.setattr(backup_module.shutil, "which", lambda name: None)
+    fake_archive = tmp_path / "youthchain_backup_x.tar.gz"
+    fake_archive.write_text("plaintext archive content")
+
+    with pytest.raises(RuntimeError, match="age is not installed"):
+        backup_module.encrypt_backup(str(fake_archive))
+
+    assert fake_archive.exists()
+
+
+def test_encrypt_backup_removes_plaintext_and_returns_age_path_on_success(backup_module, monkeypatch, tmp_path):
+    """Fakes a successful `age` invocation (real subprocess behavior is
+    covered by the live-verified round trip described above) to confirm
+    encrypt_backup()'s own bookkeeping: the plaintext archive must be
+    gone, and the returned path must be the new `.age` file."""
+    monkeypatch.setenv("BACKUP_ENCRYPTION_RECIPIENT", "age1fakerecipientforthistest0000000000000000000000000000")
+    monkeypatch.setattr(backup_module.shutil, "which", lambda name: "/usr/bin/age")
+
+    fake_archive = tmp_path / "youthchain_backup_x.tar.gz"
+    fake_archive.write_text("plaintext archive content")
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stderr = b""
+
+    def _fake_run(cmd, stdout=None, stderr=None, timeout=None):
+        # Real `age` writes ciphertext to the --output path; this fake
+        # just writes placeholder bytes there so the file exists, the way
+        # the real binary's side effect would.
+        out_path = cmd[cmd.index("--output") + 1]
+        with open(out_path, "wb") as f:
+            f.write(b"fake ciphertext")
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(backup_module.subprocess, "run", _fake_run)
+
+    result_path = backup_module.encrypt_backup(str(fake_archive))
+
+    assert result_path == str(fake_archive) + ".age"
+    assert os.path.exists(result_path)
+    assert not fake_archive.exists()  # plaintext must not survive encryption
+
+
+def test_encrypt_backup_raises_and_leaves_plaintext_when_age_itself_fails(backup_module, monkeypatch, tmp_path):
+    monkeypatch.setenv("BACKUP_ENCRYPTION_RECIPIENT", "age1fakerecipientforthistest0000000000000000000000000000")
+    monkeypatch.setattr(backup_module.shutil, "which", lambda name: "/usr/bin/age")
+
+    fake_archive = tmp_path / "youthchain_backup_x.tar.gz"
+    fake_archive.write_text("plaintext archive content")
+
+    class _FakeFailedProcess:
+        returncode = 1
+        stderr = b"age: error: no identity matched any of the recipients"
+
+    monkeypatch.setattr(backup_module.subprocess, "run", lambda *a, **k: _FakeFailedProcess())
+
+    with pytest.raises(RuntimeError, match="age encryption failed"):
+        backup_module.encrypt_backup(str(fake_archive))
+
+    # A failed encryption must not silently destroy the only copy of the backup.
+    assert fake_archive.exists()
+
+
+# --- resolve_backup_encryption() (the fail-loud-if-uploading gate) -------
+
+def test_resolve_backup_encryption_encrypts_when_recipient_configured(backup_module, monkeypatch):
+    monkeypatch.setenv("BACKUP_ENCRYPTION_RECIPIENT", "age1fakerecipient")
+    monkeypatch.setattr(backup_module, "encrypt_backup", lambda path: path + ".age")
+
+    result = backup_module.resolve_backup_encryption("/tmp/x.tar.gz", no_encrypt=False, will_upload=False)
+
+    assert result == "/tmp/x.tar.gz.age"
+
+
+def test_resolve_backup_encryption_fails_loudly_when_uploading_unencrypted(backup_module, monkeypatch):
+    """The core of this finding: BACKUP_S3_* configured (will_upload=True)
+    but no BACKUP_ENCRYPTION_RECIPIENT must refuse to proceed, not
+    silently upload plaintext PII."""
+    monkeypatch.delenv("BACKUP_ENCRYPTION_RECIPIENT", raising=False)
+
+    with pytest.raises(RuntimeError, match="BACKUP_S3_\\* is configured"):
+        backup_module.resolve_backup_encryption("/tmp/x.tar.gz", no_encrypt=False, will_upload=True)
+
+
+def test_resolve_backup_encryption_warns_but_proceeds_for_local_only_run(backup_module, monkeypatch, capsys):
+    """No off-site upload this run (will_upload=False) -- an unencrypted
+    local-only archive is still a valid, zero-config outcome, same as
+    upload_to_s3() itself being a no-op when BACKUP_S3_* is unset."""
+    monkeypatch.delenv("BACKUP_ENCRYPTION_RECIPIENT", raising=False)
+
+    result = backup_module.resolve_backup_encryption("/tmp/x.tar.gz", no_encrypt=False, will_upload=False)
+
+    assert result == "/tmp/x.tar.gz"
+    assert "UNENCRYPTED" in capsys.readouterr().out
+
+
+def test_resolve_backup_encryption_refuses_no_encrypt_combined_with_upload(backup_module):
+    """--no-encrypt is for local debugging only -- combining it with an
+    actual off-site upload must be refused outright, not silently honored."""
+    with pytest.raises(RuntimeError, match="--no-encrypt cannot be combined with an off-site upload"):
+        backup_module.resolve_backup_encryption("/tmp/x.tar.gz", no_encrypt=True, will_upload=True)
+
+
+def test_resolve_backup_encryption_no_encrypt_is_a_noop_for_local_only_run(backup_module):
+    result = backup_module.resolve_backup_encryption("/tmp/x.tar.gz", no_encrypt=True, will_upload=False)
+    assert result == "/tmp/x.tar.gz"
+
+
+# --- Remote retention pruning (prune_remote_backups) ----------------------
+
+def test_prune_remote_backups_is_a_noop_when_s3_unconfigured(backup_module, monkeypatch):
+    for var in ("BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET", "BACKUP_S3_ACCESS_KEY", "BACKUP_S3_SECRET_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+    assert backup_module.prune_remote_backups(keep=14) is True
+
+
+def test_prune_remote_backups_is_a_noop_when_keep_is_zero(backup_module, monkeypatch):
+    # Even with S3 fully configured, keep=0 means "keep everything" --
+    # same convention as prune_old_backups()'s local retention.
+    monkeypatch.setenv("BACKUP_S3_ENDPOINT", "http://minio:9000")
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "youthchain-backups")
+    monkeypatch.setenv("BACKUP_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("BACKUP_S3_SECRET_KEY", "s")
+
+    assert backup_module.prune_remote_backups(keep=0) is True
+
+
+class _FakeS3Client:
+    """Minimal stand-in for boto3's S3 client -- just enough of
+    list_objects_v2's paginator + delete_object for prune_remote_backups()
+    to exercise its own real logic (which keys count as stale) without a
+    real MinIO/S3 endpoint. Real off-site upload/list/delete against a
+    live MinIO container is covered by the Docker verification in
+    docs/disaster-recovery.md, not here."""
+
+    def __init__(self, objects):
+        self._objects = objects
+        self.deleted = []
+
+    def get_paginator(self, name):
+        assert name == "list_objects_v2"
+        client = self
+
+        class _Paginator:
+            def paginate(self, Bucket):
+                yield {"Contents": [{"Key": k} for k in client._objects]}
+
+        return _Paginator()
+
+    def delete_object(self, Bucket, Key):
+        self.deleted.append(Key)
+
+
+def test_prune_remote_backups_deletes_only_the_oldest_beyond_keep(backup_module, monkeypatch):
+    monkeypatch.setenv("BACKUP_S3_ENDPOINT", "http://minio:9000")
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "youthchain-backups")
+    monkeypatch.setenv("BACKUP_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("BACKUP_S3_SECRET_KEY", "s")
+
+    objects = [f"youthchain_backup_2026080{i}T000000Z.tar.gz" for i in range(5)]
+    fake_client = _FakeS3Client(objects)
+
+    fake_boto3 = type(sys)("boto3")
+    fake_boto3.client = lambda *a, **k: fake_client
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    ok = backup_module.prune_remote_backups(keep=2)
+
+    assert ok is True
+    assert fake_client.deleted == [
+        "youthchain_backup_20260800T000000Z.tar.gz",
+        "youthchain_backup_20260801T000000Z.tar.gz",
+        "youthchain_backup_20260802T000000Z.tar.gz",
+    ]
+
+
+def test_prune_remote_backups_ignores_objects_outside_the_backup_naming_pattern(backup_module, monkeypatch):
+    """The bucket may hold other objects (a manual upload, a different
+    tool's data) -- pruning must only ever touch this script's own
+    youthchain_backup_*.tar.gz[.age] objects, never delete something it
+    didn't create."""
+    monkeypatch.setenv("BACKUP_S3_ENDPOINT", "http://minio:9000")
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "youthchain-backups")
+    monkeypatch.setenv("BACKUP_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("BACKUP_S3_SECRET_KEY", "s")
+
+    objects = [
+        "youthchain_backup_20260801T000000Z.tar.gz",
+        "youthchain_backup_20260802T000000Z.tar.gz.age",
+        "someone_elses_object.txt",
+        "README.md",
+    ]
+    fake_client = _FakeS3Client(objects)
+    fake_boto3 = type(sys)("boto3")
+    fake_boto3.client = lambda *a, **k: fake_client
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    ok = backup_module.prune_remote_backups(keep=1)
+
+    assert ok is True
+    assert fake_client.deleted == ["youthchain_backup_20260801T000000Z.tar.gz"]
+
+
+def test_prune_remote_backups_reports_failure_on_a_real_s3_error(backup_module, monkeypatch):
+    monkeypatch.setenv("BACKUP_S3_ENDPOINT", "http://minio:9000")
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "youthchain-backups")
+    monkeypatch.setenv("BACKUP_S3_ACCESS_KEY", "k")
+    monkeypatch.setenv("BACKUP_S3_SECRET_KEY", "s")
+
+    class _BoomClient:
+        def get_paginator(self, name):
+            raise RuntimeError("connection refused")
+
+    fake_boto3 = type(sys)("boto3")
+    fake_boto3.client = lambda *a, **k: _BoomClient()
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    assert backup_module.prune_remote_backups(keep=2) is False

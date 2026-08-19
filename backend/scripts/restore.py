@@ -23,9 +23,20 @@ requires --yes (or an interactive "yes" confirmation naming the exact
 DATABASE_URL about to be written to) before proceeding — the same
 "move aside, don't delete" safety net the SQLite path already had.
 
+Encryption: backup.py now encrypts archives with age before an off-site
+upload (BACKUP_ENCRYPTION_RECIPIENT — see backend/.env.example). This
+script transparently decrypts a `.age` archive first (into a private
+tempfile.TemporaryDirectory(), never backups/ itself) using
+BACKUP_ENCRYPTION_IDENTITY — the matching age identity (private key), as
+either a filesystem path or the raw identity content — before the
+existing SQLite/Postgres restore logic below runs unchanged against the
+decrypted .tar.gz. A plain (unencrypted) .tar.gz archive still restores
+exactly as before; this is purely additive.
+
 Usage:
     python scripts/restore.py backend/backups/youthchain_backup_20260804T120000Z.tar.gz
     python scripts/restore.py --yes backend/backups/youthchain_backup_20260804T120000Z.tar.gz
+    python scripts/restore.py backend/backups/youthchain_backup_20260804T120000Z.tar.gz.age
 """
 import argparse
 import os
@@ -123,40 +134,116 @@ def _restore_postgres_dump(dump_path: str, assume_yes: bool) -> None:
     print("[restore] Postgres dump restored successfully.")
 
 
+def _decrypt_archive(encrypted_path: str, dest_dir: str) -> str:
+    """
+    Decrypts an age-encrypted backup archive (see scripts/backup.py's
+    encrypt_backup()) into dest_dir, returning the path to the resulting
+    plaintext .tar.gz. dest_dir is always caller-provided and expected to
+    be a tempfile.TemporaryDirectory() (see restore_from() below) — the
+    decrypted plaintext, like the archive's own contents, is real PII and
+    must not linger anywhere on disk once this restore run finishes.
+
+    Requires BACKUP_ENCRYPTION_IDENTITY: either a filesystem path to an
+    age identity (private key) file, or the raw identity content itself
+    (detected by the "AGE-SECRET-KEY-" prefix every age identity starts
+    with) — same path-or-content convention FIREBASE_CREDENTIALS_JSON
+    already uses in app.py, for the same reason (some hosts only offer a
+    single-line env var, not a mounted file). Raw content is written to a
+    0600 tempfile here because `age --decrypt --identity` only accepts a
+    file path, not inline key material — age itself refuses to read an
+    identity file that isn't private (group/world-readable), so this
+    matches what age already requires, not an arbitrary extra step.
+
+    Fails loudly (sys.exit(1)) rather than falling back to anything —
+    there is no safe degraded mode for "can't decrypt an archive that IS
+    encrypted"; restoring nothing is strictly better than a confusing
+    partial failure deeper in the tar/pg_dump logic below.
+    """
+    identity_value = os.getenv("BACKUP_ENCRYPTION_IDENTITY", "").strip()
+    if not identity_value:
+        print(
+            "[restore] ERROR: this archive is age-encrypted (.age), but "
+            "BACKUP_ENCRYPTION_IDENTITY is not set. Set it to the age identity "
+            "(private key) matching the BACKUP_ENCRYPTION_RECIPIENT this "
+            "archive was encrypted with — see backend/.env.example.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if not shutil.which("age"):
+        print("[restore] ERROR: age not found on PATH — cannot decrypt this archive.", file=sys.stderr)
+        sys.exit(1)
+
+    if identity_value.startswith("AGE-SECRET-KEY-"):
+        identity_file = os.path.join(dest_dir, ".age-identity")
+        with open(identity_file, "w") as f:
+            f.write(identity_value + "\n")
+        os.chmod(identity_file, 0o600)
+    else:
+        identity_file = identity_value  # already a path on disk
+
+    decrypted_path = os.path.join(dest_dir, "decrypted_backup.tar.gz")
+    try:
+        result = subprocess.run(
+            ["age", "--decrypt", "--identity", identity_file, "--output", decrypted_path, encrypted_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=300,
+        )
+    except Exception as e:
+        print(f"[restore] ERROR: age decryption failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    if result.returncode != 0:
+        print(f"[restore] ERROR: age decryption failed: {result.stderr.decode(errors='replace')}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[restore] Decrypted {os.path.basename(encrypted_path)}")
+    return decrypted_path
+
+
 def restore_from(archive_path: str, assume_yes: bool = False) -> None:
     if not os.path.exists(archive_path):
         print(f"[restore] ERROR: archive not found: {archive_path}", file=sys.stderr)
         sys.exit(1)
 
-    with tarfile.open(archive_path, "r:gz") as tar:
-        names = tar.getnames()
-        has_postgres_dump = "postgres_dump.sql" in names
-        has_sqlite_db = "instance/youthchain.db" in names
-        has_uploads = any(n.startswith("uploads/") for n in names)
+    # A separate, dedicated TemporaryDirectory for decryption (as opposed
+    # to reusing the postgres_dump-extraction tmp below) — its lifetime
+    # needs to span the whole tarfile.open() block, since has_postgres_dump/
+    # has_uploads extraction both read from whichever path tar_path ends up
+    # pointing at.
+    with tempfile.TemporaryDirectory() as decrypt_tmp:
+        tar_path = archive_path
+        if archive_path.endswith(".age"):
+            tar_path = _decrypt_archive(archive_path, decrypt_tmp)
 
-        if has_postgres_dump:
-            with tempfile.TemporaryDirectory() as tmp:
-                tar.extract("postgres_dump.sql", tmp)
-                _restore_postgres_dump(os.path.join(tmp, "postgres_dump.sql"), assume_yes)
-            if has_uploads:
-                tar.extractall(
-                    BASE_DIR,
-                    members=[m for m in tar.getmembers() if m.name.startswith("uploads/")],
-                    filter="data",
-                )
-        else:
-            # SQLite path — move current state aside instead of deleting
-            # it outright, same safety-net behavior as before.
-            if os.path.exists(DB_PATH) or os.path.isdir(UPLOADS_DIR):
-                ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-                safety_dir = os.path.join(BACKUP_DIR, f"pre_restore_{ts}")
-                os.makedirs(safety_dir, exist_ok=True)
-                if os.path.exists(DB_PATH):
-                    shutil.move(DB_PATH, os.path.join(safety_dir, "youthchain.db"))
-                if os.path.isdir(UPLOADS_DIR):
-                    shutil.move(UPLOADS_DIR, os.path.join(safety_dir, "uploads"))
-                print(f"[restore] Existing state moved aside to {safety_dir}")
-            tar.extractall(BASE_DIR, filter="data")
+        with tarfile.open(tar_path, "r:gz") as tar:
+            names = tar.getnames()
+            has_postgres_dump = "postgres_dump.sql" in names
+            has_sqlite_db = "instance/youthchain.db" in names
+            has_uploads = any(n.startswith("uploads/") for n in names)
+
+            if has_postgres_dump:
+                with tempfile.TemporaryDirectory() as tmp:
+                    tar.extract("postgres_dump.sql", tmp)
+                    _restore_postgres_dump(os.path.join(tmp, "postgres_dump.sql"), assume_yes)
+                if has_uploads:
+                    tar.extractall(
+                        BASE_DIR,
+                        members=[m for m in tar.getmembers() if m.name.startswith("uploads/")],
+                        filter="data",
+                    )
+            else:
+                # SQLite path — move current state aside instead of deleting
+                # it outright, same safety-net behavior as before.
+                if os.path.exists(DB_PATH) or os.path.isdir(UPLOADS_DIR):
+                    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    safety_dir = os.path.join(BACKUP_DIR, f"pre_restore_{ts}")
+                    os.makedirs(safety_dir, exist_ok=True)
+                    if os.path.exists(DB_PATH):
+                        shutil.move(DB_PATH, os.path.join(safety_dir, "youthchain.db"))
+                    if os.path.isdir(UPLOADS_DIR):
+                        shutil.move(UPLOADS_DIR, os.path.join(safety_dir, "uploads"))
+                    print(f"[restore] Existing state moved aside to {safety_dir}")
+                tar.extractall(BASE_DIR, filter="data")
 
     print(f"[restore] Restored from {archive_path}")
     if has_postgres_dump:

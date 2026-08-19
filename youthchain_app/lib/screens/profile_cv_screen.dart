@@ -30,6 +30,8 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
   bool _loadingCv = false;
   bool _loadingProfile = true;
   bool _exportingPdf = false;
+  bool _showingCachedProfile = false;
+  DateTime? _profileCachedAt;
 
   // Kept for a fallback/plain-text toggle -- `cv_html` (below) is the
   // primary preview now, but some future caller (or a device where the
@@ -105,7 +107,9 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
       _savingSmsAlerts = true;
     });
     try {
-      final res = await ApiClient.instance.putJson('/api/sms_alerts', {'enabled': value});
+      final res = await ApiClient.instance.putJson('/api/sms_alerts', {
+        'enabled': value,
+      });
       if (!mounted) return;
       if (res.statusCode != 200) {
         setState(() => _smsAlertsEnabled = previous);
@@ -134,7 +138,9 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
       _savingWhatsappAlerts = true;
     });
     try {
-      final res = await ApiClient.instance.putJson('/api/whatsapp_alerts', {'enabled': value});
+      final res = await ApiClient.instance.putJson('/api/whatsapp_alerts', {
+        'enabled': value,
+      });
       if (!mounted) return;
       if (res.statusCode != 200) {
         setState(() => _whatsappAlertsEnabled = previous);
@@ -146,7 +152,9 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
       if (!mounted) return;
       setState(() => _whatsappAlertsEnabled = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.networkErrorUpdatingWhatsappAlerts)),
+        SnackBar(
+          content: Text(context.l10n.networkErrorUpdatingWhatsappAlerts),
+        ),
       );
     } finally {
       if (mounted) setState(() => _savingWhatsappAlerts = false);
@@ -173,44 +181,95 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
 
   Future<void> _loadExistingProfile() async {
     try {
-      final res = await ApiClient.instance.get('/api/candidate/me');
+      // BL-37: falls back to the last successfully loaded copy of this
+      // user's own profile when offline — same cache-fallback contract as
+      // every other read screen in this app (JobScreen, PassportScreen,
+      // MyApplicationsScreen, SavedJobsScreen). This is a user's own CV
+      // data, exactly the kind of "previously seen, should still work
+      // offline" content that cache was built for.
+      final result = await ApiClient.instance.getWithCache('/api/candidate/me');
       if (!mounted) return;
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body);
-        final candidate = body is Map ? body['candidate'] : null;
-        if (candidate is Map) {
-          if (candidate['id'] != null) {
-            await ApiClient.instance.saveCandidateId(
-              (candidate['id'] as num).toInt(),
-            );
-          }
-          _nameCtrl.text = (candidate['name'] ?? '').toString();
-          _emailCtrl.text = (candidate['email'] ?? '').toString();
-          _locationCtrl.text = (candidate['location'] ?? '').toString();
-          _skillsCtrl.text = (candidate['skills'] ?? '').toString();
-          _bioCtrl.text = (candidate['bio'] ?? '').toString();
-          _jobAlertsEnabled = candidate['job_alerts_enabled'] == true;
-          final preferredIndustries = candidate['preferred_industries'];
-          if (preferredIndustries is String) {
-            setState(() {
-              _selectedIndustries
-                ..clear()
-                ..addAll(
-                  preferredIndustries
-                      .split(',')
-                      .map((e) => e.trim())
-                      .where((e) => e.isNotEmpty),
-                );
-            });
-          }
+      final body = json.decode(result.body);
+      final candidate = body is Map ? body['candidate'] : null;
+      if (candidate is Map) {
+        if (candidate['id'] != null) {
+          await ApiClient.instance.saveCandidateId(
+            (candidate['id'] as num).toInt(),
+          );
+        }
+        _nameCtrl.text = (candidate['name'] ?? '').toString();
+        _emailCtrl.text = (candidate['email'] ?? '').toString();
+        _locationCtrl.text = (candidate['location'] ?? '').toString();
+        _skillsCtrl.text = (candidate['skills'] ?? '').toString();
+        _bioCtrl.text = (candidate['bio'] ?? '').toString();
+        _jobAlertsEnabled = candidate['job_alerts_enabled'] == true;
+        final preferredIndustries = candidate['preferred_industries'];
+        if (preferredIndustries is String) {
+          setState(() {
+            _selectedIndustries
+              ..clear()
+              ..addAll(
+                preferredIndustries
+                    .split(',')
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty),
+              );
+          });
         }
       }
+      setState(() {
+        _showingCachedProfile = result.fromCache;
+        _profileCachedAt = result.cachedAt;
+      });
+    } on NoCachedDataException {
+      // No existing profile yet, or offline on the very first load — the
+      // form just starts blank, same as before this screen existed.
     } catch (_) {
-      // No existing profile yet, or a transient network error — the form
-      // just starts blank either way, same as before this screen existed.
+      // No existing profile yet, or a transient network/parse error — the
+      // form just starts blank either way, same as before this screen
+      // existed.
     } finally {
       if (mounted) setState(() => _loadingProfile = false);
     }
+  }
+
+  Widget _buildOfflineBanner() {
+    final ago = _profileCachedAt == null
+        ? ""
+        : " (as of ${_profileCachedAt!.hour.toString().padLeft(2, '0')}:${_profileCachedAt!.minute.toString().padLeft(2, '0')})";
+    final message = context.l10n.offlineShowingPreviousDataLabel(ago);
+    return Semantics(
+      liveRegion: true,
+      label: message,
+      child: Container(
+        width: double.infinity,
+        color: context.colors.warningBg,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 16,
+              color: context.colors.warning,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.colors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -282,9 +341,7 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
       if (candidateId == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.saveProfileFirstForCv),
-          ),
+          SnackBar(content: Text(context.l10n.saveProfileFirstForCv)),
         );
         return;
       }
@@ -339,9 +396,7 @@ class _ProfileCvScreenState extends State<ProfileCvScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.couldNotOpenPrintExport),
-        ),
+        SnackBar(content: Text(context.l10n.couldNotOpenPrintExport)),
       );
     } finally {
       if (mounted) setState(() => _exportingPdf = false);
@@ -551,7 +606,11 @@ $cvHtmlFragment
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: isAi ? colors.secondary.withValues(alpha: 0.35) : colors.outline),
+        border: Border.all(
+          color: isAi
+              ? colors.secondary.withValues(alpha: 0.35)
+              : colors.outline,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -564,7 +623,11 @@ $cvHtmlFragment
           const SizedBox(width: 4),
           Text(
             isAi ? context.l10n.aiEnhancedChip : context.l10n.basicChip,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
           ),
         ],
       ),
@@ -580,353 +643,406 @@ $cvHtmlFragment
       body: SafeArea(
         child: _loadingProfile
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  children: [
-                    Container(
-                      width: double.infinity,
+            : Column(
+                children: [
+                  if (_showingCachedProfile) _buildOfflineBanner(),
+                  Expanded(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: context.colors.surface,
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        border: Border.all(color: context.colors.outline),
-                        boxShadow: cardShadow,
-                      ),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: context.colors.primaryLight,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.person_outline_rounded,
-                                    color: context.colors.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Text(
-                                  l10n.tellUsAboutYouHeading,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              l10n.profileIntroText,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              controller: _nameCtrl,
-                              decoration: InputDecoration(
-                                labelText: l10n.fullNameLabel,
-                                prefixIcon: const Icon(Icons.badge_outlined),
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? l10n.requiredField
-                                  : null,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            TextFormField(
-                              controller: _emailCtrl,
-                              decoration: InputDecoration(
-                                labelText: l10n.emailLabel,
-                                prefixIcon: const Icon(Icons.email_outlined),
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? l10n.requiredField
-                                  : null,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            TextFormField(
-                              controller: _locationCtrl,
-                              decoration: InputDecoration(
-                                labelText: l10n.locationHint,
-                                hintText: l10n.locationExampleHint,
-                                prefixIcon: const Icon(Icons.location_on_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            TextFormField(
-                              controller: _skillsCtrl,
-                              decoration: InputDecoration(
-                                labelText: l10n.skillsCommaLabel,
-                                hintText: l10n.skillsExampleHint,
-                                prefixIcon: const Icon(Icons.build_outlined),
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            TextFormField(
-                              controller: _bioCtrl,
-                              maxLines: 3,
-                              decoration: InputDecoration(
-                                labelText: l10n.shortBioLabel,
-                                hintText: l10n.bioHint,
-                                alignLabelWithHint: true,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              l10n.preferredIndustriesLabel,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              l10n.preferredIndustriesHint,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            if (_industryOptions.isEmpty)
-                              Text(
-                                l10n.noIndustriesAvailable,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              )
-                            else
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: _industryOptions.map((industry) {
-                                  final selected = _selectedIndustries.contains(
-                                    industry,
-                                  );
-                                  return FilterChip(
-                                    label: Text(industry),
-                                    selected: selected,
-                                    onSelected: (value) {
-                                      setState(() {
-                                        if (value) {
-                                          _selectedIndustries.add(industry);
-                                        } else {
-                                          _selectedIndustries.remove(industry);
-                                        }
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            const SizedBox(height: AppSpacing.md),
-                            // Candidate.job_alerts_enabled -- opt-in
-                            // notification (see
-                            // app._dispatch_job_alerts_for_scan) whenever
-                            // a newly scraped Discover job's required
-                            // skills overlap the skills entered above.
-                            // Distinct from Discover's own per-search
-                            // "Alert me" bell (SavedSearchesScreen): this
-                            // one alert covers every future scan, driven
-                            // by the profile rather than a one-off search.
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              value: _jobAlertsEnabled,
-                              onChanged: (value) => setState(() => _jobAlertsEnabled = value),
-                              title: Text(l10n.jobAlertsTitle),
-                              subtitle: Text(l10n.jobAlertsSubtitle),
-                            ),
-                            // Saves immediately (see _setSmsAlertsEnabled)
-                            // -- an account-level setting, not part of the
-                            // form Save Profile below submits.
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              value: _smsAlertsEnabled,
-                              onChanged: _savingSmsAlerts ? null : _setSmsAlertsEnabled,
-                              title: Text(l10n.smsAlertsTitle),
-                              subtitle: Text(l10n.smsAlertsSubtitle),
-                            ),
-                            // Saves immediately (see _setWhatsappAlertsEnabled)
-                            // -- same account-level, independent-of-SMS
-                            // opt-in as above.
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              value: _whatsappAlertsEnabled,
-                              onChanged: _savingWhatsappAlerts ? null : _setWhatsappAlertsEnabled,
-                              title: Text(l10n.whatsappAlertsTitle),
-                              subtitle: Text(l10n.whatsappAlertsSubtitle),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            const LanguagePicker(),
-                            const SizedBox(height: AppSpacing.sm),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 48,
-                              child: ElevatedButton.icon(
-                                icon: _saving
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Icon(Icons.save_outlined, size: 18),
-                                label: Text(
-                                  _saving ? l10n.savingButton : l10n.saveProfileButton,
-                                ),
-                                onPressed: _saving ? null : _saveProfile,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: context.colors.surface,
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        border: Border.all(color: context.colors.outline),
-                        boxShadow: cardShadow,
-                      ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: context.colors.tertiaryLight,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.description_outlined,
-                                  color: context.colors.tertiary,
-                                  size: 20,
-                                ),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: context.colors.surface,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              border: Border.all(color: context.colors.outline),
+                              boxShadow: cardShadow,
+                            ),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: context.colors.primaryLight,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.person_outline_rounded,
+                                          color: context.colors.primary,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppSpacing.sm),
+                                      Text(
+                                        l10n.tellUsAboutYouHeading,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleLarge,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    l10n.profileIntroText,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  TextFormField(
+                                    controller: _nameCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.fullNameLabel,
+                                      prefixIcon: const Icon(
+                                        Icons.badge_outlined,
+                                      ),
+                                    ),
+                                    validator: (v) =>
+                                        (v == null || v.trim().isEmpty)
+                                        ? l10n.requiredField
+                                        : null,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  TextFormField(
+                                    controller: _emailCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.emailLabel,
+                                      prefixIcon: const Icon(
+                                        Icons.email_outlined,
+                                      ),
+                                    ),
+                                    keyboardType: TextInputType.emailAddress,
+                                    validator: (v) =>
+                                        (v == null || v.trim().isEmpty)
+                                        ? l10n.requiredField
+                                        : null,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  TextFormField(
+                                    controller: _locationCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.locationHint,
+                                      hintText: l10n.locationExampleHint,
+                                      prefixIcon: const Icon(
+                                        Icons.location_on_outlined,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  TextFormField(
+                                    controller: _skillsCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.skillsCommaLabel,
+                                      hintText: l10n.skillsExampleHint,
+                                      prefixIcon: const Icon(
+                                        Icons.build_outlined,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  TextFormField(
+                                    controller: _bioCtrl,
+                                    maxLines: 3,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.shortBioLabel,
+                                      hintText: l10n.bioHint,
+                                      alignLabelWithHint: true,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  Text(
+                                    l10n.preferredIndustriesLabel,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.preferredIndustriesHint,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  if (_industryOptions.isEmpty)
+                                    Text(
+                                      l10n.noIndustriesAvailable,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    )
+                                  else
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: _industryOptions.map((
+                                        industry,
+                                      ) {
+                                        final selected = _selectedIndustries
+                                            .contains(industry);
+                                        return FilterChip(
+                                          label: Text(industry),
+                                          selected: selected,
+                                          onSelected: (value) {
+                                            setState(() {
+                                              if (value) {
+                                                _selectedIndustries.add(
+                                                  industry,
+                                                );
+                                              } else {
+                                                _selectedIndustries.remove(
+                                                  industry,
+                                                );
+                                              }
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  // Candidate.job_alerts_enabled -- opt-in
+                                  // notification (see
+                                  // app._dispatch_job_alerts_for_scan) whenever
+                                  // a newly scraped Discover job's required
+                                  // skills overlap the skills entered above.
+                                  // Distinct from Discover's own per-search
+                                  // "Alert me" bell (SavedSearchesScreen): this
+                                  // one alert covers every future scan, driven
+                                  // by the profile rather than a one-off search.
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: _jobAlertsEnabled,
+                                    onChanged: (value) => setState(
+                                      () => _jobAlertsEnabled = value,
+                                    ),
+                                    title: Text(l10n.jobAlertsTitle),
+                                    subtitle: Text(l10n.jobAlertsSubtitle),
+                                  ),
+                                  // Saves immediately (see _setSmsAlertsEnabled)
+                                  // -- an account-level setting, not part of the
+                                  // form Save Profile below submits.
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: _smsAlertsEnabled,
+                                    onChanged: _savingSmsAlerts
+                                        ? null
+                                        : _setSmsAlertsEnabled,
+                                    title: Text(l10n.smsAlertsTitle),
+                                    subtitle: Text(l10n.smsAlertsSubtitle),
+                                  ),
+                                  // Saves immediately (see _setWhatsappAlertsEnabled)
+                                  // -- same account-level, independent-of-SMS
+                                  // opt-in as above.
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: _whatsappAlertsEnabled,
+                                    onChanged: _savingWhatsappAlerts
+                                        ? null
+                                        : _setWhatsappAlertsEnabled,
+                                    title: Text(l10n.whatsappAlertsTitle),
+                                    subtitle: Text(l10n.whatsappAlertsSubtitle),
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  const LanguagePicker(),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 48,
+                                    child: ElevatedButton.icon(
+                                      icon: _saving
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.save_outlined,
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        _saving
+                                            ? l10n.savingButton
+                                            : l10n.saveProfileButton,
+                                      ),
+                                      onPressed: _saving ? null : _saveProfile,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Text(
-                                l10n.cvPreviewTitle,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            l10n.cvPreviewIntro,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          SizedBox(
+                          Container(
                             width: double.infinity,
-                            height: 46,
-                            child: OutlinedButton.icon(
-                              icon: _loadingCv
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.auto_awesome_outlined,
-                                      size: 18,
-                                    ),
-                              label: Text(
-                                _loadingCv ? l10n.generatingButton : l10n.generateCvButton,
-                              ),
-                              onPressed: _loadingCv ? null : _generateCv,
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: context.colors.surface,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              border: Border.all(color: context.colors.outline),
+                              boxShadow: cardShadow,
                             ),
-                          ),
-                          if (_cvHtml != null) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildCvModeChip(context),
-                                const Spacer(),
-                                TextButton.icon(
-                                  onPressed: () => setState(
-                                    () => _showPlainText = !_showPlainText,
-                                  ),
-                                  icon: Icon(
-                                    _showPlainText
-                                        ? Icons.article_outlined
-                                        : Icons.text_snippet_outlined,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    _showPlainText
-                                        ? l10n.viewFormattedButton
-                                        : l10n.viewAsPlainTextButton,
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: context.colors.tertiaryLight,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.description_outlined,
+                                        color: context.colors.tertiary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    Text(
+                                      l10n.cvPreviewTitle,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleLarge,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  l10n.cvPreviewIntro,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 46,
+                                  child: OutlinedButton.icon(
+                                    icon: _loadingCv
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.auto_awesome_outlined,
+                                            size: 18,
+                                          ),
+                                    label: Text(
+                                      _loadingCv
+                                          ? l10n.generatingButton
+                                          : l10n.generateCvButton,
+                                    ),
+                                    onPressed: _loadingCv ? null : _generateCv,
                                   ),
                                 ),
+                                if (_cvHtml != null) ...[
+                                  const SizedBox(height: AppSpacing.md),
+                                  Row(
+                                    children: [
+                                      _buildCvModeChip(context),
+                                      const Spacer(),
+                                      TextButton.icon(
+                                        onPressed: () => setState(
+                                          () =>
+                                              _showPlainText = !_showPlainText,
+                                        ),
+                                        icon: Icon(
+                                          _showPlainText
+                                              ? Icons.article_outlined
+                                              : Icons.text_snippet_outlined,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          _showPlainText
+                                              ? l10n.viewFormattedButton
+                                              : l10n.viewAsPlainTextButton,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: EdgeInsets.all(
+                                      _showPlainText
+                                          ? AppSpacing.sm
+                                          : AppSpacing.md,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: context.colors.background,
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.sm,
+                                      ),
+                                      border: Border.all(
+                                        color: context.colors.outline,
+                                      ),
+                                    ),
+                                    child: _showPlainText
+                                        ? SelectableText(
+                                            _cvText ?? '',
+                                            style: TextStyle(
+                                              fontFamily: "monospace",
+                                              fontSize: 13,
+                                              color: context.colors.textPrimary,
+                                            ),
+                                          )
+                                        : Html(
+                                            data: _cvHtml!,
+                                            style: _cvHtmlStyles(context),
+                                          ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 46,
+                                    child: OutlinedButton.icon(
+                                      icon: _exportingPdf
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.picture_as_pdf_outlined,
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        _exportingPdf
+                                            ? l10n.preparingButton
+                                            : l10n.exportAsPdfButton,
+                                      ),
+                                      onPressed: _exportingPdf
+                                          ? null
+                                          : _exportCvPdf,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
-                            const SizedBox(height: AppSpacing.sm),
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(
-                                _showPlainText ? AppSpacing.sm : AppSpacing.md,
-                              ),
-                              decoration: BoxDecoration(
-                                color: context.colors.background,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.sm,
-                                ),
-                                border: Border.all(color: context.colors.outline),
-                              ),
-                              child: _showPlainText
-                                  ? SelectableText(
-                                      _cvText ?? '',
-                                      style: TextStyle(
-                                        fontFamily: "monospace",
-                                        fontSize: 13,
-                                        color: context.colors.textPrimary,
-                                      ),
-                                    )
-                                  : Html(
-                                      data: _cvHtml!,
-                                      style: _cvHtmlStyles(context),
-                                    ),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 46,
-                              child: OutlinedButton.icon(
-                                icon: _exportingPdf
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.picture_as_pdf_outlined,
-                                        size: 18,
-                                      ),
-                                label: Text(
-                                  _exportingPdf
-                                      ? l10n.preparingButton
-                                      : l10n.exportAsPdfButton,
-                                ),
-                                onPressed: _exportingPdf ? null : _exportCvPdf,
-                              ),
-                            ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
       ),
     );
   }
 }
-

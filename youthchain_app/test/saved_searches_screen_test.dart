@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:youthchain_app/l10n/app_localizations.dart';
 import 'package:youthchain_app/l10n/kri_material_fallback.dart';
@@ -26,6 +27,13 @@ void main() {
       .setMockMethodCallHandler(secureChannel, (call) async => null);
 
   setUp(() {
+    // _fetch() now reads /api/saved_searches via ApiClient.getWithCache
+    // (BL-37 offline read caching, extended to this screen), which writes
+    // through SharedPreferences on every successful fetch -- without a
+    // mocked plugin instance that call never resolves under flutter_test.
+    // Same fix saved_jobs_screen_test.dart already needed for the same
+    // reason.
+    SharedPreferences.setMockInitialValues({});
     ApiClient.baseUrl = 'http://127.0.0.1:5000';
     ApiClient.testClient = null;
   });
@@ -110,4 +118,76 @@ void main() {
     expect(find.textContaining('developer'), findsNothing);
     expect(find.textContaining('excel'), findsOneWidget);
   });
+
+  // BL-37 follow-up: SavedSearchesScreen previously called
+  // ApiClient.instance.get() directly, with no offline fallback -- a
+  // network failure here just meant an empty list. Now on getWithCache
+  // (see saved_jobs_screen_test.dart / api_client_cache_test.dart for the
+  // same pattern), it should keep showing the last successfully loaded
+  // searches instead.
+  testWidgets(
+    'falls back to the last loaded searches and shows an offline banner when the network fails',
+    (tester) async {
+      ApiClient.testClient = MockClient((request) async {
+        return http.Response(jsonEncode(sampleSearches), 200);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SavedSearchesScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('developer'), findsOneWidget);
+      expect(find.textContaining("You're offline"), findsNothing);
+
+      // Go offline and pull to refresh -- getWithCache should fall back to
+      // the copy cached by the successful load above rather than clearing
+      // the list.
+      ApiClient.testClient = MockClient((request) async {
+        throw Exception('connection refused');
+      });
+
+      await tester.fling(
+        find.byType(RefreshIndicator),
+        const Offset(0, 300),
+        1000,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('developer'), findsOneWidget);
+      expect(find.textContaining("You're offline"), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'shows a "no connection" message when offline with nothing ever cached',
+    (tester) async {
+      ApiClient.testClient = MockClient((request) async {
+        throw Exception('connection refused');
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SavedSearchesScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No saved searches yet'), findsOneWidget);
+      expect(
+        find.text('No connection and no previously loaded data.'),
+        findsOneWidget,
+      );
+    },
+  );
 }

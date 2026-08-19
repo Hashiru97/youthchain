@@ -78,6 +78,27 @@ neither is meant to persist outside an actual deployment.
   runs `backup.py` on a real interval (`BACKUP_INTERVAL_SECONDS`, default
   daily) using the same backend image — no separate cron image to keep in
   sync with the app's own dependencies.
+- **Encryption at rest before upload** (`encrypt_backup()` in `backup.py`,
+  new): a real infra-audit finding closed here — these archives contain
+  real PII (CVs, employer verification documents, the full user/
+  application database), and the previous version uploaded them to
+  S3-compatible storage completely unencrypted. Encrypts with
+  [age](https://age-encryption.org) (`BACKUP_ENCRYPTION_RECIPIENT` — see
+  `backend/.env.example`) the moment an off-site upload is actually about
+  to happen, and **refuses to run at all** if a recipient isn't
+  configured in that case — this is the one integration in this file that
+  does NOT degrade to a safe no-op when unset, deliberately, since
+  "upload real applicant PII in plaintext" is not a safe default. A
+  purely local backup (no `BACKUP_S3_*`, or `--no-upload`) still runs
+  unencrypted if no recipient is set, same zero-config promise this
+  script has always made — see `resolve_backup_encryption()`'s own
+  docstring for the exact rule. `scripts/restore.py` transparently
+  decrypts a `.tar.gz.age` archive first (via `BACKUP_ENCRYPTION_IDENTITY`
+  — the matching private key) before the existing SQLite/Postgres restore
+  logic runs, unchanged, against the plaintext.
+- **Remote retention pruning** (`prune_remote_backups()` in `backup.py`,
+  new): closes the "retention is only half-implemented" gap this doc used
+  to flag below — see that section, now rewritten, for what changed.
 
 ## Usage
 
@@ -101,6 +122,20 @@ Restore from a downloaded archive:
 python scripts/restore.py backend/backups/youthchain_backup_<timestamp>.tar.gz
 ```
 
+If the archive is encrypted (`.tar.gz.age` — the default the moment
+`BACKUP_ENCRYPTION_RECIPIENT` is configured), set `BACKUP_ENCRYPTION_IDENTITY`
+to the matching private key first (a file path, or the raw
+`AGE-SECRET-KEY-1...` content itself — see `backend/.env.example`), then
+restore exactly the same way:
+```
+BACKUP_ENCRYPTION_IDENTITY=/path/to/identity.txt \
+  python scripts/restore.py backend/backups/youthchain_backup_<timestamp>.tar.gz.age
+```
+`restore.py` decrypts into a private `tempfile.TemporaryDirectory()`
+first (never into `backups/` itself), then runs the exact same SQLite/
+Postgres restore logic described above against the decrypted archive —
+this is the only difference from restoring a plain, unencrypted archive.
+
 ## What this is, and isn't (same honesty as the Vault/TLS docs)
 
 `docker-compose.backup.yml`'s MinIO runs single-node with fixed
@@ -112,17 +147,24 @@ real secret rotation — an infrastructure decision this repo can prepare
 the integration for but cannot make on your behalf, the same boundary
 already stated for Vault and TLS.
 
-**Retention is also only half-implemented, and worth knowing before this
-grows unbounded.** `backup.py`'s `prune_old_backups()` deletes old
-archives from the *local* `backups/` directory (`--keep`, default 14),
-but every run still uploads to the S3-compatible bucket unconditionally
-with nothing ever deleting an old object there — remote storage grows
-forever unless the bucket itself has a lifecycle/retention rule. Every
-S3-compatible provider (AWS S3, Backblaze B2, a real MinIO cluster) can
-enforce this natively; set one when pointing `BACKUP_S3_*` at a real
-bucket, the same way TLS certs and Vault's storage backend are each the
-operator's own real-deployment setup step, not something this repo
-configures for you.
+**Update — retention was only half-implemented; this is now closed.**
+`backup.py`'s `prune_old_backups()` has always deleted old archives from
+the *local* `backups/` directory (`--keep`, default 14), but every run
+used to still upload to the S3-compatible bucket unconditionally with
+nothing on this side ever deleting an old object there — remote storage
+grew forever unless the bucket itself had a lifecycle/retention rule an
+operator had to remember to configure separately (and easy to never do —
+this repo used to explicitly call that out as a gap right here). Fixed:
+`prune_remote_backups()` now runs immediately after every successful
+upload, listing the bucket (`list_objects_v2`, paginated) and deleting
+every `youthchain_backup_*.tar.gz`/`.tar.gz.age` object beyond the same
+`--keep` depth used for local retention — one retention window, enforced
+by the script itself, not a second policy an operator has to separately
+remember to set on the bucket. A bucket-level lifecycle rule is still a
+reasonable *additional* belt-and-suspenders layer for a real production
+bucket (AWS S3, Backblaze B2, a real MinIO cluster can all enforce this
+natively too), but it's no longer the only thing standing between this
+bucket and unbounded growth.
 
 **Update — the retry/alerting gap above is now closed.** `backup-cron`
 used to wait out the *full* interval before retrying a failed backup —
@@ -157,3 +199,49 @@ Live-verified: ran `scripts/backup.py` against a real Postgres failure
 immediately after, then ran a real successful backup and confirmed both
 gauges updated correctly on the very next scrape (no caching, no stale
 values).
+
+## Encryption + remote retention — what was actually verified, honestly
+
+Unlike the fully-live-verified sections above (a real Docker daemon, a
+real MinIO container), the encryption and remote-retention work was
+verified in a sandboxed environment with **no working Docker daemon**
+(`docker` CLI present, `dockerd` not reachable) — stated plainly rather
+than implying a `docker compose up` re-run that didn't happen:
+
+- **Real, not mocked**: downloaded the real `age`/`age-keygen` v1.3.1
+  binaries directly from the
+  [age GitHub releases](https://github.com/FiloSottile/age/releases),
+  generated a real keypair, then called `backup.py`'s `create_backup()`
+  → `encrypt_backup()` → `restore.py`'s `_decrypt_archive()` end to end
+  against a throwaway directory (real fake `instance/youthchain.db` +
+  `uploads/cv.pdf` content) via a real `age` subprocess at every step —
+  not a stub. Confirmed: the plaintext `.tar.gz` no longer exists on disk
+  once `encrypt_backup()` returns, the `.tar.gz.age` it produces decrypts
+  successfully via `BACKUP_ENCRYPTION_IDENTITY` given as raw
+  `AGE-SECRET-KEY-...` content (not a file path — the other supported
+  form), and the recovered `instance/youthchain.db` content matches the
+  original byte-for-byte. Also confirmed the fail-loud paths for real:
+  `encrypt_backup()`/`resolve_backup_encryption()` correctly raise when
+  `BACKUP_ENCRYPTION_RECIPIENT` is unset and an upload is configured, and
+  `--no-encrypt` combined with an upload is refused.
+- **Full backend suite re-run**: `pytest tests/ -q` — 681 passed, 0
+  failed (SQLite, this sandbox's default `DATABASE_URL`), confirming the
+  new encryption/retention code didn't regress anything already covered.
+- **`docker-compose.yml` + `docker-compose.backup.yml` merge**: validated
+  with `docker compose config` (the CLI can parse/merge/render compose
+  files without a running daemon) — confirmed valid YAML, confirmed
+  `BACKUP_ENCRYPTION_RECIPIENT` resolves into `backup-cron`'s environment
+  correctly. This does **not** confirm the container actually builds or
+  runs `age` correctly end-to-end inside it — that needs the real
+  `docker compose up --build` re-run this doc's earlier sections describe,
+  which a future session with a working Docker daemon should do once,
+  the same way the MinIO upload/retry-backoff sections above were.
+- **Not verified**: `prune_remote_backups()` against a real MinIO/S3
+  bucket (covered by mocked-`boto3` unit tests instead — see
+  `backend/tests/test_backup_script.py` — the same trade-off this
+  script's existing `upload_to_s3()` tests already made, real S3
+  interaction being a live-Docker-verification concern, not a `pytest`
+  one), and the `age` apt package actually installing cleanly inside a
+  fresh `backend/Dockerfile` build (confirmed only that Debian bookworm —
+  this image's base — packages `age` 1.1.1-1, via packages.debian.org,
+  not via a real `docker build`).

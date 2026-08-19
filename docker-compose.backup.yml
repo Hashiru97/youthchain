@@ -92,6 +92,26 @@ services:
       - BACKUP_S3_BUCKET=youthchain-backups
       - BACKUP_S3_ACCESS_KEY=youthchain-backup
       - BACKUP_S3_SECRET_KEY=youthchain-backup-dev
+      # Real gap found in the infra audit and closed here: this used to
+      # upload the archive above to MinIO completely unencrypted — a real
+      # PII exposure (see scripts/backup.py's encrypt_backup() and its own
+      # docstring for the full reasoning). BACKUP_S3_* being configured
+      # now makes an encryption recipient mandatory (backup.py refuses to
+      # run without one the moment an upload is about to happen), so this
+      # line isn't optional the way the S3 vars technically still are.
+      #
+      # This is a throwaway DEV-ONLY age keypair generated specifically
+      # for this file with `age-keygen`, same "fixed credentials, correct
+      # for local dev, explicitly not production-appropriate" posture
+      # already stated above for BACKUP_S3_ACCESS_KEY/SECRET_KEY and in
+      # docker-compose.vault.yml's own root token. A real deployment
+      # generates its own keypair (`age-keygen -o key.txt`) and sets
+      # BACKUP_ENCRYPTION_RECIPIENT via backend/.env / a real secrets
+      # manager instead — see backend/.env.example for the full
+      # generate/rotate/restore story, including where the matching
+      # private identity (needed only for scripts/restore.py, never by
+      # this service) must be kept instead.
+      - BACKUP_ENCRYPTION_RECIPIENT=age1vu2gcppyktdvwhnzcdlq5kuvh3kwrzdsyhj4z4cltrkfc5fy4q0qhsmvdx
     volumes:
       - uploads-data:/app/uploads
       - backups-data:/app/backups

@@ -5,7 +5,10 @@ handle JS rendering/bot-detection/etc. rather than this backend fetching
 pages directly. Plain `requests.post`, same convention as
 app._password_is_breached()'s HIBP call — no SDK for a single endpoint.
 """
+import ipaddress
+import socket
 import time
+from urllib.parse import urlparse
 
 import requests
 
@@ -18,6 +21,53 @@ class ScanSourceError(Exception):
     scanner.pipeline and recorded on the owning scan_run.error_message —
     never allowed to propagate into the poller loop and kill it.
     """
+
+
+def _assert_safe_fetch_target(url: str) -> None:
+    """
+    SSRF guard for any URL this backend fetches directly (fetch_url_plain
+    below, and scrape_url as defense-in-depth even though Firecrawl's own
+    infra is the actual fetcher there). `Job.apply_url` is entirely
+    scraped-page content extracted by Claude — never something an admin
+    typed in — so nothing about it can be trusted before this check:
+    a listing crafted so Firecrawl fails to fetch its apply_url (easy —
+    point it at an address Firecrawl's infra can't reach) would otherwise
+    make fetch_url_plain() issue a direct request from this backend's own
+    network to wherever that URL points, e.g. 169.254.169.254 (cloud
+    instance metadata) or an internal service, and feed the response back
+    into extraction/storage as an oracle for internal responses.
+
+    Rejects non-http(s) schemes outright, then resolves the hostname and
+    rejects if ANY resolved address is loopback/link-local/private/
+    reserved/multicast — resolving (rather than only pattern-matching the
+    literal hostname) is what actually closes this, since a hostname
+    attacker-controlled DNS could otherwise point anywhere on first
+    request and somewhere internal on a later one.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ScanSourceError(f"Refusing to fetch {url!r}: scheme must be http or https")
+    if not parsed.hostname:
+        raise ScanSourceError(f"Refusing to fetch {url!r}: no hostname")
+
+    try:
+        addrinfo = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror as e:
+        raise ScanSourceError(f"Refusing to fetch {url!r}: DNS resolution failed: {e}") from e
+
+    for family, _, _, _, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip.is_loopback
+            or ip.is_link_local
+            or ip.is_private
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ScanSourceError(
+                f"Refusing to fetch {url!r}: resolves to non-public address {ip}"
+            )
 
 
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
@@ -40,6 +90,7 @@ def scrape_url(url: str, api_key: str | None, timeout: int = 30, _retry_delay: f
     """
     if not api_key:
         raise ScanSourceError("FIRECRAWL_API_KEY is not configured")
+    _assert_safe_fetch_target(url)
 
     for attempt in (1, 2):
         try:
@@ -92,6 +143,14 @@ _PLAIN_FETCH_USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
+# claude_extractor.py's prompt already truncates to 60,000 chars before
+# sending anything to the model, but that truncation happens after the
+# full body is fetched into memory — this bounds the fetch itself, so a
+# large or slow-drip response from an apply_url can't hold an unbounded
+# amount of memory (or wall-clock time inside `timeout`) before that
+# later truncation ever kicks in.
+_MAX_FETCH_BYTES = 5 * 1024 * 1024
+
 
 def fetch_url_plain(url: str, timeout: int = 15) -> str:
     """
@@ -108,16 +167,42 @@ def fetch_url_plain(url: str, timeout: int = 15) -> str:
     on any failure, same contract as scrape_url, so pipeline.py's
     existing except handling covers both without change.
     """
+    _assert_safe_fetch_target(url)
+
     try:
-        resp = requests.get(url, timeout=timeout, headers={"User-Agent": _PLAIN_FETCH_USER_AGENT})
+        resp = requests.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": _PLAIN_FETCH_USER_AGENT},
+            allow_redirects=False,
+            stream=True,
+        )
     except requests.RequestException as e:
         raise ScanSourceError(f"Network error fetching {url} directly: {e}") from e
 
-    try:
-        resp.raise_for_status()
-    except requests.HTTPError as e:
-        raise ScanSourceError(f"Direct fetch of {url} returned {resp.status_code}: {e}") from e
+    with resp:
+        # A redirect could point anywhere, including an internal address
+        # that passed the pre-check above only because the *original* URL
+        # was public — allow_redirects=False above stops requests from
+        # silently following it, so a 3xx here is a definite (not just
+        # possible) SSRF-via-redirect attempt, not a normal outcome to
+        # retry around.
+        if resp.is_redirect:
+            raise ScanSourceError(f"Refusing to follow redirect from {url} to {resp.headers.get('Location')!r}")
 
-    if not resp.text:
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as e:
+            raise ScanSourceError(f"Direct fetch of {url} returned {resp.status_code}: {e}") from e
+
+        body = bytearray()
+        for chunk in resp.iter_content(chunk_size=65536):
+            body += chunk
+            if len(body) > _MAX_FETCH_BYTES:
+                raise ScanSourceError(
+                    f"Direct fetch of {url} exceeded {_MAX_FETCH_BYTES} bytes, aborting"
+                )
+
+    if not body:
         raise ScanSourceError(f"Direct fetch of {url} returned an empty body")
-    return resp.text
+    return body.decode(resp.encoding or "utf-8", errors="replace")

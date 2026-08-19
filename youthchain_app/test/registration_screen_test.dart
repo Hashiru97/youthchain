@@ -4,6 +4,11 @@
 // the web portal's portal_register() flow (see app.py). Uses
 // ApiClient.testClient (see api_client_cache_test.dart) to exercise the
 // real network calls rather than mocking the widget's own methods.
+//
+// Renamed from widget_test.dart (Flutter's default template name, kept
+// as-is when this coverage was first written) to match this project's
+// one-file-per-screen convention -- content unchanged apart from the two
+// details-step validation tests added at the bottom.
 
 import 'dart:convert';
 
@@ -285,4 +290,126 @@ void main() {
 
     expect(find.textContaining('complete all fields'), findsOneWidget);
   });
+
+  testWidgets(
+    'mismatched password and confirmation blocks account creation',
+    (WidgetTester tester) async {
+      ApiClient.testClient = MockClient((request) async {
+        if (request.url.path == '/auth/otp/register/request') {
+          return http.Response(jsonEncode({'message': 'sent'}), 200);
+        }
+        if (request.url.path == '/auth/otp/register/verify') {
+          return http.Response(jsonEncode({'success': true}), 200);
+        }
+        // The /register endpoint must never be reached from this test --
+        // hitting it would mean the mismatch check silently let a bad
+        // submission through.
+        return http.Response('not found', 404);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: RegistrationScreen(),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'mismatch@test.com');
+      await tester.tap(find.text('Send verification code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '123456');
+      await tester.tap(find.text('Verify'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'First Name'),
+        'Aminata',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Last Name'),
+        'Sesay',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Phone Number'),
+        '23276112233',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'StrongPass123!',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Confirm Password'),
+        'ADifferentPass456!',
+      );
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.ensureVisible(find.text('Create Account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create Account'));
+      await tester.pump();
+
+      expect(find.textContaining('do not match'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a password shorter than 8 characters blocks account creation',
+    (WidgetTester tester) async {
+      ApiClient.testClient = MockClient((request) async {
+        if (request.url.path == '/auth/otp/register/request') {
+          return http.Response(jsonEncode({'message': 'sent'}), 200);
+        }
+        if (request.url.path == '/auth/otp/register/verify') {
+          return http.Response(jsonEncode({'success': true}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: RegistrationScreen(),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'shortpw@test.com');
+      await tester.tap(find.text('Send verification code'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '123456');
+      await tester.tap(find.text('Verify'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'First Name'),
+        'Aminata',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Last Name'),
+        'Sesay',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Phone Number'),
+        '23276112233',
+      );
+      await tester.enterText(find.widgetWithText(TextField, 'Password'), 'short1');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Confirm Password'),
+        'short1',
+      );
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.ensureVisible(find.text('Create Account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create Account'));
+      await tester.pump();
+
+      expect(find.textContaining('at least 8 characters'), findsOneWidget);
+    },
+  );
 }

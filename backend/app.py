@@ -1993,7 +1993,17 @@ def _password_is_breached(password: str) -> bool | None:
     requirement, not the only thing standing between an attacker and an
     account.
     """
-    sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+    # Suppression rationale for the `# nosec B324` marker below: Bandit
+    # flags SHA-1 as a weak hash for security use (collision resistance),
+    # but it isn't used that way here -- SHA-1 is the
+    # Pwned Passwords API's own fixed wire protocol (see the docstring
+    # above), not a choice made by this codebase, and nothing here trusts
+    # SHA-1 to resist a deliberate collision attack -- it's a lookup key
+    # into a public breach-hash database, not a password-storage or
+    # integrity mechanism (bcrypt/Werkzeug's own hasher does that elsewhere
+    # in this file). Switching hash algorithms would just make every
+    # lookup fail against the real API.
+    sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()  # nosec B324
     prefix, suffix = sha1[:5], sha1[5:]
     try:
         resp = requests.get(
@@ -2048,6 +2058,29 @@ def content_matches_extension(file_storage, filename: str) -> bool:
         # recognize — reject rather than trust an unverifiable claim.
         return False
     return kind.extension in expected
+
+
+# Every on-chain WRITE (registerCredential.js, revokeCredential.js,
+# accreditIssuer.js, revokeIssuer.js) shells out to a fresh `npx hardhat
+# run` process that resolves its own signer's "next" nonce from the RPC
+# node independently -- there is no shared nonce-tracking between
+# invocations. Two of these running concurrently (e.g. two credentials
+# uploaded moments apart, each getting its own
+# _write_onchain_tx_for_credential_async background thread) can both read
+# the same "next" nonce before either transaction is mined, and the
+# second one to actually reach the node either gets rejected (nonce
+# already used) or silently replaces the first depending on the RPC
+# provider's mempool behavior -- either way the wrong credential/issuer
+# action goes uncommitted with no application-level error surfaced.
+# Serializing all writes behind one process-wide lock is a narrow, real
+# fix for that specific race -- it does not address a genuinely
+# concurrent RPC provider outage/timeout (an already-existing, separate
+# failure mode each write function already handles via its own None
+# return), only the specific case where two writes would otherwise be
+# in flight from this backend at the same moment. Read-only calls
+# (checkRegistered.js, checkValid.js, listIssuers.js) don't consume a
+# nonce and are deliberately NOT gated by this lock.
+_ONCHAIN_WRITE_LOCK = threading.Lock()
 
 
 def generate_file_hash(file_path: str) -> str:
@@ -2141,7 +2174,8 @@ def _write_onchain_tx_for_credential(credential: Credential) -> str | None:
         )
         return None
 
-    stdout = _run_hardhat_script("registerCredential.js", hash_hex)
+    with _ONCHAIN_WRITE_LOCK:
+        stdout = _run_hardhat_script("registerCredential.js", hash_hex)
     if not stdout:
         return None
 
@@ -2231,7 +2265,8 @@ def _revoke_credential_onchain(credential: "Credential") -> str | None:
     if not hash_hex:
         return None
 
-    stdout = _run_hardhat_script("revokeCredential.js", hash_hex)
+    with _ONCHAIN_WRITE_LOCK:
+        stdout = _run_hardhat_script("revokeCredential.js", hash_hex)
     if not stdout:
         return None
 
@@ -2308,7 +2343,8 @@ def _accredit_issuer_onchain(address: str) -> str | None:
     background-thread treatment _write_onchain_tx_for_credential_async
     gets, since there's no per-request-throughput concern to justify that
     complexity here."""
-    stdout = _run_hardhat_script_for_address("accreditIssuer.js", address)
+    with _ONCHAIN_WRITE_LOCK:
+        stdout = _run_hardhat_script_for_address("accreditIssuer.js", address)
     if not stdout:
         return None
 
@@ -2323,7 +2359,8 @@ def _revoke_issuer_onchain(address: str) -> str | None:
     """Calls the contract's revokeIssuer(address) via
     scripts/revokeIssuer.js. Same synchronous reasoning as
     _accredit_issuer_onchain."""
-    stdout = _run_hardhat_script_for_address("revokeIssuer.js", address)
+    with _ONCHAIN_WRITE_LOCK:
+        stdout = _run_hardhat_script_for_address("revokeIssuer.js", address)
     if not stdout:
         return None
 
@@ -4509,6 +4546,11 @@ def get_jobs():
     return jsonify([job.to_dict() for job in jobs])
 
 
+# See the skill-match branch inside api_discover_jobs below for what this
+# actually bounds.
+MAX_DISCOVER_JOBS_TO_SCORE = 1000
+
+
 @app.route("/api/discover_jobs", methods=["GET"])
 @jwt_required()
 def api_discover_jobs():
@@ -4568,8 +4610,20 @@ def api_discover_jobs():
                 return 0
             return int(100 * len(cand_skills & required) / len(required))
 
+        # This branch scores/sorts in Python rather than SQL (see the
+        # docstring above for why), which means its cost scales with how
+        # many scraped jobs match location/skill — not with `limit`, the
+        # way _search_jobs()'s SQL-paginated branch below does. Capped at
+        # the most recent MAX_DISCOVER_JOBS_TO_SCORE (order_by(id.desc())
+        # already puts newest first, so this only ever drops the oldest,
+        # lowest-priority matches) as a stopgap against that scaling with
+        # total scraped-job volume rather than page size. Not a real fix —
+        # this app's own principle is "never optimize before measuring,"
+        # and nobody has measured real row counts against this cap yet —
+        # just a bound on how bad it can get before that measurement
+        # happens.
         scored = sorted(
-            (( _score(j), j) for j in base_query.order_by(Job.id.desc()).all()),
+            ((_score(j), j) for j in base_query.order_by(Job.id.desc()).limit(MAX_DISCOVER_JOBS_TO_SCORE).all()),
             key=lambda pair: pair[0], reverse=True,
         )
         page = scored[offset:offset + limit]
@@ -4853,6 +4907,20 @@ def apply():
 
     except IntegrityError:
         db.session.rollback()
+        # Race only: the pre-check at the top of this route already looked
+        # for an existing (user, job) Application and found none, but a
+        # second concurrent request for the same pair can still slip past
+        # that check and lose the DB's own unique-constraint race here.
+        # The files above were already written to disk before this
+        # commit, on the assumption the write would succeed -- clean them
+        # up rather than leaving them orphaned with no Application row
+        # ever created to reference them.
+        for orphaned in (cv_filename, support_filename):
+            if orphaned:
+                try:
+                    os.remove(os.path.join(APPLICATION_FOLDER, orphaned))
+                except OSError:
+                    logger.exception("apply(): failed to remove orphaned file %s after IntegrityError", orphaned)
         return jsonify({"success": False, "error": "You have already applied for this job"}), 400
 
     log_event("application_submitted", user_id=user_id, job_id=job_id)
@@ -4902,6 +4970,100 @@ def my_applications(user_id):
     return jsonify(out)
 
 
+def _submit_gig_rating(application, direction, employer_id, data):
+    """
+    Shared core of all three gig-rating submission routes (rate_employer,
+    portal_rate_employer, employer_rate_worker below) -- see Rating's
+    docstring for why both directions exist. Each of the three keeps its
+    own ownership/auth check at the call site (JWT current-user, portal
+    session current-user, employer-owns-job -- genuinely different from
+    each other), since that's the only part that isn't just copy-pasted:
+    the Completed-status guard, the already-rated guard, score parsing/
+    validation, and the Rating row/commit/log_event used to be repeated
+    line-for-line across all three. One real behavior change folded in
+    here: rate_employer alone used to answer an invalid score with a bare
+    400 while every other error on all three routes used _forbidden()'s
+    403 -- unified on _forbidden() since nothing enforced that split and
+    no test/client depended on the 400 (checked before making this
+    change).
+
+    `data` is whatever the caller already extracted request data from
+    (request.get_json() or request.form) -- the one place the three
+    callers genuinely differ in how they read the incoming score/comment.
+
+    Returns (rating, error_response): on success, rating is the created
+    Rating and error_response is None; on failure, rating is None and
+    error_response is the Flask response the caller should return as-is.
+    """
+    if application.status != "Completed":
+        return None, _forbidden("This application hasn't been marked complete yet")
+    if Rating.query.filter_by(application_id=application.id, direction=direction).first():
+        already = "employer" if direction == "worker_to_employer" else "worker"
+        return None, _forbidden(f"You have already rated this {already}")
+
+    try:
+        score = int(data.get("score"))
+    except (TypeError, ValueError):
+        score = None
+    if score not in _GIG_RATING_SCORE_RANGE:
+        return None, _forbidden("score must be an integer from 1 to 5")
+
+    rating = Rating(
+        application_id=application.id,
+        direction=direction,
+        employer_id=employer_id,
+        user_id=application.user_id,
+        score=score,
+        comment=(data.get("comment") or "").strip() or None,
+    )
+    db.session.add(rating)
+    db.session.commit()
+    event_name = "employer_rated" if direction == "worker_to_employer" else "worker_rated"
+    log_event(event_name, user_id=application.user_id, employer_id=employer_id, application_id=application.id, score=score)
+    return rating, None
+
+
+def _submit_worker_rating_flag(rating, user_id, reason):
+    """
+    Shared core of flag_rating() (JWT/mobile) and portal_flag_rating()
+    (web-portal session) below -- the worker's two routes to dispute a
+    rating THEY received (employer_to_worker direction). Ownership/
+    direction check and the reason-required check stay at each call site
+    rather than folding in here: the two routes format "reason is
+    required" differently (a bare 400 vs _forbidden()'s 403), and a real
+    test (test_flag_requires_a_reason) locks the JWT route's 400, so
+    unifying that specific check would be a genuine behavior change, not
+    just a dedup. employer_flag_rating (the employer-side symmetric flow,
+    elsewhere in this file) has a different rate-limit key shape and
+    redirect target entirely, so it stays fully separate too.
+
+    Handles the part that WAS identical: the per-hour rate limit (same
+    tight budget as report_employer() -- a dispute queue is exactly as
+    plausible a harassment/spam vector as the employer-report one that
+    reasoning was first written for), RatingFlag creation, commit,
+    log_event, and the admin notification.
+
+    Returns (flag, rate_limited): on success, flag is the created
+    RatingFlag and rate_limited is False; if rate-limited, flag is None
+    and rate_limited is True so the caller returns its own 429.
+    """
+    if _report_rate_limited(f"user:{user_id}"):
+        return None, True
+    _record_report_attempt(f"user:{user_id}")
+
+    flag = RatingFlag(
+        rating_id=rating.id,
+        flagged_by_role="worker",
+        flagged_by_user_id=user_id,
+        reason=reason,
+    )
+    db.session.add(flag)
+    db.session.commit()
+    log_event("rating_flagged", user_id=user_id, rating_id=rating.id)
+    _notify_admins_of_new_rating_flag(flag, rating)
+    return flag, False
+
+
 @app.route("/api/applications/<int:app_id>/rate_employer", methods=["POST"])
 @jwt_required()
 def rate_employer(app_id):
@@ -4912,31 +5074,11 @@ def rate_employer(app_id):
     if application.user_id != _current_user_id():
         return _forbidden()
     job = Job.query.get_or_404(application.job_id)
-    if application.status != "Completed":
-        return _forbidden("This application hasn't been marked complete yet")
-
-    if Rating.query.filter_by(application_id=application.id, direction="worker_to_employer").first():
-        return _forbidden("You have already rated this employer")
 
     data = request.get_json(silent=True) or request.form
-    try:
-        score = int(data.get("score"))
-    except (TypeError, ValueError):
-        score = None
-    if score not in _GIG_RATING_SCORE_RANGE:
-        return jsonify({"success": False, "error": "score must be an integer from 1 to 5"}), 400
-
-    rating = Rating(
-        application_id=application.id,
-        direction="worker_to_employer",
-        employer_id=job.employer_id,
-        user_id=application.user_id,
-        score=score,
-        comment=(data.get("comment") or "").strip() or None,
-    )
-    db.session.add(rating)
-    db.session.commit()
-    log_event("employer_rated", user_id=application.user_id, employer_id=job.employer_id, application_id=application.id, score=score)
+    rating, error = _submit_gig_rating(application, "worker_to_employer", job.employer_id, data)
+    if error:
+        return error
     return jsonify({"success": True, "rating": rating.to_dict()}), 201
 
 
@@ -4965,23 +5107,9 @@ def flag_rating(rating_id):
     if not reason:
         return jsonify({"success": False, "error": "reason is required"}), 400
 
-    # Same tight per-hour budget as report_employer() -- a dispute queue is
-    # exactly as plausible a harassment/spam vector as the employer-report
-    # one it already documents this reasoning for.
-    if _report_rate_limited(f"user:{user_id}"):
+    flag, rate_limited = _submit_worker_rating_flag(rating, user_id, reason)
+    if rate_limited:
         return jsonify({"success": False, "error": "Too many reports. Try again later."}), 429
-    _record_report_attempt(f"user:{user_id}")
-
-    flag = RatingFlag(
-        rating_id=rating.id,
-        flagged_by_role="worker",
-        flagged_by_user_id=user_id,
-        reason=reason,
-    )
-    db.session.add(flag)
-    db.session.commit()
-    log_event("rating_flagged", user_id=user_id, rating_id=rating.id)
-    _notify_admins_of_new_rating_flag(flag, rating)
     return jsonify({"success": True, "flag_id": flag.id}), 201
 
 
@@ -5835,29 +5963,10 @@ def portal_rate_employer(app_id):
     if application.user_id != uid:
         return _forbidden()
     job = Job.query.get_or_404(application.job_id)
-    if application.status != "Completed":
-        return _forbidden("This application hasn't been marked complete yet")
-    if Rating.query.filter_by(application_id=application.id, direction="worker_to_employer").first():
-        return _forbidden("You have already rated this employer")
 
-    try:
-        score = int(request.form.get("score"))
-    except (TypeError, ValueError):
-        score = None
-    if score not in _GIG_RATING_SCORE_RANGE:
-        return _forbidden("score must be an integer from 1 to 5")
-
-    rating = Rating(
-        application_id=application.id,
-        direction="worker_to_employer",
-        employer_id=job.employer_id,
-        user_id=application.user_id,
-        score=score,
-        comment=(request.form.get("comment") or "").strip() or None,
-    )
-    db.session.add(rating)
-    db.session.commit()
-    log_event("employer_rated", user_id=application.user_id, employer_id=job.employer_id, application_id=application.id, score=score)
+    rating, error = _submit_gig_rating(application, "worker_to_employer", job.employer_id, request.form)
+    if error:
+        return error
     return redirect(url_for("portal_applications"))
 
 
@@ -5874,20 +5983,9 @@ def portal_flag_rating(rating_id):
     if not reason:
         return _forbidden("reason is required")
 
-    if _report_rate_limited(f"user:{uid}"):
+    flag, rate_limited = _submit_worker_rating_flag(rating, uid, reason)
+    if rate_limited:
         return jsonify({"success": False, "error": "Too many reports. Try again later."}), 429
-    _record_report_attempt(f"user:{uid}")
-
-    flag = RatingFlag(
-        rating_id=rating.id,
-        flagged_by_role="worker",
-        flagged_by_user_id=uid,
-        reason=reason,
-    )
-    db.session.add(flag)
-    db.session.commit()
-    log_event("rating_flagged", user_id=uid, rating_id=rating.id)
-    _notify_admins_of_new_rating_flag(flag, rating)
     return redirect(url_for("portal_applications"))
 
 
@@ -8883,37 +8981,17 @@ def employer_rate_worker(app_id):
     job = Job.query.get_or_404(application.job_id)
     if not _employer_owns_job(job, _current_employer_id()):
         return _forbidden("This application belongs to another employer account")
-    if application.status != "Completed":
-        return _forbidden("This application hasn't been marked complete yet")
 
-    if Rating.query.filter_by(application_id=application.id, direction="employer_to_worker").first():
-        return _forbidden("You have already rated this worker")
-
-    try:
-        score = int(request.form.get("score"))
-    except (TypeError, ValueError):
-        score = None
-    if score not in _GIG_RATING_SCORE_RANGE:
-        return _forbidden("score must be an integer from 1 to 5")
-
-    rating = Rating(
-        application_id=application.id,
-        direction="employer_to_worker",
-        employer_id=job.employer_id,
-        user_id=application.user_id,
-        score=score,
-        comment=(request.form.get("comment") or "").strip() or None,
-    )
-    db.session.add(rating)
-    db.session.commit()
-    log_event("worker_rated", user_id=application.user_id, employer_id=job.employer_id, application_id=application.id, score=score)
+    rating, error = _submit_gig_rating(application, "employer_to_worker", job.employer_id, request.form)
+    if error:
+        return error
     notify_user(
         application.user_id,
         "worker_rated",
         "You were rated for a completed gig",
-        f"{job.title}: {score}/5.",
+        f"{job.title}: {rating.score}/5.",
         application_id=application.id,
-        score=score,
+        score=rating.score,
     )
     return redirect(url_for("employer_applications", job_id=job.id))
 
@@ -9392,4 +9470,17 @@ if __name__ == "__main__":
     # unhandled exceptions — a remote-code-execution vector if this process
     # is ever reachable beyond a developer's own machine. This was
     # previously hardcoded True unconditionally regardless of FLASK_ENV.
-    socketio.run(app, debug=not IS_PRODUCTION, host="0.0.0.0", port=5000)
+    #
+    # Suppression rationale for the `# nosec B104` marker below: Bandit
+    # flags 0.0.0.0 as binding to all interfaces, but that's the intended,
+    # required behavior here, not an oversight:
+    # this is the `python app.py` local-dev entrypoint, and the container
+    # entrypoint (gunicorn, per backend/Dockerfile's CMD) binds the same
+    # 0.0.0.0:5000 for the same reason -- a process inside a Docker
+    # container/behind a reverse proxy (see docker-compose.yml, ProxyFix
+    # in this file) MUST bind all interfaces to be reachable from outside
+    # its own network namespace at all; binding 127.0.0.1 here would make
+    # the container unreachable. Public exposure is controlled at the
+    # network layer (compose port mapping / the reverse proxy in front of
+    # it, see loadbalancer/nginx.conf), not by this bind address.
+    socketio.run(app, debug=not IS_PRODUCTION, host="0.0.0.0", port=5000)  # nosec B104

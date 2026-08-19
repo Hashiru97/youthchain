@@ -44,7 +44,9 @@
         <div class="result success" role="status">
           <h3>✅ Credential Found</h3>
           <p><strong>Title:</strong> {{ credential.title }}</p>
-          <p><strong>Issuer:</strong> {{ credential.issuer }}</p>
+          <p><strong>Issuer:</strong> {{ credential.issuer }}
+            <span class="muted">(as entered by the credential holder — see note below)</span>
+          </p>
           <p><strong>Year:</strong> {{ credential.year }}</p>
           <p><strong>Hash:</strong>
             <code class="mono">{{ credential.hash }}</code>
@@ -58,7 +60,7 @@
           {% elif onchain_status is not none %}
             {% if onchain_status %}
               <p class="badge badge-success">
-                ⛓ Live check: hash IS registered and valid on YouthChainRegistry (checked just now, not just a database flag)
+                ⛓ Live check: this exact file's hash IS registered and valid on YouthChainRegistry, unaltered since {{ credential.year }} (checked just now, not just a database flag)
               </p>
             {% else %}
               <p class="badge badge-error">
@@ -72,6 +74,15 @@
               ⏳ Could not reach the blockchain to check live just now — showing database record only.
             </p>
           {% endif %}
+
+          <p class="muted verify-scope-note">
+            <strong>What this checks:</strong> the blockchain confirms this exact document
+            existed, unaltered, at the time shown above — it does not independently confirm
+            that {{ credential.issuer }} actually issued it. Title, issuer, and year are
+            entered by the credential holder, the same as on a paper certificate; treat this
+            as proof the document itself hasn't been tampered with since upload, not as
+            institutional confirmation from {{ credential.issuer }}.
+          </p>
 
           {% if credential.onchain_tx %}
             <p class="muted">

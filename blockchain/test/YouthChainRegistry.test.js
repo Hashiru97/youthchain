@@ -92,6 +92,28 @@ describe("YouthChainRegistry", function () {
       .withArgs(issuer.address);
   });
 
+  it("lets the owner re-accredit a previously-revoked issuer, restoring their ability to register", async function () {
+    // Flagged as an untested-but-presumed-working path by the engineering
+    // review: accreditIssuer() just sets accreditedIssuers[issuer] = true
+    // unconditionally, with no guard against re-accrediting someone
+    // currently revoked, so this should work -- confirming it here rather
+    // than leaving it unverified.
+    await registry.connect(owner).accreditIssuer(issuer.address);
+    await registry.connect(owner).revokeIssuer(issuer.address);
+    await expect(
+      registry.connect(issuer).registerCredential(HASH_A)
+    ).to.be.revertedWith("not an accredited issuer");
+
+    await expect(registry.connect(owner).accreditIssuer(issuer.address))
+      .to.emit(registry, "IssuerAccredited")
+      .withArgs(issuer.address);
+
+    await registry.connect(issuer).registerCredential(HASH_A);
+    expect(await registry.isRegistered(HASH_A)).to.equal(true);
+    const stored = await registry.credentials(HASH_A);
+    expect(stored.issuer).to.equal(issuer.address);
+  });
+
   it("does not retroactively invalidate a credential registered before its issuer was revoked", async function () {
     await registry.connect(owner).accreditIssuer(issuer.address);
     await registry.connect(issuer).registerCredential(HASH_A);

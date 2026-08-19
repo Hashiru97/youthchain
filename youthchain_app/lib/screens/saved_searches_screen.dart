@@ -24,6 +24,8 @@ class _SavedSearchesScreenState extends State<SavedSearchesScreen> {
   List<Map<String, dynamic>> _searches = [];
   bool _isLoading = true;
   final Set<int> _deleting = {};
+  bool _showingCachedSearches = false;
+  DateTime? _cachedAt;
 
   @override
   void initState() {
@@ -34,17 +36,29 @@ class _SavedSearchesScreenState extends State<SavedSearchesScreen> {
   Future<void> _fetch() async {
     if (!_isLoading) setState(() => _isLoading = true);
     try {
-      final res = await ApiClient.instance.get("/api/saved_searches");
+      // BL-37: falls back to the last successfully loaded copy when
+      // offline — same cache-fallback contract as every other read screen
+      // in this app (JobScreen, PassportScreen, MyApplicationsScreen,
+      // SavedJobsScreen).
+      final result = await ApiClient.instance.getWithCache(
+        "/api/saved_searches",
+      );
       if (!mounted) return;
-      if (res.statusCode == 200) {
-        final List rows = json.decode(res.body) as List;
-        _searches = rows.map((r) => (r as Map).cast<String, dynamic>()).toList();
-      } else {
-        _searches = [];
-      }
+      final List rows = json.decode(result.body) as List;
+      _searches = rows.map((r) => (r as Map).cast<String, dynamic>()).toList();
+      _showingCachedSearches = result.fromCache;
+      _cachedAt = result.cachedAt;
+    } on NoCachedDataException {
+      if (!mounted) return;
+      _searches = [];
+      _showingCachedSearches = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.noConnectionNoPreviousData)),
+      );
     } catch (_) {
       if (!mounted) return;
       _searches = [];
+      _showingCachedSearches = false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.networkErrorLoadingSavedSearches)),
       );
@@ -53,13 +67,57 @@ class _SavedSearchesScreenState extends State<SavedSearchesScreen> {
     }
   }
 
+  Widget _buildOfflineBanner() {
+    final ago = _cachedAt == null
+        ? ""
+        : " (as of ${_cachedAt!.hour.toString().padLeft(2, '0')}:${_cachedAt!.minute.toString().padLeft(2, '0')})";
+    final message = context.l10n.offlineShowingPreviousDataLabel(ago);
+    return Semantics(
+      liveRegion: true,
+      label: message,
+      child: Container(
+        width: double.infinity,
+        color: context.colors.warningBg,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 16,
+              color: context.colors.warning,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.colors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _delete(int id) async {
     setState(() => _deleting.add(id));
     try {
-      final res = await ApiClient.instance.postJson("/api/saved_searches/$id/delete", {});
+      final res = await ApiClient.instance.postJson(
+        "/api/saved_searches/$id/delete",
+        {},
+      );
       if (!mounted) return;
       if (res.statusCode == 200) {
-        setState(() => _searches.removeWhere((s) => (s["id"] as num).toInt() == id));
+        setState(
+          () => _searches.removeWhere((s) => (s["id"] as num).toInt() == id),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.couldNotDeleteSavedSearch)),
@@ -81,8 +139,12 @@ class _SavedSearchesScreenState extends State<SavedSearchesScreen> {
     final location = search["location"] as String?;
     final skill = search["skill"] as String?;
     if (q != null && q.isNotEmpty) parts.add('"$q"');
-    if (skill != null && skill.isNotEmpty) parts.add(l10n.savedSearchSkillLabel(skill));
-    if (location != null && location.isNotEmpty) parts.add(l10n.savedSearchLocationLabel(location));
+    if (skill != null && skill.isNotEmpty) {
+      parts.add(l10n.savedSearchSkillLabel(skill));
+    }
+    if (location != null && location.isNotEmpty) {
+      parts.add(l10n.savedSearchLocationLabel(location));
+    }
     return parts.isEmpty ? l10n.anyNewListing : parts.join(" · ");
   }
 
@@ -97,54 +159,67 @@ class _SavedSearchesScreenState extends State<SavedSearchesScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetch,
-              child: _searches.isEmpty
-                  ? LayoutBuilder(
-                      builder: (context, constraints) => ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: [
-                          SizedBox(
-                            height: constraints.maxHeight,
-                            child: EmptyState(
-                              icon: Icons.notifications_outlined,
-                              title: l10n.noSavedSearchesYet,
-                              subtitle: l10n.savedSearchesEmptySubtitle,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      itemCount: _searches.length,
-                      itemBuilder: (context, index) {
-                        final search = _searches[index];
-                        final id = (search["id"] as num).toInt();
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          color: context.colors.surface,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                          ),
-                          child: ListTile(
-                            leading: Icon(Icons.notifications_active_outlined, color: context.colors.tertiary),
-                            title: Text(_describe(l10n, search)),
-                            trailing: _deleting.contains(id)
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded),
-                                    tooltip: l10n.deleteTooltip,
-                                    onPressed: () => _delete(id),
-                                  ),
-                          ),
-                        );
-                      },
+          : Column(
+              children: [
+                if (_showingCachedSearches) _buildOfflineBanner(),
+                Expanded(child: _buildList()),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildList() {
+    final l10n = context.l10n;
+    return RefreshIndicator(
+      onRefresh: _fetch,
+      child: _searches.isEmpty
+          ? LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: constraints.maxHeight,
+                    child: EmptyState(
+                      icon: Icons.notifications_outlined,
+                      title: l10n.noSavedSearchesYet,
+                      subtitle: l10n.savedSearchesEmptySubtitle,
                     ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              itemCount: _searches.length,
+              itemBuilder: (context, index) {
+                final search = _searches[index];
+                final id = (search["id"] as num).toInt();
+                return Card(
+                  margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  color: context.colors.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.notifications_active_outlined,
+                      color: context.colors.tertiary,
+                    ),
+                    title: Text(_describe(l10n, search)),
+                    trailing: _deleting.contains(id)
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            tooltip: l10n.deleteTooltip,
+                            onPressed: () => _delete(id),
+                          ),
+                  ),
+                );
+              },
             ),
     );
   }

@@ -1,0 +1,24 @@
+# Used only with docker-compose.scale.yml's `caddy` service — the TLS-
+# terminating edge for the horizontal-scale stack. Same automatic-HTTPS
+# machinery as the root Caddyfile (see docker-compose.tls.yml's header for
+# how that works and what it requires: a real domain with DNS already
+# pointed at this host, reachable on port 80 for the Let's Encrypt HTTP-01
+# challenge). The only difference here is what's behind Caddy: the root
+# Caddyfile reverse-proxies straight to a single `backend:5000`, this one
+# proxies to `nginx:80`, which round-robins across backend1/2/3 itself.
+#
+# Replace "your-domain.example" with your real domain before using this in
+# production — "your-domain.example" will not issue a real certificate.
+your-domain.example {
+	# Caddy sets X-Forwarded-For/-Proto/-Host on every proxied request
+	# automatically — nginx.conf on the other side is written to trust and
+	# forward those rather than overwrite them (see its own comment on
+	# $proxy_x_forwarded_proto for the bug that pattern used to cause).
+	reverse_proxy nginx:80 {
+		transport http {
+			read_timeout 120s
+		}
+	}
+
+	encode gzip
+}

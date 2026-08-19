@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:socket_io_client/socket_io_client.dart' as sio;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/l10n_context.dart';
@@ -21,7 +22,21 @@ class MessagesScreen extends StatefulWidget {
   // job title is fetched/known separately, or simply omitted in the AppBar.
   final String? jobTitle;
 
-  const MessagesScreen({super.key, required this.applicationId, this.jobTitle});
+  /// Test-only seam: when provided, this stream stands in for the real
+  /// Socket.IO connection (see _connectSocket) -- feeding it an event map
+  /// simulates the server pushing a `message_created` event, the same way
+  /// ApiClient.testClient stands in for real HTTP calls in every other
+  /// screen's tests. Left null in production, where _connectSocket() opens
+  /// a real connection instead.
+  @visibleForTesting
+  final Stream<dynamic>? testMessageEvents;
+
+  const MessagesScreen({
+    super.key,
+    required this.applicationId,
+    this.jobTitle,
+    this.testMessageEvents,
+  });
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -43,17 +58,68 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool _sending = false;
   XFile? _pendingAttachment;
 
+  sio.Socket? _socket;
+  StreamSubscription<dynamic>? _testEventsSub;
+
   @override
   void initState() {
     super.initState();
     _fetchMessages();
+    if (widget.testMessageEvents != null) {
+      _testEventsSub = widget.testMessageEvents!.listen(_handleIncomingMessageEvent);
+    } else {
+      _connectSocket();
+    }
   }
 
   @override
   void dispose() {
     _bodyController.dispose();
     _scrollController.dispose();
+    _testEventsSub?.cancel();
+    try {
+      _socket?.off('message_created');
+      _socket?.disconnect();
+      _socket?.dispose();
+    } catch (_) {}
     super.dispose();
+  }
+
+  // ---------------- Socket.IO (Realtime) ----------------
+  //
+  // Real gap found via a full-codebase review: JobScreen already
+  // subscribes to Socket.IO for job/application/notification push events
+  // (see JobScreenState._connectSocket), but this screen had no
+  // subscription at all -- a user with a thread open would never see a
+  // reply arrive without manually tapping Refresh. Mirrors JobScreen's
+  // connection setup exactly (same path/transports/reconnection options,
+  // same JWT-in-auth-payload handshake), just listening for one different
+  // event.
+  Future<void> _connectSocket() async {
+    final token = await ApiClient.instance.getToken();
+    final socketOptions = sio.OptionBuilder()
+        .setPath('/socket.io')
+        .setTransports(['websocket', 'polling'])
+        .enableReconnection()
+        .setReconnectionAttempts(1 << 20)
+        .setReconnectionDelay(800)
+        .setAuth(token != null ? {'token': token} : {})
+        .build();
+    socketOptions['reconnectionDelayMax'] = 8000;
+    _socket = sio.io(ApiClient.baseUrl, socketOptions);
+
+    // message_created is emitted to both the applicant's and the
+    // employer's private rooms (see _create_message in app.py) whenever
+    // either side posts to any of their threads -- only react to it when
+    // it belongs to the specific thread open on this screen.
+    _socket!.on('message_created', _handleIncomingMessageEvent);
+  }
+
+  void _handleIncomingMessageEvent(dynamic data) {
+    if (!mounted) return;
+    if (data is Map && (data['application_id'] as num?)?.toInt() == widget.applicationId) {
+      _fetchMessages();
+    }
   }
 
   Future<void> _fetchMessages() async {

@@ -35,9 +35,15 @@ WORKDIR /app
 # toolchain — see blockchain/package.json). Node 22, not 20: found via a
 # real `docker build` failure, not assumed -- Hardhat 3.12.0 hard-requires
 # Node >= 22 ("ERROR: You are using Node.js 20.20.2 which is not supported
-# by Hardhat"). Kept minimal otherwise on purpose.
+# by Hardhat"). age (FiloSottile/age, packaged in Debian bookworm as `age`
+# 1.1.1-1 — this image's base, python:3.11-slim, is bookworm-based,
+# confirmed via packages.debian.org rather than assumed) encrypts backup
+# archives before off-site upload (scripts/backup.py's encrypt_backup(),
+# BACKUP_ENCRYPTION_RECIPIENT in .env.example) — same subprocess-CLI
+# pattern already used for pg_dump/psql above, not a new Python dependency.
+# Kept minimal otherwise on purpose.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential postgresql-client curl gnupg \
+    && apt-get install -y --no-install-recommends build-essential postgresql-client curl gnupg age \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*

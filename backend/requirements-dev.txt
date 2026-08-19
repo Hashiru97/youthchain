@@ -8,3 +8,24 @@ pytest==9.0.3
 # vulnerability in a pinned version is caught automatically instead of
 # needing another manual audit pass to notice it.
 pip-audit==2.10.1
+
+# Static analysis (SAST) for this codebase's own Python source, as opposed
+# to pip-audit's dependency-CVE scanning above — a real gap found in the
+# infra/DevOps audit: nothing here ever looked for actual insecure coding
+# patterns in app.py/scripts/scanner (hardcoded binds, weak hashing
+# misuse, subprocess/SQL-construction risk) written by this project
+# itself, only vulnerabilities imported from third-party packages. Run via
+# `bandit -r . -x ./tests,./migrations,./venv -ll -ii` (see ci.yml) —
+# medium+ severity AND medium+ confidence, a threshold picked only after
+# actually running bandit against this exact 8,400-line codebase: the
+# default (any severity/confidence) surfaces 15 findings, 13 of them Low-
+# severity/High-confidence notes ("this file imports subprocess") that are
+# accurate but not actionable here, since every subprocess call in this
+# codebase already uses a hardcoded argv list, never shell=True. At -ll
+# -ii, two real findings remained -- SHA-1 use in the Have I Been Pwned
+# k-anonymity check (_password_is_breached) and socketio.run's
+# host="0.0.0.0" -- both individually reviewed and suppressed inline with
+# a `# nosec BXXX` marker and a comment explaining why each is
+# intentional, not a blanket ignore. A future genuinely-new medium+/
+# medium+ finding still fails the build.
+bandit==1.9.4
