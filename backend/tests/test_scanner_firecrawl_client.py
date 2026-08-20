@@ -280,3 +280,107 @@ def test_fetch_url_plain_aborts_a_response_over_the_size_cap(monkeypatch):
         assert False, "expected ScanSourceError"
     except ScanSourceError as e:
         assert "exceeded" in str(e)
+
+
+# ----------------- DNS-rebinding SSRF regression -----------------
+#
+# Real gap found via a full-codebase audit: _assert_safe_fetch_target's
+# own resolution and whatever requests/urllib3 performs internally to
+# actually open the connection moments later are two SEPARATE DNS
+# lookups. An attacker running their own authoritative DNS server can
+# legitimately answer them differently — a public IP for the first, a
+# private/internal one for the second — which passes the check and then
+# connects fetch_url_plain() to an address inside this backend's own
+# network anyway. Every test above monkeypatches socket.getaddrinfo to
+# one FIXED answer for the whole test, which can't have caught this: it
+# never modeled the resolver answering twice, differently. These tests
+# do, directly against _pin_dns (the actual fix) rather than needing a
+# real socket/DNS server to prove it.
+
+def test_pin_dns_returns_the_pinned_answer_even_when_the_real_resolver_would_rebind(monkeypatch):
+    """The core property: once _pin_dns is holding a hostname's already-
+    validated addrinfo, ANY lookup of that hostname inside the block
+    returns the pinned answer -- never a fresh one, no matter what the
+    real resolver would now say (simulating DNS rebinding: it "would"
+    answer with a private IP if actually asked again)."""
+    validated_addrinfo = _fake_getaddrinfo(_PUBLIC_IP)("careers.sl")
+
+    def _rebound_resolver(host, *a, **k):
+        # What a real resolver would answer NOW, if _pin_dns weren't
+        # intercepting -- the attacker's second, different answer.
+        return _fake_getaddrinfo(_PRIVATE_IP)(host)
+
+    monkeypatch.setattr(firecrawl_client.socket, "getaddrinfo", _rebound_resolver)
+
+    with firecrawl_client._pin_dns("careers.sl", validated_addrinfo):
+        result = socket.getaddrinfo("careers.sl", None)
+        assert result == validated_addrinfo
+        assert result[0][4][0] == _PUBLIC_IP
+
+    # Restored afterward -- an unrelated later lookup for the same host
+    # (e.g. a completely separate fetch) is not permanently pinned.
+    assert socket.getaddrinfo("careers.sl", None) == _rebound_resolver("careers.sl")
+
+
+def test_pin_dns_does_not_affect_lookups_for_a_different_hostname(monkeypatch):
+    """Only the specific hostname just validated is pinned -- Firecrawl's
+    own domain, or any other DNS this process needs during the same
+    window, must still resolve normally."""
+    validated_addrinfo = _fake_getaddrinfo(_PUBLIC_IP)("careers.sl")
+    monkeypatch.setattr(firecrawl_client.socket, "getaddrinfo", _fake_getaddrinfo(_PRIVATE_IP))
+
+    with firecrawl_client._pin_dns("careers.sl", validated_addrinfo):
+        assert socket.getaddrinfo("careers.sl", None) == validated_addrinfo
+        # A different host isn't pinned -- passes through to the (fake)
+        # real resolver untouched.
+        assert socket.getaddrinfo("some-other-host.example", None)[0][4][0] == _PRIVATE_IP
+
+
+def test_fetch_url_plain_connects_to_the_validated_address_even_if_dns_would_rebind(monkeypatch):
+    """End-to-end proof at the level that actually matters: fetch_url_plain
+    itself must be immune to the resolver answering differently between
+    its safety check and the moment requests.get() would normally
+    resolve the host again to actually connect. Simulated here by making
+    the fake requests.get() perform its own, separate getaddrinfo call
+    (standing in for what urllib3 really does under the hood) and
+    asserting it observes the pinned, safe address -- never a fresh
+    lookup, which is exactly what closes this off: the underlying
+    resolver a rebinding attacker controls is never consulted a second
+    time at all once _pin_dns holds the validated answer, regardless of
+    what it would now say."""
+    call_count = {"n": 0}
+
+    def _resolver(host, *a, **k):
+        call_count["n"] += 1
+        # Only ever reached by _assert_safe_fetch_target's own initial
+        # check. If fetch_url_plain's connection later consulted this
+        # same (attacker-controlled) resolver again -- the bug this test
+        # guards against -- it would land here too and get answered
+        # privately, exactly modeling a DNS-rebinding attacker's second,
+        # different answer.
+        target_ip = _PUBLIC_IP if call_count["n"] == 1 else _PRIVATE_IP
+        return _fake_getaddrinfo(target_ip)(host)
+
+    monkeypatch.setattr(firecrawl_client.socket, "getaddrinfo", _resolver)
+
+    observed = {}
+
+    def _fake_get(url, timeout, headers, allow_redirects, stream):
+        # Stands in for urllib3's own connection-time DNS resolution,
+        # which happens for real inside requests.get() in production.
+        observed["resolved_to"] = socket.getaddrinfo("rebinding.example", None)[0][4][0]
+        return _FakeGetResponse(200, "<html>ok</html>")
+
+    monkeypatch.setattr(firecrawl_client.requests, "get", _fake_get)
+
+    fetch_url_plain("https://rebinding.example/job/x/")
+
+    assert call_count["n"] == 1, (
+        "the underlying resolver must be consulted exactly once (the initial safety "
+        "check) -- a second call means the connection wasn't actually pinned and could "
+        "have been rebound to whatever the attacker's DNS now answers"
+    )
+    assert observed["resolved_to"] == _PUBLIC_IP, (
+        "fetch_url_plain must connect to the address already validated as safe, "
+        "not a fresh (attacker-controlled) resolution"
+    )

@@ -22,6 +22,15 @@ import 'api_client.dart';
 /// app restarts — the whole point of a durable queue is surviving both.
 class PendingApplication {
   final String id;
+  // Whichever account's ApiClient.getUserId() was current at enqueue()
+  // time — see PendingApplicationsQueue's own docstring on why every
+  // read/sync path filters by this against the CURRENTLY logged-in user
+  // rather than operating on the raw on-disk list directly. Nullable only
+  // for defensive backward-compat with an item persisted before this
+  // field existed; such an item can never match a real logged-in user's
+  // id again and is effectively orphaned (safe default: excluded from
+  // every account's view rather than guessed into one).
+  final int? userId;
   final int jobId;
   final String jobTitle;
   final String cvFileName;
@@ -34,6 +43,7 @@ class PendingApplication {
 
   const PendingApplication({
     required this.id,
+    required this.userId,
     required this.jobId,
     required this.jobTitle,
     required this.cvFileName,
@@ -47,6 +57,7 @@ class PendingApplication {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'userId': userId,
         'jobId': jobId,
         'jobTitle': jobTitle,
         'cvFileName': cvFileName,
@@ -60,6 +71,7 @@ class PendingApplication {
 
   factory PendingApplication.fromJson(Map<String, dynamic> json) => PendingApplication(
         id: json['id'] as String,
+        userId: (json['userId'] as num?)?.toInt(),
         jobId: (json['jobId'] as num).toInt(),
         jobTitle: json['jobTitle'] as String? ?? '',
         cvFileName: json['cvFileName'] as String,
@@ -73,6 +85,7 @@ class PendingApplication {
 
   PendingApplication copyWith({String? status, String? lastError}) => PendingApplication(
         id: id,
+        userId: userId,
         jobId: jobId,
         jobTitle: jobTitle,
         cvFileName: cvFileName,
@@ -123,6 +136,14 @@ class PendingApplicationsQueue {
     return dir;
   }
 
+  /// Raw, unfiltered contents of the on-disk queue -- every account that
+  /// has ever queued an application on this device, not just the one
+  /// currently logged in. Kept unfiltered specifically because
+  /// _saveAll()'s read-modify-write callers (enqueue/_removeAndCleanup/
+  /// _updateStatus) round-trip through this list and must never silently
+  /// drop another account's still-queued entries when they persist their
+  /// own change -- see loadForCurrentUser() for the account-scoped view
+  /// every UI/sync call site outside this class should actually use.
   Future<List<PendingApplication>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
@@ -135,6 +156,28 @@ class PendingApplicationsQueue {
     } catch (_) {
       return [];
     }
+  }
+
+  /// The queue as it should ever be shown to, or synced on behalf of, a
+  /// human: only entries queued by whichever account is CURRENTLY logged
+  /// in. Real gap found via a live audit: this queue used to be a single
+  /// on-disk list with no per-account scoping at all, and this app has no
+  /// per-user storage namespace elsewhere to lean on for it (ApiClient's
+  /// own token/session keys are already single-slot by design, since only
+  /// one account is ever logged in on a device at once) -- meaning on a
+  /// shared/family device (the norm this app is built for, not an edge
+  /// case), a user who queued an application offline, then logged out
+  /// and handed the phone to someone else, would have had their still-
+  /// pending job application -- CV attached -- silently surfaced to, and
+  /// on reconnect auto-submitted as, the NEXT person who logs in. Scoping
+  /// by userId here (rather than clearing the whole queue on logout)
+  /// preserves the original queuer's own pending application for when
+  /// THEY log back in, while making it invisible and unsyncable to
+  /// anyone else in the meantime.
+  Future<List<PendingApplication>> loadForCurrentUser() async {
+    final uid = await ApiClient.instance.getUserId();
+    final all = await loadAll();
+    return all.where((e) => e.userId != null && e.userId == uid).toList();
   }
 
   Future<void> _saveAll(List<PendingApplication> items) async {
@@ -172,6 +215,7 @@ class PendingApplicationsQueue {
     final items = await loadAll();
     items.add(PendingApplication(
       id: id,
+      userId: await ApiClient.instance.getUserId(),
       jobId: jobId,
       jobTitle: jobTitle,
       cvFileName: cvFileName,
@@ -201,16 +245,20 @@ class PendingApplicationsQueue {
     }
   }
 
-  /// Attempts to submit every queued application. Items that fail again
-  /// (still offline, or a real server error) stay queued with an updated
-  /// status/error for the UI to show; items that succeed are removed and
-  /// their local files cleaned up. Safe to call repeatedly/concurrently —
+  /// Attempts to submit every queued application belonging to the
+  /// CURRENTLY logged-in account (see loadForCurrentUser() -- syncing the
+  /// raw, unscoped list here would submit another account's still-queued
+  /// application, CV attached, under whichever account happens to be
+  /// logged in when connectivity returns). Items that fail again (still
+  /// offline, or a real server error) stay queued with an updated status/
+  /// error for the UI to show; items that succeed are removed and their
+  /// local files cleaned up. Safe to call repeatedly/concurrently —
   /// re-entrant calls are no-ops while a sync is already running.
   Future<void> trySyncAll() async {
     if (_syncing) return;
     _syncing = true;
     try {
-      final items = await loadAll();
+      final items = await loadForCurrentUser();
       for (final item in items) {
         await _trySyncOne(item);
       }

@@ -27,9 +27,14 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
     super.initState();
     fetchApplications();
     _loadPending();
-    _pendingSub = PendingApplicationsQueue.instance.changes.listen((items) {
+    _pendingSub = PendingApplicationsQueue.instance.changes.listen((_) {
       if (!mounted) return;
-      setState(() => pending = items);
+      // The stream emits the raw, account-unscoped on-disk queue (see
+      // loadForCurrentUser()'s own docstring) -- re-derive this account's
+      // own view rather than displaying that payload directly, or a
+      // shared-device account switch would leak the PREVIOUS account's
+      // still-pending application (CV attached) into this one's list.
+      _loadPending();
       // A queued item just succeeded and dropped out of the pending list —
       // refresh the real list so it shows up there instead.
       fetchApplications();
@@ -43,7 +48,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
   }
 
   Future<void> _loadPending() async {
-    final items = await PendingApplicationsQueue.instance.loadAll();
+    final items = await PendingApplicationsQueue.instance.loadForCurrentUser();
     if (!mounted) return;
     setState(() => pending = items);
   }

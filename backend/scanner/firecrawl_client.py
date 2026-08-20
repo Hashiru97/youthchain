@@ -5,6 +5,7 @@ handle JS rendering/bot-detection/etc. rather than this backend fetching
 pages directly. Plain `requests.post`, same convention as
 app._password_is_breached()'s HIBP call — no SDK for a single endpoint.
 """
+import contextlib
 import ipaddress
 import socket
 import time
@@ -23,7 +24,7 @@ class ScanSourceError(Exception):
     """
 
 
-def _assert_safe_fetch_target(url: str) -> None:
+def _assert_safe_fetch_target(url: str) -> list:
     """
     SSRF guard for any URL this backend fetches directly (fetch_url_plain
     below, and scrape_url as defense-in-depth even though Firecrawl's own
@@ -43,6 +44,17 @@ def _assert_safe_fetch_target(url: str) -> None:
     literal hostname) is what actually closes this, since a hostname
     attacker-controlled DNS could otherwise point anywhere on first
     request and somewhere internal on a later one.
+
+    Returns the validated addrinfo list (see _pin_dns below) — this
+    function's own resolution and whatever requests/urllib3 performs
+    internally moments later when actually opening the connection are two
+    SEPARATE DNS lookups. An attacker running their own DNS server can
+    legitimately answer them differently (a public IP here, a private one
+    then) — classic DNS-rebinding, and the entire reason this check
+    existed was defeated by it otherwise. Callers MUST fetch inside
+    _pin_dns(hostname, this-return-value) so the connection actually
+    opened is guaranteed to be the same address just validated, not a
+    fresh, unvalidated lookup.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -68,6 +80,41 @@ def _assert_safe_fetch_target(url: str) -> None:
             raise ScanSourceError(
                 f"Refusing to fetch {url!r}: resolves to non-public address {ip}"
             )
+    return addrinfo
+
+
+@contextlib.contextmanager
+def _pin_dns(hostname: str, addrinfo: list):
+    """
+    Closes the DNS-rebinding TOCTOU window above: scopes a monkeypatch of
+    socket.getaddrinfo so that ANY resolution of `hostname` during this
+    block — specifically including whatever requests/urllib3 does
+    internally to actually open the connection — returns exactly the
+    already-validated `addrinfo`, never a fresh lookup an attacker's DNS
+    server could answer differently. Only intercepts lookups for this
+    exact hostname; everything else (Firecrawl's own domain, unrelated
+    DNS this process needs) resolves normally, and the real resolver is
+    always restored in `finally` even on exception.
+
+    Deliberately does NOT touch how the TLS handshake itself validates
+    the connection — SNI and certificate hostname verification still run
+    against the real `hostname` string throughout; only the numeric
+    address the socket actually connects to is pinned. That's what makes
+    this safe to do at the DNS layer alone rather than needing to
+    hand-roll connection-pool/SNI logic to pin an IP directly.
+    """
+    real_getaddrinfo = socket.getaddrinfo
+
+    def _pinned(host, *args, **kwargs):
+        if host == hostname:
+            return addrinfo
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    socket.getaddrinfo = _pinned
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = real_getaddrinfo
 
 
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
@@ -167,16 +214,18 @@ def fetch_url_plain(url: str, timeout: int = 15) -> str:
     on any failure, same contract as scrape_url, so pipeline.py's
     existing except handling covers both without change.
     """
-    _assert_safe_fetch_target(url)
+    addrinfo = _assert_safe_fetch_target(url)
+    hostname = urlparse(url).hostname
 
     try:
-        resp = requests.get(
-            url,
-            timeout=timeout,
-            headers={"User-Agent": _PLAIN_FETCH_USER_AGENT},
-            allow_redirects=False,
-            stream=True,
-        )
+        with _pin_dns(hostname, addrinfo):
+            resp = requests.get(
+                url,
+                timeout=timeout,
+                headers={"User-Agent": _PLAIN_FETCH_USER_AGENT},
+                allow_redirects=False,
+                stream=True,
+            )
     except requests.RequestException as e:
         raise ScanSourceError(f"Network error fetching {url} directly: {e}") from e
 

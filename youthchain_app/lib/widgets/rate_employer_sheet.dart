@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
@@ -17,6 +18,7 @@ Future<bool> showRateEmployerSheet(
 }) async {
   int score = 0;
   final commentCtrl = TextEditingController();
+  final l10n = context.l10n;
 
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -32,7 +34,7 @@ Future<bool> showRateEmployerSheet(
           Future<void> submit() async {
             if (score < 1) {
               ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(content: Text("Choose a star rating.")),
+                SnackBar(content: Text(l10n.chooseStarRatingError)),
               );
               return;
             }
@@ -47,7 +49,7 @@ Future<bool> showRateEmployerSheet(
               if (resp.statusCode == 201) {
                 if (ctx.mounted) Navigator.of(ctx).pop(true);
               } else {
-                String msg = "Could not submit rating";
+                String msg = l10n.couldNotSubmitRating;
                 try {
                   final body = json.decode(resp.body);
                   if (body is Map && body["error"] is String) {
@@ -63,9 +65,7 @@ Future<bool> showRateEmployerSheet(
             } catch (_) {
               if (ctx.mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text("Network error submitting rating"),
-                  ),
+                  SnackBar(content: Text(l10n.networkErrorSubmittingRating)),
                 );
               }
             } finally {
@@ -96,12 +96,12 @@ Future<bool> showRateEmployerSheet(
                   ),
                 ),
                 Text(
-                  "Rate this employer",
+                  l10n.rateThisEmployerTitle,
                   style: Theme.of(ctx).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "How was your experience on this gig? This helps other workers decide who to work with.",
+                  l10n.rateEmployerSubtitle,
                   style: Theme.of(ctx).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -128,9 +128,9 @@ Future<bool> showRateEmployerSheet(
                 TextField(
                   controller: commentCtrl,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: "Comment (optional)",
-                    hintText: "e.g. Paid on time, clear instructions",
+                  decoration: InputDecoration(
+                    labelText: l10n.ratingCommentOptionalLabel,
+                    hintText: l10n.ratingCommentHint,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -151,7 +151,7 @@ Future<bool> showRateEmployerSheet(
                             ),
                           )
                         : const Icon(Icons.star_rounded, size: 18),
-                    label: Text(submitting ? "Submitting..." : "Submit rating"),
+                    label: Text(submitting ? l10n.submittingEllipsis : l10n.submitRatingButton),
                     onPressed: submitting ? null : submit,
                   ),
                 ),

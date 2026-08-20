@@ -202,7 +202,20 @@ Set, at minimum:
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | real SMTP creds — without these, OTP codes only ever reach the server log, not the user |
 
 Leave `DATABASE_URL` blank — `docker-compose.tls.yml` sets it to the
-bundled Postgres container for you.
+bundled Postgres container for you, using the password from step 4.2b
+below.
+
+**4.2b — Configure the root `.env` (Postgres password)**
+
+```bash
+cp .env.example .env
+```
+
+Set `POSTGRES_PASSWORD` to a real random value (`openssl rand -hex 32`)
+— see `.env.example`'s own comment for why this matters: every compose
+file used to hardcode the same literal password, committed to version
+control. `docker-compose.tls.yml` now refuses to start at all without a
+real value set here.
 
 **4.3 — Configure `blockchain/.env`**
 
@@ -238,7 +251,28 @@ written by a manual deploy run won't survive the container being
 recreated (a redeploy, an image rebuild) unless the address is also
 captured in `backend/.env`, which does persist.
 
+As run above, the deploying key (`DEPLOYER_PRIVATE_KEY`) becomes the
+registry's sole `owner` — one compromised key/host then controls all of
+issuer accreditation/revocation and credential revocation forever. See
+the README's own "Governance: a single key vs. a Safe multisig" section
+for why that's a real production risk, not a theoretical one, and
+**strongly consider `scripts/deploySafe.js` before this step instead**:
+run it first, then re-run 4.4 as `OWNER_ADDRESS=<printed Safe address>
+OWNER_ADDRESS_CONFIRMED=1 npx hardhat run scripts/deploy.js --network
+sepolia` rather than the plain command above. If you do, **skip 4.5's
+script below** — `accreditIssuer` is `onlyOwner`, and the owner is now
+the Safe, not this VPS's deployer key; a Safe owner can only ever be
+called through the Safe itself (app.safe.global, or the owners' own
+independent signing tooling), meeting its threshold, never by a single
+hardhat script run from here. That is the entire point of moving to a
+Safe — see `transferRegistryOwnershipToSafe.js`'s own docstring if you
+need to migrate an already-deployed single-EOA registry to one instead
+of deploying straight to it.
+
 **4.5 — Accredit the issuer key**
+
+*(Skip this step if 4.4 deployed with a Safe as owner — see the note
+above; accredit the issuer key as a Safe transaction instead.)*
 
 If `ISSUER_PRIVATE_KEY` (3c) is a different key from the deployer (it
 should be), accredit it as a one-off script rather than the interactive

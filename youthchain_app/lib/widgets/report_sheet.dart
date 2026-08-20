@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_context.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
@@ -37,13 +38,13 @@ Future<void> showReportSheet(
     "showReportSheet needs exactly one of employerId or scrapedJobId",
   );
   final bool isListingReport = scrapedJobId != null;
-
-  const categories = <String, String>{
-    "scam": "Scam",
-    "harassment": "Harassment",
-    "fake_job": "Fake job",
-    "inappropriate": "Inappropriate",
-    "other": "Other",
+  final l10n = context.l10n;
+  final categories = <String, String>{
+    "scam": l10n.reportCategoryScam,
+    "harassment": l10n.reportCategoryHarassment,
+    "fake_job": l10n.reportCategoryFakeJob,
+    "inappropriate": l10n.reportCategoryInappropriate,
+    "other": l10n.reportCategoryOther,
   };
 
   await showModalBottomSheet(
@@ -79,17 +80,13 @@ Future<void> showReportSheet(
                 if (ctx.mounted) Navigator.of(ctx).pop();
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "Report submitted — thank you for helping keep YouthChain safe",
-                    ),
-                  ),
+                  SnackBar(content: Text(l10n.reportSubmittedSuccess)),
                 );
               } else if (res.statusCode == 429) {
                 final body = _jsonDecodeSafe(res.body);
                 final msg =
                     (body?["error"] as String?) ??
-                    "Too many reports. Try again later.";
+                    l10n.tooManyAttemptsTryLater;
                 if (!ctx.mounted) return;
                 ScaffoldMessenger.of(
                   ctx,
@@ -97,7 +94,7 @@ Future<void> showReportSheet(
               } else {
                 final body = _jsonDecodeSafe(res.body);
                 final msg =
-                    (body?["error"] as String?) ?? "Failed to submit report";
+                    (body?["error"] as String?) ?? l10n.failedToSubmitReport;
                 if (!ctx.mounted) return;
                 ScaffoldMessenger.of(
                   ctx,
@@ -106,9 +103,7 @@ Future<void> showReportSheet(
             } catch (_) {
               if (!ctx.mounted) return;
               ScaffoldMessenger.of(ctx).showSnackBar(
-                const SnackBar(
-                  content: Text("Network error while submitting report"),
-                ),
+                SnackBar(content: Text(l10n.networkErrorSubmittingReport)),
               );
             } finally {
               setSheetState(() => submitting = false);
@@ -138,20 +133,16 @@ Future<void> showReportSheet(
                   ),
                 ),
                 Text(
-                  isListingReport ? "Report this listing" : "Report this employer",
+                  isListingReport ? l10n.reportThisListingTitle : l10n.reportThisEmployerTitle,
                   style: Theme.of(ctx).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  isListingReport
-                      ? "Tell us what's wrong. Reports help YouthChain keep Discover "
-                          "listings trustworthy."
-                      : "Tell us what's wrong. Reports help YouthChain keep employers "
-                          "accountable.",
+                  isListingReport ? l10n.reportListingSubtitle : l10n.reportEmployerSubtitle,
                   style: Theme.of(ctx).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text("Category", style: Theme.of(ctx).textTheme.titleSmall),
+                Text(l10n.reportCategoryLabel, style: Theme.of(ctx).textTheme.titleSmall),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -171,9 +162,9 @@ Future<void> showReportSheet(
                   controller: detailsCtrl,
                   maxLines: 4,
                   maxLength: 500,
-                  decoration: const InputDecoration(
-                    labelText: "Details (optional)",
-                    hintText: "Describe what happened...",
+                  decoration: InputDecoration(
+                    labelText: l10n.reportDetailsOptionalLabel,
+                    hintText: l10n.reportDetailsHint,
                     alignLabelWithHint: true,
                   ),
                 ),
@@ -192,7 +183,7 @@ Future<void> showReportSheet(
                             ),
                           )
                         : const Icon(Icons.flag_outlined, size: 18),
-                    label: Text(submitting ? "Submitting..." : "Submit report"),
+                    label: Text(submitting ? l10n.submittingEllipsis : l10n.submitReportButton),
                     onPressed: submitting ? null : submit,
                   ),
                 ),

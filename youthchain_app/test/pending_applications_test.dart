@@ -33,6 +33,20 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     tempDir = await Directory.systemTemp.createTemp('yc_pending_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
+    // Every queue entry is now tagged with ApiClient.getUserId() at
+    // enqueue time and filtered against it again on read/sync (see
+    // PendingApplicationsQueue.loadForCurrentUser()'s own docstring on
+    // why: without this, a shared-device account switch would leak the
+    // previous account's still-pending application to the next one).
+    // Secure storage's platform channel isn't mocked in this harness, so
+    // the write below will throw -- caught here the same way ApiClient's
+    // own getToken()/getUserId() already degrade to null on it, but the
+    // in-memory cache (set synchronously before that awaited write) is
+    // what actually makes getUserId() resolve to 1 for the rest of each
+    // test regardless.
+    try {
+      await ApiClient.instance.saveSession(token: 'test-token', userId: 1);
+    } catch (_) {}
   });
 
   tearDown(() async {
@@ -122,6 +136,52 @@ void main() {
     expect(items, hasLength(1));
     expect(items.first.status, 'failed');
     expect(items.first.lastError, contains('no longer accepting'));
+  });
+
+  test('a shared device: switching accounts hides the previous account\'s '
+      'pending application and does not sync it under the new one', () async {
+    // User 1 (set up in setUp above) queues an application offline.
+    await PendingApplicationsQueue.instance.enqueue(
+      jobId: 55,
+      jobTitle: 'User 1s job',
+      cvFileName: 'cv.pdf',
+      cvBytes: utf8.encode('user 1 cv content'),
+    );
+
+    // User 1 logs out, User 2 logs in on the same device.
+    try {
+      await ApiClient.instance.clearSession();
+    } catch (_) {}
+    try {
+      await ApiClient.instance.saveSession(token: 'user-2-token', userId: 2);
+    } catch (_) {}
+
+    // User 2 must not see User 1's still-pending application...
+    final visibleToUser2 = await PendingApplicationsQueue.instance.loadForCurrentUser();
+    expect(visibleToUser2, isEmpty);
+
+    // ...and reconnecting must not silently submit it under User 2's
+    // identity (the request below would fail this expectation if
+    // trySyncAll() ever reached the network for it).
+    ApiClient.testClient = MockClient((request) async {
+      fail('trySyncAll() must not submit another account\'s queued application');
+    });
+    await PendingApplicationsQueue.instance.trySyncAll();
+
+    // The entry is still there, untouched, for when User 1 logs back in.
+    final raw = await PendingApplicationsQueue.instance.loadAll();
+    expect(raw, hasLength(1));
+    expect(raw.first.jobId, 55);
+
+    try {
+      await ApiClient.instance.clearSession();
+    } catch (_) {}
+    try {
+      await ApiClient.instance.saveSession(token: 'test-token', userId: 1);
+    } catch (_) {}
+    final visibleToUser1Again = await PendingApplicationsQueue.instance.loadForCurrentUser();
+    expect(visibleToUser1Again, hasLength(1));
+    expect(visibleToUser1Again.first.jobId, 55);
   });
 
   test('discard removes the queue entry and deletes its local file', () async {

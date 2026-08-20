@@ -60,6 +60,22 @@ dev_dependencies:
   path_provider_platform_interface: ^2.1.0
   plugin_platform_interface: ^2.1.0
 
+# Real gap found via a full engineering audit: a routine `flutter pub
+# upgrade` (no --major-versions, entirely within the constraints above)
+# silently breaks the Android build -- confirmed live with a real
+# `flutter build apk`, not assumed. url_launcher (^6.3.0 above) has no
+# upper bound on its own transitive url_launcher_android dependency, and
+# the newest one pub resolves to (6.3.30, pulling in androidx.core
+# 1.17.0 / androidx.browser 1.9.0) requires Android Gradle Plugin 8.9.1+
+# -- this project is pinned to AGP 8.7.3 (see android/settings.gradle.kts),
+# a full major version behind that. Pinned here at the last version
+# confirmed to actually build (6.3.20) so a future routine dependency
+# refresh doesn't silently reintroduce this. Removing this override is
+# safe again once AGP itself is deliberately bumped to 8.9.1+ (its own,
+# separately-tested change -- not bundled into a routine `pub upgrade`).
+dependency_overrides:
+  url_launcher_android: 6.3.20
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

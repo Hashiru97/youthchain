@@ -87,7 +87,12 @@ services:
       # says, see scripts/backup.py treat that as "no Postgres configured",
       # and silently back up a stale/nonexistent SQLite file instead of the
       # real data backend is actually writing to.
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      # Matches docker-compose.yml's own POSTGRES_PASSWORD resolution
+      # (this file combines with that one, per its own header) — must
+      # stay the same variable/default so this always connects with
+      # whatever password postgres was actually started with, never a
+      # stale hardcoded copy that could silently drift out of sync.
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-youthchain}@postgres:5432/youthchain
       - BACKUP_S3_ENDPOINT=http://minio:9000
       - BACKUP_S3_BUCKET=youthchain-backups
       - BACKUP_S3_ACCESS_KEY=youthchain-backup

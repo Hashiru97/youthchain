@@ -50,7 +50,21 @@ services:
     build: ./infra/postgres-cron
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
     environment:
-      - POSTGRES_PASSWORD=youthchain
+      # Real gap found via a full engineering audit: this literal
+      # "youthchain" password was hardcoded and committed to version
+      # control across every compose file in this repo, including
+      # docker-compose.tls.yml/docker-compose.scale.yml -- both
+      # documented as the actual production stack. Anyone with read
+      # access to this repository has always had the production database
+      # password, permanently (git history doesn't forget it even after
+      # rotation), regardless of whether Postgres's own port is ever
+      # published to the host. ${POSTGRES_PASSWORD:-...} keeps this file
+      # specifically working with zero setup for local/dev (its own
+      # stated design goal) via a root .env (see .env.example) — the
+      # production compose files use :? instead, which refuses to start
+      # at all rather than silently falling back to this same weak,
+      # public default.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-youthchain}
       - POSTGRES_DB=youthchain
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -75,7 +89,7 @@ services:
       # Overrides any DATABASE_URL in backend/.env on purpose, so this
       # stack is correct out of the box with zero setup — see the header
       # comment above for pointing at a real external Postgres instead.
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-youthchain}@postgres:5432/youthchain
       # Job scanner's poller (see app.py's "Job scanner poller" section) —
       # safe to enable unconditionally: it just never claims anything
       # until real job_source rows exist and FIRECRAWL_API_KEY/

@@ -49,6 +49,36 @@ def test_employer_erase_requires_the_correct_password(client):
         assert employer.erased_at is None
 
 
+def test_employer_erase_is_rate_limited_after_five_bad_password_attempts(client):
+    """
+    Same gap class as test_employer_login_rate_limited_after_five_bad_password_attempts
+    in test_employer.py: /api/employer/account/erase checks a password
+    against an existing session (see erase_own_employer_account()'s own
+    docstring), so without a throttle here too, that password check is an
+    unbounded guessing oracle -- exactly what employer/user/admin login
+    already had to be fixed against.
+    """
+    register_employer(client, email="erase-bruteforce@test.com")
+    page = client.get("/employer/verification")
+    token = _csrf_token(page.get_data(as_text=True))
+
+    for _ in range(5):
+        resp = client.post(
+            "/api/employer/account/erase",
+            data={"csrf_token": token, "password": "wrong-password"},
+        )
+        assert resp.status_code == 403
+    limited = client.post(
+        "/api/employer/account/erase",
+        data={"csrf_token": token, "password": "wrong-password"},
+    )
+    assert limited.status_code == 429
+
+    with app_module.app.app_context():
+        employer = app_module.Employer.query.filter_by(email="erase-bruteforce@test.com").first()
+        assert employer.erased_at is None
+
+
 def test_employer_erase_scrubs_pii_and_deletes_verification_document(client):
     register_employer(client)
     employer_id, doc_filename = _upload_verification_document(client)

@@ -6935,6 +6935,11 @@ def erase_own_employer_account():
     docstring for the User side."""
     employer = Employer.query.get_or_404(_current_employer_id())
     password = request.form.get("password") or (request.get_json(silent=True) or {}).get("password") or ""
+
+    if _login_rate_limited(f"erase:employer:{employer.id}"):
+        return jsonify({"success": False, "error": "Too many attempts. Try again later."}), 429
+    _record_login_attempt(f"erase:employer:{employer.id}")
+
     if not check_password_hash(employer.password_hash, password):
         return _forbidden("Incorrect password.")
 
@@ -7150,6 +7155,11 @@ def erase_own_account():
     user = User.query.get_or_404(_current_user_id())
     data = request.get_json(silent=True) or request.form
     password = data.get("password") or ""
+
+    if _login_rate_limited(f"erase:{user.id}"):
+        return jsonify({"success": False, "error": "Too many attempts. Try again later."}), 429
+    _record_login_attempt(f"erase:{user.id}")
+
     if not check_password_hash(user.password_hash, password):
         return _forbidden("Incorrect password.")
 

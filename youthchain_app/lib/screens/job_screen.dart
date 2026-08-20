@@ -26,7 +26,7 @@ import 'profile_cv_screen.dart';
 import 'saved_jobs_screen.dart';
 import 'work_history_screen.dart';
 
-enum _JobScreenMenuAction { profile, savedJobs, devices, language, logout }
+enum _JobScreenMenuAction { profile, savedJobs, devices, language, logout, deleteAccount }
 
 class JobScreen extends StatefulWidget {
   final int userId;
@@ -737,6 +737,168 @@ class JobScreenState extends State<JobScreen> {
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
+  /// Self-service counterpart to POST /api/account/erase (see
+  /// _erase_user_data()'s own docstring in app.py for what this actually
+  /// does) -- real gap found via a full-codebase audit: the privacy
+  /// policy has always promised this is reachable "from within the app",
+  /// and the backend route has existed, been tested, and been
+  /// rate-limited against password guessing for a while, but nothing in
+  /// this app -- the actual primary product surface -- ever exposed it.
+  /// Requires re-entering the password (same reasoning as the backend
+  /// route's own docstring: a still-valid session token alone shouldn't
+  /// be enough to trigger something this irreversible), and surfaces the
+  /// backend's own specific hold reason (an open appeal/report/dispute)
+  /// verbatim rather than a generic failure, since that message is
+  /// actionable ("resolve that first") in a way a generic error isn't.
+  Future<void> _confirmAndEraseAccount() async {
+    final passwordController = TextEditingController();
+    String? error;
+    bool submitting = false;
+    bool obscure = true;
+    // Deliberately swaps this SAME dialog's own content in place on
+    // success rather than popping it and opening a second showDialog()
+    // right after -- chaining two modal route transitions back-to-back
+    // like that turned out to be genuinely flaky under flutter_test's
+    // frame-synchronous pumping (a real, reproduced pumpAndSettle
+    // timeout/build-scope assertion, not just a style preference), and a
+    // single dialog that transitions is simpler for a real user too (no
+    // close-then-reopen flicker).
+    bool succeeded = false;
+    final l10n = context.l10n;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            final password = passwordController.text;
+            if (password.isEmpty) {
+              setDialogState(() => error = l10n.incorrectPasswordError);
+              return;
+            }
+            setDialogState(() {
+              submitting = true;
+              error = null;
+            });
+            try {
+              final res = await ApiClient.instance.postJson(
+                '/api/account/erase',
+                {'password': password},
+              );
+              if (res.statusCode == 200) {
+                setDialogState(() {
+                  submitting = false;
+                  succeeded = true;
+                });
+                return;
+              }
+              String message;
+              if (res.statusCode == 429) {
+                message = l10n.tooManyAttemptsTryLater;
+              } else if (res.statusCode == 403) {
+                message = l10n.incorrectPasswordError;
+              } else {
+                // 409 (an open appeal/report/dispute) carries the
+                // backend's own specific, actionable reason in `error` --
+                // show it verbatim rather than a generic failure.
+                Map<String, dynamic>? data;
+                try {
+                  final decoded = json.decode(res.body);
+                  if (decoded is Map<String, dynamic>) data = decoded;
+                } catch (_) {}
+                message = (data?['error'] as String?) ?? l10n.deleteAccountFailedGeneric;
+              }
+              setDialogState(() {
+                submitting = false;
+                error = message;
+              });
+            } catch (_) {
+              setDialogState(() {
+                submitting = false;
+                error = l10n.networkErrorGeneric;
+              });
+            }
+          }
+
+          if (succeeded) {
+            return AlertDialog(
+              title: Text(l10n.accountDeletedTitle),
+              content: Text(l10n.accountDeletedMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.okButton),
+                ),
+              ],
+            );
+          }
+
+          return AlertDialog(
+            title: Text(l10n.deleteAccountDialogTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.deleteAccountWarning),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: passwordController,
+                  obscureText: obscure,
+                  autofocus: true,
+                  enabled: !submitting,
+                  decoration: InputDecoration(
+                    labelText: l10n.passwordLabel,
+                    suffixIcon: IconButton(
+                      icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                      onPressed: () => setDialogState(() => obscure = !obscure),
+                    ),
+                  ),
+                  onSubmitted: (_) => submitting ? null : submit(),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(error!, style: TextStyle(color: context.colors.error, fontSize: 13)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: submitting ? null : () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.cancelButton),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: context.colors.error),
+                onPressed: submitting ? null : submit,
+                child: submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                      )
+                    : Text(l10n.deleteAccountConfirmButton),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    passwordController.dispose();
+
+    if (!succeeded) return;
+    if (!mounted) return;
+
+    // The account row is already gone server-side (tombstoned) by this
+    // point -- same local cleanup as _logout() above, no POST /logout
+    // call first since there is no longer any account for that route to
+    // act on.
+    await PushNotificationService.clearToken();
+    await ApiClient.instance.clearSession();
+    widget.onLoggedOut?.call();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+  }
+
   // ---------------- Helper UI ----------------
 
   List<String> _parseSkills(String? skills) => (skills ?? "")
@@ -1012,6 +1174,9 @@ class JobScreenState extends State<JobScreen> {
                 case _JobScreenMenuAction.logout:
                   _logout();
                   break;
+                case _JobScreenMenuAction.deleteAccount:
+                  _confirmAndEraseAccount();
+                  break;
               }
             },
             itemBuilder: (context) => [
@@ -1052,6 +1217,26 @@ class JobScreenState extends State<JobScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.logout_rounded),
                   title: Text(context.l10n.logoutMenuItem),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              // Real gap found via a full-codebase audit: the privacy
+              // policy (see backend/templates/privacy_policy.html) has
+              // always promised "you can request deletion of your account
+              // and data from within the app" -- POST /api/account/erase
+              // has existed and been fully tested since BL-XX, but nothing
+              // in this app, the actual primary product surface, ever
+              // exposed it. Styled distinctly (error color) and placed
+              // last -- the one destructive, irreversible action in this
+              // menu, as opposed to Logout's fully reversible one.
+              PopupMenuItem(
+                value: _JobScreenMenuAction.deleteAccount,
+                child: ListTile(
+                  leading: Icon(Icons.delete_forever_rounded, color: context.colors.error),
+                  title: Text(
+                    context.l10n.deleteAccountMenuItem,
+                    style: TextStyle(color: context.colors.error),
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),

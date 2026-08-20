@@ -89,6 +89,45 @@ def test_erase_requires_the_correct_password(client):
         assert row.name != "Deleted user"
 
 
+def test_erase_is_rate_limited_after_five_bad_password_attempts(client):
+    """
+    Same gap class as test_login_rate_limited_after_five_bad_password_attempts
+    in test_auth.py: /api/account/erase checks a password against a
+    still-valid JWT (see erase_own_account()'s own docstring on why a
+    stolen/lifted token shouldn't be enough on its own), so without a
+    throttle here too, that password check becomes exactly the unbounded
+    guessing oracle login already had to be fixed against.
+    """
+    user = register_user(client)
+    for _ in range(5):
+        r = client.post(
+            "/api/account/erase",
+            json={"password": "wrong-password"},
+            headers=auth_headers(user["access_token"]),
+        )
+        assert r.status_code == 403
+    limited = client.post(
+        "/api/account/erase",
+        json={"password": "wrong-password"},
+        headers=auth_headers(user["access_token"]),
+    )
+    assert limited.status_code == 429
+
+    # A DIFFERENT user's erase attempts are unaffected -- per-account, not
+    # a global lockout of the whole route.
+    other = register_user(client, email="other-erase@test.com", phone="999")
+    other_resp = client.post(
+        "/api/account/erase",
+        json={"password": "wrong-password"},
+        headers=auth_headers(other["access_token"]),
+    )
+    assert other_resp.status_code == 403
+
+    with app_module.app.app_context():
+        row = app_module.User.query.get(user["user"]["id"])
+        assert row.erased_at is None
+
+
 def test_erase_scrubs_pii_deletes_credential_and_its_file(client):
     user = register_user(client, email="erase-me@test.com", phone="444")
     cred_id = _issue_credential(client, user["access_token"])

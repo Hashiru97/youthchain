@@ -37,7 +37,15 @@ services:
     build: ./infra/postgres-cron
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
     environment:
-      - POSTGRES_PASSWORD=youthchain
+      # Real gap found via a full engineering audit: this was a hardcoded
+      # "youthchain" literal, committed to version control, on what this
+      # file's own header calls "the public-facing production stack" —
+      # meaning the real database password was permanently public to
+      # anyone with repo read access. :? (not :-) means this refuses to
+      # start at all rather than silently falling back to that same weak
+      # default — set a real POSTGRES_PASSWORD in a root .env before
+      # running this file (see .env.example).
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack — see .env.example}
       - POSTGRES_DB=youthchain
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -57,7 +65,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack — see .env.example}@postgres:5432/youthchain
       - ENABLE_JOB_SCANNER_POLLER=1
     depends_on:
       postgres:

@@ -150,4 +150,11 @@ requests==2.34.2
 # Defense-in-depth allowlist sanitizer for the AI-assisted CV's HTML
 # output (see cv_generator.py's own docstring for the full three-layer
 # model — this is the third, independent layer, not the only one).
-bleach==6.2.0
+# 6.2.0 -> 6.4.0 closes GHSA-gj48-438w-jh9v and GHSA-8rfp-98v4-mmr6
+# (found via pip-audit): both are URI-scheme sanitization gaps on
+# `formaction`/`href`/`a`, neither of which _ALLOWED_TAGS/_ALLOWED_ATTRS
+# in cv_generator.py ever allows through to begin with (no `a`, `button`,
+# or `input` tag, no non-`class` attribute) -- not reachable today, same
+# "costs nothing to close before it might be" reasoning as the
+# python-socketio bump above.
+bleach==6.4.0

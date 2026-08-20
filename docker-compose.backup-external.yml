@@ -52,7 +52,12 @@ services:
       # blank-by-default DATABASE_URL and silently backs up nothing real.
       # BACKUP_S3_* deliberately NOT overridden here — see this file's own
       # header. They come from backend/.env, real values only.
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      # Matches docker-compose.tls.yml's own POSTGRES_PASSWORD resolution
+      # (this file combines with that one, per its own header) — must
+      # stay the same variable/require so this always connects with
+      # whatever password postgres was actually started with, never a
+      # stale hardcoded copy that could silently drift out of sync.
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack}@postgres:5432/youthchain
     volumes:
       - uploads-data:/app/uploads
       - backups-data:/app/backups

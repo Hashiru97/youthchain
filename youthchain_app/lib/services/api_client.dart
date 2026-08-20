@@ -137,8 +137,16 @@ class ApiClient {
 
   Future<int?> getUserId() async {
     if (_cachedUserId != null) return _cachedUserId;
-    final raw = await _storage.read(key: _userIdKey);
-    _cachedUserId = raw != null ? int.tryParse(raw) : null;
+    try {
+      final raw = await _storage.read(key: _userIdKey);
+      _cachedUserId = raw != null ? int.tryParse(raw) : null;
+    } catch (_) {
+      // Same degrade-to-null reasoning as getToken() above — secure
+      // storage's platform channel can be unavailable in some contexts
+      // (e.g. a plain `dart test`/`flutter_test` harness with no
+      // platform bindings registered for it).
+      return null;
+    }
     return _cachedUserId;
   }
 

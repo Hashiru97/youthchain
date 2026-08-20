@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:youthchain_app/l10n/app_localizations.dart';
+import 'package:youthchain_app/l10n/kri_material_fallback.dart';
 import 'package:youthchain_app/services/api_client.dart';
 import 'package:youthchain_app/theme/app_theme.dart';
 import 'package:youthchain_app/widgets/rate_employer_sheet.dart';
@@ -49,7 +51,7 @@ void main() {
   });
 
   testWidgets('requires a star rating before submitting', (tester) async {
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: _Host()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), localizationsDelegates: appLocalizationsDelegates, supportedLocales: AppLocalizations.supportedLocales, home: _Host()));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
@@ -68,7 +70,7 @@ void main() {
       return http.Response(jsonEncode({"success": true}), 201);
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: _Host()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), localizationsDelegates: appLocalizationsDelegates, supportedLocales: AppLocalizations.supportedLocales, home: _Host()));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
@@ -101,7 +103,7 @@ void main() {
       );
     });
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: _Host()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), localizationsDelegates: appLocalizationsDelegates, supportedLocales: AppLocalizations.supportedLocales, home: _Host()));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 

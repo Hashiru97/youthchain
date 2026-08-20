@@ -71,7 +71,11 @@ services:
     build: ./infra/postgres-cron
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=youthchain
     environment:
-      - POSTGRES_PASSWORD=youthchain
+      # Real gap found via a full engineering audit: was hardcoded and
+      # committed to version control — see docker-compose.tls.yml's own
+      # comment on this same variable for the full reasoning. :? refuses
+      # to start rather than silently using that same public default.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack — see .env.example}
       - POSTGRES_DB=youthchain
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -102,7 +106,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack}@postgres:5432/youthchain
     command: ["true"]
     depends_on:
       postgres:
@@ -115,7 +119,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack}@postgres:5432/youthchain
       - REDIS_URL=redis://redis:6379/0
       - FLASK_ENV=production
       # Safe across all three replicas × their gunicorn workers — the
@@ -142,7 +146,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack}@postgres:5432/youthchain
       - REDIS_URL=redis://redis:6379/0
       - FLASK_ENV=production
       # Safe across all three replicas × their gunicorn workers — the
@@ -169,7 +173,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:youthchain@postgres:5432/youthchain
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Set a real POSTGRES_PASSWORD in a root .env before running the production stack}@postgres:5432/youthchain
       - REDIS_URL=redis://redis:6379/0
       - FLASK_ENV=production
       # Safe across all three replicas × their gunicorn workers — the
