@@ -173,7 +173,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final token = await ApiClient.instance.getToken();
       final uri = ApiClient.instance
           .uri("/message_attachment/${Uri.encodeComponent(filename)}")
-          .replace(queryParameters: {if (token != null) "token": token});
+          .replace(queryParameters: {"token": ?token});
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

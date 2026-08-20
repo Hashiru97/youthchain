@@ -42,7 +42,7 @@ class NameWithBadge extends StatelessWidget {
             constraints: BoxConstraints(maxWidth: constraints.maxWidth),
             child: Text(name, style: style, overflow: TextOverflow.ellipsis),
           ),
-          if (badge != null) badge!,
+          ?badge,
         ],
       ),
     );

@@ -70,7 +70,7 @@ Future<void> showReportSheet(
                   if (isListingReport) "job_id": scrapedJobId else "employer_id": employerId,
                   "category": selectedCategory,
                   if (!isListingReport && jobId != null) "job_id": jobId,
-                  if (messageId != null) "message_id": messageId,
+                  "message_id": ?messageId,
                   if (detailsCtrl.text.trim().isNotEmpty)
                     "details": detailsCtrl.text.trim(),
                 },
