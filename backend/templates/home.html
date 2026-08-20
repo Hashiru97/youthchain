@@ -29,32 +29,39 @@
       <p class="home-prompt">Continue as</p>
     </div>
 
+    <!-- Every card's CTA reads "Log in" and every "New here?" line reads
+         "Create an account" -- fine in normal reading order (the card's
+         own heading is right above it), but a screen-reader user
+         jumping via a links list (a common navigation mode, out of
+         surrounding context) would hear "Log in, Log in, Log in" with
+         no way to tell them apart. aria-label on each disambiguates
+         without changing what's shown on screen. -->
     <div class="home-cards">
       <div class="home-card is-jobseeker">
         <div class="home-card-icon">{{ icon_users_count() }}</div>
         <h2>Job seeker</h2>
         <p>Find work, apply with your CV, message employers, and build a verified employment passport.</p>
-        <a class="home-card-cta" href="{{ url_for('portal_login') }}">
+        <a class="home-card-cta" href="{{ url_for('portal_login') }}" aria-label="Log in as a job seeker">
           Log in {{ icon_chevron_right() }}
         </a>
-        <p class="home-card-secondary">New here? <a href="{{ url_for('portal_register') }}">Create an account</a></p>
+        <p class="home-card-secondary">New here? <a href="{{ url_for('portal_register') }}" aria-label="Create a job seeker account">Create an account</a></p>
       </div>
 
       <div class="home-card is-employer">
         <div class="home-card-icon">{{ icon_briefcase() }}</div>
         <h2>Employer</h2>
         <p>Post jobs, review applicants, and message candidates through a verified employer account.</p>
-        <a class="home-card-cta" href="{{ url_for('employer_login') }}">
+        <a class="home-card-cta" href="{{ url_for('employer_login') }}" aria-label="Log in as an employer">
           Log in {{ icon_chevron_right() }}
         </a>
-        <p class="home-card-secondary">New here? <a href="{{ url_for('employer_register') }}">Create an account</a></p>
+        <p class="home-card-secondary">New here? <a href="{{ url_for('employer_register') }}" aria-label="Create an employer account">Create an account</a></p>
       </div>
 
       <div class="home-card is-admin">
         <div class="home-card-icon">{{ icon_shield_check() }}</div>
         <h2>Admin</h2>
         <p>Platform operations: employer verification, credential oversight, reports, and analytics.</p>
-        <a class="home-card-cta" href="{{ url_for('admin_login') }}">
+        <a class="home-card-cta" href="{{ url_for('admin_login') }}" aria-label="Log in as an admin">
           Log in {{ icon_chevron_right() }}
         </a>
         <!-- No self-registration for admin accounts (see admin_login.html's

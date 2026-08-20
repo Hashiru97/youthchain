@@ -554,6 +554,39 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Real gap found via a full site-wide review, not scoped to any one
+   page: nothing anywhere in this codebase's CSS (19 separate
+   transition/hover rules across admin.css/employer.css/portal.css/
+   home.css/style.css) ever checked prefers-reduced-motion, despite
+   this app caring enough about real accessibility elsewhere (WCAG AA
+   contrast fixes throughout this file, the focus-visible fix directly
+   above, real ARIA labels on icon-only buttons) to make that an actual
+   inconsistency, not a non-issue. Vestibular-disorder users who've
+   told their OS they need reduced motion were getting every hover
+   lift/fade/slide anyway. One rule here protects the whole product
+   rather than annotating each of the 19 individually (new hover
+   effects added later inherit this for free too, without needing to
+   remember to add their own guard). !important is the correct,
+   conventional use here, not an anti-pattern: the entire point is
+   overriding any component's own transition-duration regardless of
+   its specificity, for users who've explicitly opted into this at the
+   OS level -- the standard pattern recommended by the WCAG 2.3.3
+   (Animation from Interactions) working group examples, not invented
+   here. scroll-behavior: auto is included as standard practice for
+   the same reason, even though nothing in this codebase currently sets
+   scroll-behavior: smooth anywhere -- forward-looking, not covering an
+   existing usage. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .helper-text {
   display: block;
   margin-top: 6px;
