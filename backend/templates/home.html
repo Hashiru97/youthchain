@@ -19,13 +19,25 @@
     <span class="icon-moon">{{ icon_moon() }}</span>
   </button>
 
+  <!-- Atmosphere layer: three soft, hand-authored blob shapes (SVG, not a
+       raster image -- no asset to fetch, scales losslessly, recolors for
+       free via CSS on the dark-mode fill swap below) rather than the
+       plain radial-gradient corners this page shipped with initially.
+       aria-hidden + fixed positioning behind everything: decorative only,
+       never intercepts a click or gets announced. -->
+  <svg class="home-atmosphere" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <path class="blob-primary" d="M120,180 C260,60 460,40 560,140 C670,250 640,420 500,470 C340,530 140,480 80,360 C30,260 40,250 120,180 Z" />
+    <path class="blob-secondary" d="M980,90 C1120,110 1180,240 1130,340 C1080,440 940,470 850,410 C760,350 750,220 830,140 C880,90 920,80 980,90 Z" />
+    <path class="blob-tertiary" d="M600,600 C760,570 920,640 950,760 C980,880 850,940 700,920 C550,900 430,830 440,730 C450,650 480,625 600,600 Z" />
+  </svg>
+
   <div class="home-shell">
     <div class="home-header">
-      <div class="home-brand-mark">
+      <div class="home-wordmark">
         <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
+        <span>YouthChain</span>
       </div>
-      <h1>YouthChain</h1>
-      <p class="home-tagline">Verified skills. Real opportunities.</p>
+      <h1 class="home-hero">Verified skills.<br />Real opportunities.</h1>
       <p class="home-prompt">Continue as</p>
     </div>
 

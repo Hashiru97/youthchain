@@ -4,25 +4,71 @@
    first-time visitor to the bare domain had no way to discover any of
    them (this is the real gap the engineering review found: GET / used
    to return a bare JSON API status message with no link to anything).
-   Same design language as the existing auth shells (admin_auth_shell.html/
-   employer_auth_shell.html) -- a soft radial-gradient backdrop behind a
-   centered card layout -- extended from "one ambient accent" to "three",
-   since this page's whole job is presenting three equally legitimate
-   entry points, not one surface's own pre-login screen. Colors reuse
-   style.css's own documented mapping (green=jobs, purple=employer/
-   credentials, blue=admin/ops) rather than inventing a fourth palette. */
+
+   Visual language deliberately goes further than the existing auth
+   shells (admin_auth_shell.html/employer_auth_shell.html): those are
+   pre-login *utility* screens (a form, entered dozens of times a day by
+   someone who already knows where they're going) and correctly stay
+   plain. This is the one page a first-time visitor forms their whole
+   impression of the product from, so it earns a real hero moment --
+   Fraunces for the display headline (self-hosted, see style.css's own
+   comment on why not a live Google Fonts link), a painterly SVG
+   backdrop instead of flat corner gradients, and richer per-card
+   treatment -- while still reusing style.css's own token system
+   throughout, so dark mode and the rest of this product's visual
+   identity come along for free rather than needing a parallel palette. */
 
 .home-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48px 20px 32px;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(15, 122, 92, 0.10), transparent 40%),
-    radial-gradient(circle at 88% 15%, rgba(109, 40, 217, 0.09), transparent 42%),
-    radial-gradient(circle at 50% 100%, rgba(29, 99, 201, 0.08), transparent 45%),
-    var(--bg);
+  padding: 56px 20px 32px;
+  overflow-x: clip;
+}
+
+/* Three soft, hand-authored blob shapes -- not a raster image (nothing to
+   fetch, scales losslessly, recolors for free on the dark-mode swap
+   below) and not a photo (this product has no real photography of its
+   own users to draw on, and fabricating stock-style "diverse youth"
+   imagery for a real, live product is exactly the kind of thing not to
+   fake). Fixed + behind everything + aria-hidden: purely atmospheric,
+   never intercepts a click or gets announced to a screen reader. Blur
+   applied directly to the SVG element (not a filter primitive) for the
+   soft, out-of-focus glow -- simpler to read and tune than feGaussianBlur
+   markup for the same visual result. */
+.home-atmosphere {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  filter: blur(64px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.home-atmosphere .blob-primary {
+  fill: var(--primary);
+}
+
+.home-atmosphere .blob-secondary {
+  fill: var(--secondary);
+}
+
+.home-atmosphere .blob-tertiary {
+  fill: var(--tertiary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .home-atmosphere {
+    opacity: 0.28;
+  }
+}
+:root[data-theme="dark"] .home-atmosphere {
+  opacity: 0.28;
 }
 
 .home-header {
@@ -30,36 +76,40 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  max-width: 480px;
-  margin-bottom: 40px;
+  max-width: 560px;
+  margin-bottom: 44px;
+  animation: home-rise 0.5s ease both;
 }
 
-.home-brand-mark {
-  width: 64px;
-  height: 64px;
+.home-wordmark {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 28px;
 }
 
-.home-brand-mark img {
-  height: 52px;
+.home-wordmark img {
+  height: 30px;
   width: auto;
 }
 
-.home-header h1 {
-  font-size: 26px;
+.home-wordmark span {
+  font-size: 16px;
   font-weight: 800;
-  color: var(--text-primary);
-  margin: 0 0 6px;
   letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
-.home-header .home-tagline {
-  color: var(--text-secondary);
-  font-size: 14.5px;
+.home-hero {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(34px, 6vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
   margin: 0 0 22px;
+  text-wrap: balance;
 }
 
 .home-header .home-prompt {
@@ -72,6 +122,8 @@
 }
 
 .home-cards {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
@@ -88,63 +140,95 @@
 }
 
 .home-card {
+  --card-accent: var(--primary);
+  --card-accent-dark: var(--primary-dark);
+  --card-accent-light: var(--primary-light);
+  --card-glow: rgba(15, 122, 92, 0.22);
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 28px 24px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  padding: 30px 24px 26px;
+  overflow: hidden;
+  animation: home-rise 0.5s ease both;
+}
+
+.home-cards .home-card:nth-child(1) {
+  animation-delay: 0.06s;
+}
+.home-cards .home-card:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.home-cards .home-card:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+/* Top accent stripe -- a thin, rounded-corner-matching bar rather than a
+   plain border-top, so it doesn't square off the card's own radius. */
+.home-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--card-accent);
 }
 
 .home-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -8px var(--card-glow), var(--shadow-sm);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.home-card.is-employer {
+  --card-accent: var(--secondary);
+  --card-accent-dark: var(--secondary-dark);
+  --card-accent-light: var(--secondary-light);
+  --card-glow: rgba(109, 40, 217, 0.22);
+}
+
+.home-card.is-admin {
+  --card-accent: var(--tertiary);
+  --card-accent-dark: var(--tertiary-dark);
+  --card-accent-light: var(--tertiary-light);
+  --card-glow: rgba(29, 99, 201, 0.22);
 }
 
 .home-card-icon {
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  background: var(--card-accent-light);
+  color: var(--card-accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--card-accent-light) 55%, transparent);
 }
 
 .home-card-icon svg {
-  width: 22px;
-  height: 22px;
-}
-
-.home-card.is-jobseeker .home-card-icon {
-  background: var(--primary-light);
-  color: var(--primary);
-}
-
-.home-card.is-employer .home-card-icon {
-  background: var(--secondary-light);
-  color: var(--secondary);
-}
-
-.home-card.is-admin .home-card-icon {
-  background: var(--tertiary-light);
-  color: var(--tertiary);
+  width: 24px;
+  height: 24px;
 }
 
 .home-card h2 {
-  font-size: 17px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
   color: var(--text-primary);
-  margin: 0 0 6px;
+  margin: 0 0 7px;
 }
 
 .home-card p {
   font-size: 13.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-secondary);
-  margin: 0 0 20px;
+  margin: 0 0 22px;
   flex: 1;
 }
 
@@ -154,43 +238,30 @@
   justify-content: center;
   gap: 6px;
   width: 100%;
-  height: 42px;
+  height: 44px;
   border: none;
   border-radius: var(--radius-sm);
+  background: var(--card-accent);
   color: #fff;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.home-card-cta:hover {
+  background: var(--card-accent-dark);
 }
 
 .home-card-cta svg {
   width: 16px;
   height: 16px;
+  transition: transform 0.15s ease;
 }
 
-.home-card.is-jobseeker .home-card-cta {
-  background: var(--primary);
-}
-
-.home-card.is-jobseeker .home-card-cta:hover {
-  background: var(--primary-dark);
-}
-
-.home-card.is-employer .home-card-cta {
-  background: var(--secondary);
-}
-
-.home-card.is-employer .home-card-cta:hover {
-  background: var(--secondary-dark);
-}
-
-.home-card.is-admin .home-card-cta {
-  background: var(--tertiary);
-}
-
-.home-card.is-admin .home-card-cta:hover {
-  background: var(--tertiary-dark);
+.home-card-cta:hover svg {
+  transform: translateX(3px);
 }
 
 .home-card-secondary {
@@ -213,12 +284,16 @@
 }
 
 .home-footer {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px 18px;
   font-size: 12.5px;
   color: var(--text-muted);
+  animation: home-rise 0.5s ease both;
+  animation-delay: 0.3s;
 }
 
 .home-footer a {
@@ -234,8 +309,18 @@
   position: fixed;
   top: 16px;
   right: 16px;
-  z-index: 1;
+  z-index: 2;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

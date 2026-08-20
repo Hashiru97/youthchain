@@ -3,7 +3,38 @@
    messages) so the employer/admin web surfaces feel like the same product,
    not a bolted-on afterthought. */
 
+/* Fraunces (SIL Open Font License), self-hosted -- consistent with this
+   codebase's existing no-external-CDN discipline (the hand-authored SVG
+   icon set, the self-rendered analytics charts): a live
+   fonts.googleapis.com <link> would make every page load depend on
+   Google's CDN being reachable, and would be the first external network
+   dependency this static asset pipeline has ever had. Downloaded once
+   (the real .woff2 files, not a stand-in) and served from this app's own
+   /static/fonts/ instead -- same trust boundary as every other asset
+   here. Google Fonts already ships Fraunces as ONE variable-weight file
+   covering 500/600/700 (confirmed directly against the CSS Google's own
+   API returns -- all three weight declarations point at the identical
+   file hash), so this is two font files total, not six. Used sparingly,
+   for display moments only (the landing page's own hero/wordmark) --
+   body copy and every existing shell/console page keep the system font
+   stack below, unchanged. */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/fraunces-variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/fraunces-italic-variable.woff2") format("woff2");
+}
+
 :root {
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --primary: #0f7a5c;
   --primary-dark: #0b5d46;
   --primary-light: #e3f5ee;
