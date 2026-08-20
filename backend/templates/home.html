@@ -30,13 +30,13 @@
   </div>
 
   <!-- Compact photo banner -- deliberately short (clamp 380-460px), not
-       a full-viewport cinematic hero. img/hero-placeholder.svg stands in
-       for a real portrait photo (a young Sierra Leonean job seeker,
-       genuinely smiling) until one is sourced; swap the src when it is,
-       no other markup changes needed. A left-side scrim keeps the
-       Fraunces headline legible over whatever sits in the photo. -->
+       a full-viewport cinematic hero. Photo credit: Eye for Ebony
+       (unsplash.com/photos/3dqSZidOkvs), free under the Unsplash
+       License -- self-hosted here rather than hotlinked, matching this
+       app's no-external-CDN discipline everywhere else. A left-side
+       scrim keeps the Fraunces headline legible over the photo. -->
   <section class="home-banner" aria-label="YouthChain">
-    <img class="home-banner-photo" src="{{ url_for('static', filename='img/hero-placeholder.svg', v=asset_version('img/hero-placeholder.svg')) }}" alt="A young Sierra Leonean job seeker smiling, having just landed a verified opportunity." />
+    <img class="home-banner-photo" src="{{ url_for('static', filename='img/hero-photo.jpg', v=asset_version('img/hero-photo.jpg')) }}" alt="A young woman smiling warmly outdoors, having just landed a verified opportunity on YouthChain." />
     <div class="home-banner-scrim" aria-hidden="true"></div>
 
     <!-- Faint seal-ring corner motif bled off the banner's own top-right

@@ -66,12 +66,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* The placeholder graphic's own "PHOTO PLACEHOLDER" caption sits dead
-     center of its source image -- centering the crop would run that
-     label straight through the real headline text. Anchoring high in
-     the frame keeps this stand-in to plain gradient in the crop window;
-     a real portrait photo (no embedded caption) won't need this. */
-  object-position: center 8%;
+  /* The subject sits in the right ~60% of the source frame, looking
+     off to camera-left with open (blurred foliage) space on her left --
+     biasing the crop right/upper keeps her face in frame at every
+     banner width instead of a plain center crop clipping her out on
+     narrower viewports. */
+  object-position: 82% 30%;
 }
 
 .home-banner-scrim {
@@ -197,16 +197,15 @@
 
 @media (max-width: 640px) {
   /* At this width the crop window is nearly the whole source image, so
-     the placeholder graphic's own center-of-frame caption can't be
-     cropped out the way the desktop anchor manages -- darkened further,
-     near-opaque, rather than left as a legible ghost line competing
-     with the real headline. A production photo with no baked-in caption
-     won't need this override; it exists for the stand-in only. */
+     the left-to-right desktop scrim can't reliably dodge the subject
+     the way it does on a wide banner -- a uniform, moderately darker
+     wash keeps white text legible regardless of what's directly behind
+     it, while still leaving the photo clearly visible underneath. */
   .home-banner-scrim {
     background: linear-gradient(
-      175deg,
-      rgba(8, 14, 12, 0.86) 0%,
-      rgba(8, 14, 12, 0.9) 100%
+      180deg,
+      rgba(8, 14, 12, 0.55) 0%,
+      rgba(8, 14, 12, 0.72) 100%
     );
   }
 
