@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Terms of Service • YouthChain</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>📜 Terms of Service</h1>
+      <p class="subtitle">What using YouthChain means for you, and where YouthChain's responsibility ends.</p>
+    </header>
+
+    <main>
+      <section class="card warning-box">
+        <p role="status" class="warning-box-title">
+          ⚠️ Draft — pending legal review. This page is written by YouthChain's engineering team to
+          describe, accurately, what the platform technically does and does not guarantee. It is not
+          legal advice and has not been reviewed or approved by a lawyer. Before any public launch,
+          this page must be replaced with terms drafted or reviewed by qualified legal counsel, in
+          line with Sierra Leone's applicable law.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">What YouthChain is</h2>
+        <p>
+          YouthChain connects job seekers and employers in Sierra Leone, and lets job seekers build a
+          portable record of their skills, credentials, and work history. YouthChain provides the
+          platform — the accounts, the listings, the messaging, the credential registry — but is not a
+          party to any employment relationship, gig arrangement, or hiring decision made through it.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Credentials and verification — what we do and don't guarantee</h2>
+        <p>
+          When you upload a credential, YouthChain records a cryptographic fingerprint of that exact
+          file on a blockchain, timestamped, tamper-evident. That is a real, technical guarantee: the
+          file you see today is the same one originally uploaded, unaltered.
+        </p>
+        <p>
+          What YouthChain does <strong>not</strong> guarantee: that the issuer, title, or year you
+          entered are accurate. Those are entered by the credential holder, the same as on a paper
+          certificate — YouthChain does not independently contact the named school or employer to
+          confirm they issued it. "Verified" on this platform means <em>this file has not been altered
+          since upload</em>, not <em>this institution confirms issuing this credential</em>.
+        </p>
+        <p>
+          Employers and other users are responsible for their own reliance on any credential, rating,
+          job listing, or other content submitted by another user. YouthChain provides tools to report
+          suspected fraud (see below) and reviews reports it receives, but does not guarantee the
+          truthfulness of user-submitted content and is not liable for decisions made in reliance on
+          it.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Reporting and enforcement</h2>
+        <ul>
+          <li>Any user can report a job listing, employer, rating, or credential they believe is fraudulent or violates these terms.</li>
+          <li>YouthChain admins review reports and can suspend accounts, revoke credentials, or remove listings found to violate these terms.</li>
+          <li>A suspended user or employer can appeal that decision — see the app for the current process.</li>
+          <li>Reporting and enforcement are best-effort, not a guarantee that every violation will be caught or caught before harm occurs.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Acceptable use</h2>
+        <p>You agree not to:</p>
+        <ul>
+          <li>Submit false, fraudulent, or misleading information — including fake credentials, fake job listings, or impersonating another person or business.</li>
+          <li>Use the platform to harass, discriminate against, or defraud another user.</li>
+          <li>Attempt to circumvent account suspension, rate limits, or other enforcement actions.</li>
+          <li>Use the platform's data or infrastructure in a way not intended for its normal use (e.g. scraping, automated abuse of the API).</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Limitation of liability</h2>
+        <p>
+          YouthChain is provided "as is." To the fullest extent permitted by applicable law, YouthChain
+          is not liable for indirect, incidental, or consequential damages arising from use of the
+          platform, including but not limited to losses arising from reliance on another user's
+          credentials, ratings, job listings, or other submitted content. Nothing here limits liability
+          that cannot be limited under Sierra Leonean law.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Changes, disputes, and governing law</h2>
+        <ul>
+          <li>YouthChain may update these terms; continued use after an update means you accept the revised terms.</li>
+          <li>Governing law and dispute resolution process: to be finalized with legal counsel — not yet determined.</li>
+        </ul>
+      </section>
+
+      <section class="card subtle">
+        <h2 class="card-title">Questions</h2>
+        <p class="muted">
+          This platform is under active development. If you have questions about these terms, contact
+          the YouthChain team through the channel where you obtained this app.
+        </p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

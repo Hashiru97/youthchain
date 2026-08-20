@@ -47,3 +47,10 @@ def test_privacy_policy_page_is_publicly_reachable(client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "pending legal review" in body.lower()
+
+
+def test_terms_of_service_page_is_publicly_reachable(client):
+    resp = client.get("/terms-of-service")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "pending legal review" in body.lower()

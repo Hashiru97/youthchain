@@ -12,6 +12,12 @@ blockchain/node_modules/
 backend/node_modules/
 blockchain/artifacts/
 blockchain/cache/
+# Unlike deployed.json (committed on purpose -- a fixed, deterministic
+# address on a fresh local Hardhat node, a genuinely useful shared
+# default), a Safe's predicted address depends on which core contracts
+# deployed it and isn't reproducible/meaningful to commit -- every
+# operator running scripts/deploySafe.js gets their own.
+blockchain/deployed-safe.json
 
 # Flutter
 # NOTE: these patterns previously said "flutter_app/", which doesn't match

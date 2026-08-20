@@ -48,6 +48,44 @@ export function normalizeHash(hash) {
  * anyway on a genuinely invalid address), not enforce EIP-55 casing on
  * what's typically pasted straight from a wallet UI or block explorer.
  */
+/**
+ * Pure decision logic for deploy.js's OWNER_ADDRESS safety check (see its
+ * own comment for the full reasoning: unlike a later transferOwnership()
+ * call, this constructor argument becomes the PERMANENT owner the
+ * instant deployment mines, with no two-step confirmation of its own).
+ * Deliberately separate from the actual `ethers.provider.getCode()` I/O
+ * call deploy.js makes -- this only takes the two already-resolved
+ * booleans, so it's directly unit-testable without needing a live
+ * network (see test/DeployOwnerAddressSafety.test.js).
+ *
+ * Returns an error message string if deployment should be refused, or
+ * null if it's safe to proceed.
+ */
+export function ownerAddressSafetyError({ ownerAddress, networkName, hasCode, isConfirmed }) {
+    if (!hasCode) {
+        return (
+            `OWNER_ADDRESS (${ownerAddress}) has no contract code on "${networkName}". ` +
+            "A Safe (or any other multisig/contract owner) must already be deployed on " +
+            "THIS network before pointing the registry at it -- see scripts/deploySafe.js. " +
+            "If this is meant to be a plain EOA (not recommended for anything beyond " +
+            "local/dev use -- see the engineering audit's own reasoning on single-key " +
+            "governance), that choice still needs the explicit confirmation below; this " +
+            "check cannot distinguish 'real EOA, chosen on purpose' from 'typo', so it " +
+            "refuses either way without it."
+        );
+    }
+    if (!isConfirmed) {
+        return (
+            `about to deploy YouthChainRegistry on "${networkName}" with owner ${ownerAddress} ` +
+            "PERMANENTLY, effective immediately, with no two-step confirmation and no way to " +
+            "undo a wrong address afterward. Verify that address on a block explorer (or " +
+            "against deployed-safe.json if it's a Safe deployed by this project's own " +
+            "scripts/deploySafe.js) first, then set OWNER_ADDRESS_CONFIRMED=1 to proceed."
+        );
+    }
+    return null;
+}
+
 export function normalizeAddress(address) {
     if (!address) {
         console.error("❌ ERROR: ADDRESS environment variable not set");

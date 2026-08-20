@@ -610,6 +610,20 @@ class User(db.Model):
     # want SMS, or vice versa) -- same one-flag-per-real-choice principle
     # as keeping this distinct from Candidate.job_alerts_enabled itself.
     whatsapp_alerts_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    # Set once, permanently, by _erase_user_data() -- distinct from `active`
+    # (suspension: reversible, data intact, an admin can reinstate) because
+    # erasure is neither: name/phone/email/ncra_id/password_hash are
+    # overwritten with unusable placeholders and every file this user
+    # uploaded is deleted from disk (see _erase_user_data()'s own
+    # docstring for the full scope). The row itself is kept, not deleted --
+    # every other table's user_id FK (Application, Message, Rating, ...)
+    # stays valid and automatically becomes "an anonymized user" the
+    # instant this is set, with no need to touch those tables' FK values
+    # at all. active is also set False alongside this so every existing
+    # per-request suspension check keeps working unchanged; erased_at is
+    # what distinguishes "erased, never coming back" from "suspended,
+    # could be reinstated" for anything that needs to tell them apart.
+    erased_at = db.Column(db.DateTime, nullable=True)
 
     credentials = db.relationship("Credential", backref="user", lazy=True)
 
@@ -850,6 +864,11 @@ class Employer(db.Model):
     # matching it doesn't have). Nullable so existing employers created
     # before this field existed aren't forced into a guessed value.
     industry = db.Column(db.String(50), nullable=True)
+    # Same tombstone design as User.erased_at -- see that column's own
+    # docstring for the full reasoning. Set once, permanently, by
+    # _erase_employer_data(); distinct from `active` (suspension:
+    # reversible) for the same reason.
+    erased_at = db.Column(db.DateTime, nullable=True)
 
     def to_dict(self):
         return {
@@ -3776,6 +3795,22 @@ def privacy_policy():
     so it does not pretend to.
     """
     return render_template("privacy_policy.html")
+
+
+@app.route("/terms-of-service")
+def terms_of_service():
+    """
+    Same posture as privacy_policy() above: an accurate, engineering-written
+    description of what the platform does and does not guarantee (the
+    credential-verification scope, acceptable use, reporting/enforcement),
+    explicitly marked as a draft pending real legal review rather than
+    fabricated legal text -- see this codebase's engineering constitution
+    on not inventing legal advice. Not yet linked from the registration
+    consent checkbox alongside /privacy-policy; wiring that in is a product
+    decision (single checkbox agreeing to both vs. two separate ones) left
+    for whoever finalizes the real legal text, not assumed here.
+    """
+    return render_template("terms_of_service.html")
 
 
 @app.route("/get-app")
@@ -6809,6 +6844,121 @@ def admin_reinstate_employer(employer_id):
     return redirect(url_for("admin_employer_verifications"))
 
 
+def _open_employer_erasure_holds(employer_id: int) -> list[str]:
+    """Employer-side counterpart to _open_erasure_holds() above -- same
+    reasoning, scoped to disputes this EMPLOYER is a direct party to:
+    their own appeal, their own filed rating dispute, and (unlike the
+    worker side) an open EmployerReport where they're the SUBJECT --
+    workers filed those against them, so erasing on top of an active
+    fraud/scam investigation would be destroying the evidence the
+    investigation is actually about, not just evidence of the erasing
+    party's own making."""
+    holds = []
+    if EmployerAppeal.query.filter_by(employer_id=employer_id, status="open").first():
+        holds.append("This employer has an open appeal awaiting review.")
+    if EmployerReport.query.filter_by(employer_id=employer_id, status="open").first():
+        holds.append("This employer has an open report awaiting review.")
+    if RatingFlag.query.filter_by(flagged_by_employer_id=employer_id, status="open").first():
+        holds.append("This employer has an open rating dispute awaiting review.")
+    return holds
+
+
+def _erase_employer_data(employer: "Employer", *, reason: str) -> tuple[bool, str | None]:
+    """
+    Employer-side counterpart to _erase_user_data() above -- same
+    tombstone design (see User.erased_at's docstring), same "delete
+    what's purely theirs, redact their content out of records a
+    counterparty has a legitimate interest in, leave everything else's
+    employer_id FK pointing at this now-anonymized row untouched."
+
+    - Job rows survive untouched (title/location/duration/etc): every
+      applicant's own Application.job_id is NOT NULL, so their
+      application history depends on the Job existing, the same reason
+      Application rows themselves survive User erasure. This does leave a
+      real, separate gap this function does not attempt to fix: nothing
+      in this codebase today hides an inactive/suspended/erased
+      employer's job postings from GET /jobs or search -- that gap
+      predates this feature (a merely-suspended employer's jobs are
+      already just as visible) and fixing it is a distinct piece of work
+      from account erasure, not folded in here.
+    - Rating rows survive untouched -- same reasoning as the User side:
+      an employer_to_worker rating is the employer's own assessment,
+      already fed into the worker's trust history; a worker_to_employer
+      rating affects THIS employer's own trust score history, which
+      erasing shouldn't retroactively rewrite.
+    - EmployerReport rows survive -- these are workers' own reports
+      against this employer; their content isn't this employer's data to
+      erase.
+    - Message rows survive, only this employer's own sent messages have
+      body/attachment redacted, same as the User side.
+
+    Returns (success, error_message), same contract as
+    _erase_user_data().
+    """
+    holds = _open_employer_erasure_holds(employer.id)
+    if holds:
+        return False, " ".join(holds) + " This account can be erased once that's resolved."
+
+    if employer.verification_document:
+        _delete_upload_file(os.path.join(EMPLOYER_VERIFICATION_FOLDER, employer.verification_document))
+
+    for message in Message.query.filter_by(sender_employer_id=employer.id).all():
+        if message.attachment_file:
+            _delete_upload_file(os.path.join(MESSAGE_ATTACHMENT_FOLDER, message.attachment_file))
+            message.attachment_file = None
+        message.body = "[deleted by employer]"
+
+    # Already confirmed above there's no OPEN appeal -- any that exist
+    # here are resolved; redact the free-text body, same treatment as a
+    # Message this employer sent.
+    for appeal in EmployerAppeal.query.filter_by(employer_id=employer.id).all():
+        appeal.message = "[erased]"
+
+    employer.name = "Deleted employer"
+    employer.email = f"erased-employer-{employer.id}@erased.youthchain.invalid"
+    employer.password_hash = generate_password_hash(secrets.token_hex(32))
+    employer.verification_document = None
+    employer.active = False
+    employer.erased_at = datetime.utcnow()
+
+    db.session.commit()
+    log_event("employer_erased", employer_id=employer.id, reason=reason)
+    return True, None
+
+
+@app.route("/api/employer/account/erase", methods=["POST"])
+@employer_login_required
+def erase_own_employer_account():
+    """Self-service counterpart to admin_erase_employer() below -- see
+    _erase_employer_data()'s own docstring. Requires re-entering the
+    current password, same reasoning as erase_own_account()'s own
+    docstring for the User side."""
+    employer = Employer.query.get_or_404(_current_employer_id())
+    password = request.form.get("password") or (request.get_json(silent=True) or {}).get("password") or ""
+    if not check_password_hash(employer.password_hash, password):
+        return _forbidden("Incorrect password.")
+
+    ok, error = _erase_employer_data(employer, reason="employer_requested")
+    if not ok:
+        return jsonify({"success": False, "error": error}), 409
+    return jsonify({"success": True})
+
+
+@app.route("/admin/employers/<int:employer_id>/erase", methods=["POST"])
+@admin_role_required("admin")
+def admin_erase_employer(employer_id):
+    """Admin-triggered counterpart to erase_own_employer_account() above --
+    see admin_erase_user()'s own docstring for the identical reasoning on
+    why the admin's own 2FA-gated login is the identity check a request
+    reaching an admin this way still needs."""
+    employer = Employer.query.get_or_404(employer_id)
+    ok, error = _erase_employer_data(employer, reason=f"admin_requested:{_current_admin_id()}")
+    if not ok:
+        return jsonify({"success": False, "error": error}), 409
+    log_event("employer_erased_by_admin", employer_id=employer_id, admin_id=_current_admin_id())
+    return jsonify({"success": True})
+
+
 @app.route("/admin/users")
 @admin_role_required("admin")
 def admin_users():
@@ -6843,6 +6993,188 @@ def admin_users():
         query=q,
         active_page="users",
     )
+
+
+def _open_erasure_holds(user_id: int) -> list[str]:
+    """
+    Returns a list of human-readable reasons erasure must be refused right
+    now, or an empty list if there are none. Real gap the erasure feature
+    below exists to close without opening a worse one: an unconditional
+    self-service "delete everything" action would let someone erase their
+    account specifically to destroy evidence the moment a fraud
+    investigation or dispute involving them opens -- checked here, not
+    assumed away. Deliberately scoped to disputes THIS user is a direct
+    party to (their own appeal, a report/flag THEY filed, a duplicate-
+    identity flag naming them either side) rather than every conceivable
+    record that mentions them -- narrow and enforceable beats broad and
+    unverifiable.
+    """
+    holds = []
+    if UserAppeal.query.filter_by(user_id=user_id, status="open").first():
+        holds.append("You have an open appeal awaiting review.")
+    if EmployerReport.query.filter_by(reporter_user_id=user_id, status="open").first():
+        holds.append("You have an open report awaiting review.")
+    if ScrapedListingReport.query.filter_by(reporter_user_id=user_id, status="open").first():
+        holds.append("You have an open listing report awaiting review.")
+    if RatingFlag.query.filter_by(flagged_by_user_id=user_id, status="open").first():
+        holds.append("You have an open rating dispute awaiting review.")
+    if DuplicateFlag.query.filter(
+        db.or_(DuplicateFlag.user_id == user_id, DuplicateFlag.matched_user_id == user_id),
+        DuplicateFlag.resolved.is_(False),
+    ).first():
+        holds.append("Your account is part of an open identity-verification review.")
+    return holds
+
+
+def _delete_upload_file(path: str | None) -> None:
+    """Best-effort file removal for _erase_user_data() below -- a file
+    already gone (double-erasure, a prior partial failure) is a successful
+    outcome here, not an error; only unexpected failures are logged."""
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        logger.exception("_erase_user_data: failed to remove file %s", path)
+
+
+def _erase_user_data(user: "User", *, reason: str) -> tuple[bool, str | None]:
+    """
+    Permanently erases a User's personal data -- see erased_at's own
+    docstring on the User model for the tombstone design this relies on:
+    the row itself is kept (every other table's user_id FK, e.g.
+    Application/Message/Rating, stays valid and pointing at this same row
+    without needing to touch any of those FK columns), only overwritten
+    with unusable placeholders, alongside deleting every file this user
+    uploaded and every record that's purely theirs with no other party's
+    legitimate interest in it.
+
+    What's deliberately NOT touched, and why:
+    - Application rows survive (job_id/status/dates intact) -- the
+      employer's own hiring record. Only this user's own uploaded files
+      (cv_file/supporting_file) are deleted and those columns nulled.
+    - Message rows survive, but only messages THIS user sent have their
+      body/attachment redacted -- the counterparty's own messages in the
+      same thread, and the thread's existence, are theirs to keep.
+    - Rating rows survive untouched -- a rating is the RATER's own
+      assessment/speech (and, in the worker_to_employer direction,
+      directly feeds the employer's public trust score), not something
+      erasing the person it's ABOUT should delete.
+    - Credential rows are the one exception to "keep the row": deleted
+      outright, not redacted, along with the file. This makes
+      /verify/<id> and /employer/verify return the same judgment-free
+      "not_found" state as a hash that was never registered -- see
+      verify()'s own routes -- rather than introducing a new "erased"
+      status that risks reading as "revoked" (implying fraud, which this
+      isn't). The on-chain hash itself is never touched (can't be, and
+      doesn't need to be -- see the privacy policy's own explanation of
+      why deleting the source file is what actually matters).
+    - AnalyticsEvent rows are untouched deliberately -- they already
+      reference user_id, which is about to point at an anonymized row;
+      no further action needed for them to stop being personally
+      identifying.
+
+    Returns (success, error_message). On success, error_message is None
+    and the caller's own commit already happened (this function commits
+    internally, matching _submit_gig_rating's contract elsewhere in this
+    file). Refuses (without deleting anything) if _open_erasure_holds()
+    finds a reason to.
+    """
+    holds = _open_erasure_holds(user.id)
+    if holds:
+        return False, " ".join(holds) + " Your account can be erased once that's resolved."
+
+    for credential in Credential.query.filter_by(user_id=user.id).all():
+        if credential.file_path:
+            _delete_upload_file(os.path.join(UPLOAD_FOLDER, credential.file_path))
+        db.session.delete(credential)
+
+    for application in Application.query.filter_by(user_id=user.id).all():
+        if application.cv_file:
+            _delete_upload_file(os.path.join(APPLICATION_FOLDER, application.cv_file))
+            application.cv_file = None
+        if application.supporting_file:
+            _delete_upload_file(os.path.join(APPLICATION_FOLDER, application.supporting_file))
+            application.supporting_file = None
+
+    for message in Message.query.filter_by(sender_user_id=user.id).all():
+        if message.attachment_file:
+            _delete_upload_file(os.path.join(MESSAGE_ATTACHMENT_FOLDER, message.attachment_file))
+            message.attachment_file = None
+        message.body = "[deleted by user]"
+
+    UserSession.query.filter_by(user_id=user.id).delete()
+    SavedJob.query.filter_by(user_id=user.id).delete()
+    SavedSearch.query.filter_by(user_id=user.id).delete()
+    Notification.query.filter_by(user_id=user.id).delete()
+
+    candidate = Candidate.query.filter_by(user_id=user.id).first()
+    if candidate:
+        Education.query.filter_by(candidate_id=candidate.id).delete()
+        db.session.delete(candidate)
+
+    # Already confirmed above there's no OPEN appeal -- any that exist
+    # here are resolved (reinstated/denied); redact the free-text body,
+    # same treatment as a Message this user sent.
+    for appeal in UserAppeal.query.filter_by(user_id=user.id).all():
+        appeal.message = "[erased]"
+
+    user.name = "Deleted user"
+    user.phone = f"erased-{user.id}"
+    user.email = f"erased-{user.id}@erased.youthchain.invalid"
+    user.password_hash = generate_password_hash(secrets.token_hex(32))
+    user.push_token = None
+    user.ncra_id = None
+    user.active = False
+    user.erased_at = datetime.utcnow()
+
+    db.session.commit()
+    log_event("user_erased", user_id=user.id, reason=reason)
+    return True, None
+
+
+@app.route("/api/account/erase", methods=["POST"])
+@jwt_required()
+def erase_own_account():
+    """
+    Self-service counterpart to admin_erase_user() below -- see
+    _erase_user_data()'s own docstring for what erasure actually does.
+    Requires re-entering the current password, not just an active JWT --
+    this codebase has no other "change something permanent while already
+    logged in" route to match an existing precedent against, but a
+    still-valid session token (left open on a shared device, or lifted
+    via XSS/malware) being sufficient on its own to trigger something
+    this irreversible would be a real gap worth closing here regardless.
+    """
+    user = User.query.get_or_404(_current_user_id())
+    data = request.get_json(silent=True) or request.form
+    password = data.get("password") or ""
+    if not check_password_hash(user.password_hash, password):
+        return _forbidden("Incorrect password.")
+
+    ok, error = _erase_user_data(user, reason="user_requested")
+    if not ok:
+        return jsonify({"success": False, "error": error}), 409
+    return jsonify({"success": True})
+
+
+@app.route("/admin/users/<int:user_id>/erase", methods=["POST"])
+@admin_role_required("admin")
+def admin_erase_user(user_id):
+    """Admin-triggered counterpart to erase_own_account() above -- e.g. a
+    request that arrives by a channel other than the app itself. See
+    _erase_user_data()'s own docstring for what this actually does; the
+    admin performing this action is themselves identity-verified by
+    already being logged into the admin console (2FA-gated -- see
+    admin_2fa_verify), which is the identity check a request reaching an
+    admin this way still needs before acting on it."""
+    user = User.query.get_or_404(user_id)
+    ok, error = _erase_user_data(user, reason=f"admin_requested:{_current_admin_id()}")
+    if not ok:
+        return jsonify({"success": False, "error": error}), 409
+    log_event("user_erased_by_admin", user_id=user_id, admin_id=_current_admin_id())
+    return jsonify({"success": True})
 
 
 @app.route("/admin/users/<int:user_id>/suspend", methods=["POST"])
