@@ -19,16 +19,112 @@
     <span class="icon-moon">{{ icon_moon() }}</span>
   </button>
 
-  <!-- Atmosphere layer: three soft, hand-authored blob shapes (SVG, not a
-       raster image -- no asset to fetch, scales losslessly, recolors for
-       free via CSS on the dark-mode fill swap below) rather than the
-       plain radial-gradient corners this page shipped with initially.
-       aria-hidden + fixed positioning behind everything: decorative only,
-       never intercepts a click or gets announced. -->
+  <!-- Atmosphere layer: two engraved seal rings -- concentric circles plus
+       a ring of radial tick marks, the vocabulary of a certificate stamp
+       or an official coin edge, in place of the soft color-blob mesh this
+       page tried first (that read as generic "modern SaaS gradient hero"
+       rather than anything specific to a product whose whole premise is
+       verified, stamped credentials). Bleeds off two opposite corners so
+       it reads as one continuous idea, not a centered logo. Line art, not
+       filled shapes: aria-hidden + fixed behind everything, decorative
+       only, never intercepts a click or gets announced. -->
   <svg class="home-atmosphere" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
-    <path class="blob-primary" d="M120,180 C260,60 460,40 560,140 C670,250 640,420 500,470 C340,530 140,480 80,360 C30,260 40,250 120,180 Z" />
-    <path class="blob-secondary" d="M980,90 C1120,110 1180,240 1130,340 C1080,440 940,470 850,410 C760,350 750,220 830,140 C880,90 920,80 980,90 Z" />
-    <path class="blob-tertiary" d="M600,600 C760,570 920,640 950,760 C980,880 850,940 700,920 C550,900 430,830 440,730 C450,650 480,625 600,600 Z" />
+    <g class="seal-ring seal-ring-primary">
+      <circle cx="1150" cy="70" r="250" />
+      <circle cx="1150" cy="70" r="200" />
+      <g class="seal-ticks">
+        <line x1="1368.0" y1="70.0" x2="1382.0" y2="70.0" />
+        <line x1="1366.1" y1="98.5" x2="1380.0" y2="100.3" />
+        <line x1="1360.6" y1="126.4" x2="1374.1" y2="130.0" />
+        <line x1="1351.4" y1="153.4" x2="1364.3" y2="158.8" />
+        <line x1="1338.8" y1="179.0" x2="1350.9" y2="186.0" />
+        <line x1="1323.0" y1="202.7" x2="1334.1" y2="211.2" />
+        <line x1="1304.1" y1="224.1" x2="1314.0" y2="234.0" />
+        <line x1="1282.7" y1="243.0" x2="1291.2" y2="254.1" />
+        <line x1="1259.0" y1="258.8" x2="1266.0" y2="270.9" />
+        <line x1="1233.4" y1="271.4" x2="1238.8" y2="284.3" />
+        <line x1="1206.4" y1="280.6" x2="1210.0" y2="294.1" />
+        <line x1="1178.5" y1="286.1" x2="1180.3" y2="300.0" />
+        <line x1="1150.0" y1="288.0" x2="1150.0" y2="302.0" />
+        <line x1="1121.5" y1="286.1" x2="1119.7" y2="300.0" />
+        <line x1="1093.6" y1="280.6" x2="1090.0" y2="294.1" />
+        <line x1="1066.6" y1="271.4" x2="1061.2" y2="284.3" />
+        <line x1="1041.0" y1="258.8" x2="1034.0" y2="270.9" />
+        <line x1="1017.3" y1="243.0" x2="1008.8" y2="254.1" />
+        <line x1="995.9" y1="224.1" x2="986.0" y2="234.0" />
+        <line x1="977.0" y1="202.7" x2="965.9" y2="211.2" />
+        <line x1="961.2" y1="179.0" x2="949.1" y2="186.0" />
+        <line x1="948.6" y1="153.4" x2="935.7" y2="158.8" />
+        <line x1="939.4" y1="126.4" x2="925.9" y2="130.0" />
+        <line x1="933.9" y1="98.5" x2="920.0" y2="100.3" />
+        <line x1="932.0" y1="70.0" x2="918.0" y2="70.0" />
+        <line x1="933.9" y1="41.5" x2="920.0" y2="39.7" />
+        <line x1="939.4" y1="13.6" x2="925.9" y2="10.0" />
+        <line x1="948.6" y1="-13.4" x2="935.7" y2="-18.8" />
+        <line x1="961.2" y1="-39.0" x2="949.1" y2="-46.0" />
+        <line x1="977.0" y1="-62.7" x2="965.9" y2="-71.2" />
+        <line x1="995.9" y1="-84.1" x2="986.0" y2="-94.0" />
+        <line x1="1017.3" y1="-103.0" x2="1008.8" y2="-114.1" />
+        <line x1="1041.0" y1="-118.8" x2="1034.0" y2="-130.9" />
+        <line x1="1066.6" y1="-131.4" x2="1061.2" y2="-144.3" />
+        <line x1="1093.6" y1="-140.6" x2="1090.0" y2="-154.1" />
+        <line x1="1121.5" y1="-146.1" x2="1119.7" y2="-160.0" />
+        <line x1="1150.0" y1="-148.0" x2="1150.0" y2="-162.0" />
+        <line x1="1178.5" y1="-146.1" x2="1180.3" y2="-160.0" />
+        <line x1="1206.4" y1="-140.6" x2="1210.0" y2="-154.1" />
+        <line x1="1233.4" y1="-131.4" x2="1238.8" y2="-144.3" />
+        <line x1="1259.0" y1="-118.8" x2="1266.0" y2="-130.9" />
+        <line x1="1282.7" y1="-103.0" x2="1291.2" y2="-114.1" />
+        <line x1="1304.1" y1="-84.1" x2="1314.0" y2="-94.0" />
+        <line x1="1323.0" y1="-62.7" x2="1334.1" y2="-71.2" />
+        <line x1="1338.8" y1="-39.0" x2="1350.9" y2="-46.0" />
+        <line x1="1351.4" y1="-13.4" x2="1364.3" y2="-18.8" />
+        <line x1="1360.6" y1="13.6" x2="1374.1" y2="10.0" />
+        <line x1="1366.1" y1="41.5" x2="1380.0" y2="39.7" />
+      </g>
+    </g>
+    <g class="seal-ring seal-ring-tertiary">
+      <circle cx="30" cy="850" r="160" />
+      <circle cx="30" cy="850" r="128" />
+      <g class="seal-ticks">
+        <line x1="170.0" y1="850.0" x2="180.0" y2="850.0" />
+        <line x1="167.9" y1="874.3" x2="177.7" y2="876.0" />
+        <line x1="161.6" y1="897.9" x2="171.0" y2="901.3" />
+        <line x1="151.2" y1="920.0" x2="159.9" y2="925.0" />
+        <line x1="137.2" y1="940.0" x2="144.9" y2="946.4" />
+        <line x1="120.0" y1="957.2" x2="126.4" y2="964.9" />
+        <line x1="100.0" y1="971.2" x2="105.0" y2="979.9" />
+        <line x1="77.9" y1="981.6" x2="81.3" y2="991.0" />
+        <line x1="54.3" y1="987.9" x2="56.0" y2="997.7" />
+        <line x1="30.0" y1="990.0" x2="30.0" y2="1000.0" />
+        <line x1="5.7" y1="987.9" x2="4.0" y2="997.7" />
+        <line x1="-17.9" y1="981.6" x2="-21.3" y2="991.0" />
+        <line x1="-40.0" y1="971.2" x2="-45.0" y2="979.9" />
+        <line x1="-60.0" y1="957.2" x2="-66.4" y2="964.9" />
+        <line x1="-77.2" y1="940.0" x2="-84.9" y2="946.4" />
+        <line x1="-91.2" y1="920.0" x2="-99.9" y2="925.0" />
+        <line x1="-101.6" y1="897.9" x2="-111.0" y2="901.3" />
+        <line x1="-107.9" y1="874.3" x2="-117.7" y2="876.0" />
+        <line x1="-110.0" y1="850.0" x2="-120.0" y2="850.0" />
+        <line x1="-107.9" y1="825.7" x2="-117.7" y2="824.0" />
+        <line x1="-101.6" y1="802.1" x2="-111.0" y2="798.7" />
+        <line x1="-91.2" y1="780.0" x2="-99.9" y2="775.0" />
+        <line x1="-77.2" y1="760.0" x2="-84.9" y2="753.6" />
+        <line x1="-60.0" y1="742.8" x2="-66.4" y2="735.1" />
+        <line x1="-40.0" y1="728.8" x2="-45.0" y2="720.1" />
+        <line x1="-17.9" y1="718.4" x2="-21.3" y2="709.0" />
+        <line x1="5.7" y1="712.1" x2="4.0" y2="702.3" />
+        <line x1="30.0" y1="710.0" x2="30.0" y2="700.0" />
+        <line x1="54.3" y1="712.1" x2="56.0" y2="702.3" />
+        <line x1="77.9" y1="718.4" x2="81.3" y2="709.0" />
+        <line x1="100.0" y1="728.8" x2="105.0" y2="720.1" />
+        <line x1="120.0" y1="742.8" x2="126.4" y2="735.1" />
+        <line x1="137.2" y1="760.0" x2="144.9" y2="753.6" />
+        <line x1="151.2" y1="780.0" x2="159.9" y2="775.0" />
+        <line x1="161.6" y1="802.1" x2="171.0" y2="798.7" />
+        <line x1="167.9" y1="825.7" x2="177.7" y2="824.0" />
+      </g>
+    </g>
   </svg>
 
   <div class="home-shell">
