@@ -3794,8 +3794,17 @@ def home():
     breaking one: a real landing page presenting the three real,
     already-working entry points (portal/employer/admin login) as equal,
     clearly-labeled choices, not a fourth parallel auth system.
+
+    featured_jobs reuses the exact same _search_jobs() query GET /jobs
+    already runs (same default filters: employer-sourced, not expired,
+    newest first) rather than a bespoke "featured" query -- a first-time
+    visitor sees the same live listings /jobs itself would return, not a
+    curated or fabricated subset. Empty on a fresh install with zero
+    jobs; home.html guards the whole section on that rather than
+    rendering an empty grid.
     """
-    return render_template("home.html")
+    featured_jobs = _search_jobs(q=None, location=None, skill=None, limit=6, offset=0)
+    return render_template("home.html", featured_jobs=[job.to_dict() for job in featured_jobs])
 
 
 @app.route("/privacy-policy")
