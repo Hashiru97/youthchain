@@ -733,6 +733,14 @@ a.employer-onboarding-step:hover {
 .employer-auth-shell {
   min-height: 100vh;
   display: flex;
+  /* column, not the flex default (row): admin_login.html's/
+     employer_login.html's own "Choose a different way in" back-link
+     (see shell_common.css's .home-back-link) renders as a second child
+     alongside .employer-auth-card here -- row would center the PAIR
+     side-by-side instead of stacking the link below the card. Visually
+     identical to before for every other page using this shell, which
+     only ever renders the card alone. */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 32px 20px;

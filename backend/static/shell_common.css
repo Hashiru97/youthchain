@@ -315,6 +315,31 @@
   border-bottom: 1px solid var(--outline);
 }
 
+/* ---------- "Choose a different way in" (home.html's own back-link,
+   rendered on the three real login pages -- admin_auth_shell.html,
+   employer_auth_shell.html, portal_login.html) ----------
+   Closes the loop back to the unified chooser for someone who landed
+   directly on the wrong one (a stale bookmark, a link shared by someone
+   else). Lives here, not home.css, specifically because none of the
+   three login pages that use it load home.css -- see this file's own
+   header comment on what belongs here vs. a shell-specific file. */
+.home-back-link {
+  display: block;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 18px;
+}
+
+.home-back-link a {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.home-back-link a:hover {
+  color: var(--text-primary);
+}
+
 /* ---------- Focus visibility (both shells) ----------
    Real accessibility gap: buttons/links relied entirely on browser
    defaults for keyboard-focus visibility, which several browsers render

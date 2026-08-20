@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>YouthChain</title>
+  <meta name="description" content="Verified skills. Real opportunities. Continue as a job seeker, an employer, or platform staff." />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_version('home.css')) }}" />
+</head>
+<body>
+  {% from "_admin_icons.html" import icon_sun, icon_moon, icon_users_count, icon_briefcase, icon_shield_check, icon_chevron_right %}
+  <button type="button" class="shell-theme-toggle home-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
+    <span class="icon-sun">{{ icon_sun() }}</span>
+    <span class="icon-moon">{{ icon_moon() }}</span>
+  </button>
+
+  <div class="home-shell">
+    <div class="home-header">
+      <div class="home-brand-mark">
+        <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
+      </div>
+      <h1>YouthChain</h1>
+      <p class="home-tagline">Verified skills. Real opportunities.</p>
+      <p class="home-prompt">Continue as</p>
+    </div>
+
+    <div class="home-cards">
+      <div class="home-card is-jobseeker">
+        <div class="home-card-icon">{{ icon_users_count() }}</div>
+        <h2>Job seeker</h2>
+        <p>Find work, apply with your CV, message employers, and build a verified employment passport.</p>
+        <a class="home-card-cta" href="{{ url_for('portal_login') }}">
+          Log in {{ icon_chevron_right() }}
+        </a>
+        <p class="home-card-secondary">New here? <a href="{{ url_for('portal_register') }}">Create an account</a></p>
+      </div>
+
+      <div class="home-card is-employer">
+        <div class="home-card-icon">{{ icon_briefcase() }}</div>
+        <h2>Employer</h2>
+        <p>Post jobs, review applicants, and message candidates through a verified employer account.</p>
+        <a class="home-card-cta" href="{{ url_for('employer_login') }}">
+          Log in {{ icon_chevron_right() }}
+        </a>
+        <p class="home-card-secondary">New here? <a href="{{ url_for('employer_register') }}">Create an account</a></p>
+      </div>
+
+      <div class="home-card is-admin">
+        <div class="home-card-icon">{{ icon_shield_check() }}</div>
+        <h2>Admin</h2>
+        <p>Platform operations: employer verification, credential oversight, reports, and analytics.</p>
+        <a class="home-card-cta" href="{{ url_for('admin_login') }}">
+          Log in {{ icon_chevron_right() }}
+        </a>
+        <!-- No self-registration for admin accounts (see admin_login.html's
+             own subtitle) -- this reserves the same vertical space the
+             other two cards' "New here?" line takes, so all three CTA
+             buttons stay pixel-aligned across the row rather than the
+             shorter card's flex-grown description pushing its button
+             lower than its siblings'. -->
+        <p class="home-card-secondary" aria-hidden="true" style="visibility: hidden">&nbsp;</p>
+      </div>
+    </div>
+
+    <div class="home-footer">
+      <a href="{{ url_for('get_app') }}">Get the app</a>
+      <a href="{{ url_for('privacy_policy') }}">Privacy policy</a>
+      <a href="{{ url_for('terms_of_service') }}">Terms of service</a>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
+</body>
+</html>

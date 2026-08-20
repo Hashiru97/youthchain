@@ -34,3 +34,7 @@
     </div>
   </form>
 {% endblock %}
+
+{% block back_link %}
+  <p class="home-back-link">Not staff? <a href="{{ url_for('home') }}">Choose a different way in</a></p>
+{% endblock %}

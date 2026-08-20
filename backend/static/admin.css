@@ -450,6 +450,12 @@ body.admin-shell-body {
 .admin-auth-shell {
   min-height: 100vh;
   display: flex;
+  /* column, not the flex default (row) -- see employer.css's identical
+     comment on .employer-auth-shell for why: admin_login.html's own
+     "Choose a different way in" back-link renders as a second child
+     alongside .admin-auth-card, which needs to stack below it, not sit
+     beside it. */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 32px 20px;

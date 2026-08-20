@@ -42,3 +42,7 @@
     </div>
   </form>
 {% endblock %}
+
+{% block back_link %}
+  <p class="home-back-link">Not an employer? <a href="{{ url_for('home') }}">Choose a different way in</a></p>
+{% endblock %}

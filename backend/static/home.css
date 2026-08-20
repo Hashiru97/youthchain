@@ -1,0 +1,241 @@
+/* Unified landing chooser (see app.py's home()) -- the "front door" this
+   app never actually had: /admin, /employer, and /portal each already
+   worked fine on their own, but nothing tied them together, and a
+   first-time visitor to the bare domain had no way to discover any of
+   them (this is the real gap the engineering review found: GET / used
+   to return a bare JSON API status message with no link to anything).
+   Same design language as the existing auth shells (admin_auth_shell.html/
+   employer_auth_shell.html) -- a soft radial-gradient backdrop behind a
+   centered card layout -- extended from "one ambient accent" to "three",
+   since this page's whole job is presenting three equally legitimate
+   entry points, not one surface's own pre-login screen. Colors reuse
+   style.css's own documented mapping (green=jobs, purple=employer/
+   credentials, blue=admin/ops) rather than inventing a fourth palette. */
+
+.home-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px 32px;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(15, 122, 92, 0.10), transparent 40%),
+    radial-gradient(circle at 88% 15%, rgba(109, 40, 217, 0.09), transparent 42%),
+    radial-gradient(circle at 50% 100%, rgba(29, 99, 201, 0.08), transparent 45%),
+    var(--bg);
+}
+
+.home-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 480px;
+  margin-bottom: 40px;
+}
+
+.home-brand-mark {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.home-brand-mark img {
+  height: 52px;
+  width: auto;
+}
+
+.home-header h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.home-header .home-tagline {
+  color: var(--text-secondary);
+  font-size: 14.5px;
+  margin: 0 0 22px;
+}
+
+.home-header .home-prompt {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 920px;
+  margin-bottom: 40px;
+}
+
+@media (max-width: 800px) {
+  .home-cards {
+    grid-template-columns: 1fr;
+    max-width: 420px;
+  }
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 24px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.home-card-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.home-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.home-card.is-jobseeker .home-card-icon {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.home-card.is-employer .home-card-icon {
+  background: var(--secondary-light);
+  color: var(--secondary);
+}
+
+.home-card.is-admin .home-card-icon {
+  background: var(--tertiary-light);
+  color: var(--tertiary);
+}
+
+.home-card h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+}
+
+.home-card p {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  flex: 1;
+}
+
+.home-card-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 42px;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.home-card-cta svg {
+  width: 16px;
+  height: 16px;
+}
+
+.home-card.is-jobseeker .home-card-cta {
+  background: var(--primary);
+}
+
+.home-card.is-jobseeker .home-card-cta:hover {
+  background: var(--primary-dark);
+}
+
+.home-card.is-employer .home-card-cta {
+  background: var(--secondary);
+}
+
+.home-card.is-employer .home-card-cta:hover {
+  background: var(--secondary-dark);
+}
+
+.home-card.is-admin .home-card-cta {
+  background: var(--tertiary);
+}
+
+.home-card.is-admin .home-card-cta:hover {
+  background: var(--tertiary-dark);
+}
+
+.home-card-secondary {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.home-card-secondary a {
+  color: var(--text-secondary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--outline);
+  text-underline-offset: 2px;
+}
+
+.home-card-secondary a:hover {
+  color: var(--text-primary);
+}
+
+.home-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.home-footer a {
+  color: var(--text-muted);
+}
+
+.home-footer a:hover {
+  color: var(--text-primary);
+}
+
+/* Fixed corner placement, same convention as .auth-shell-theme-toggle. */
+.home-theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+

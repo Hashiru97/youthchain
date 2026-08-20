@@ -3779,7 +3779,23 @@ def health_deep():
 
 @app.route("/")
 def home():
-    return jsonify({"message": "YouthChain API with Users, Jobs, Applications, Credentials"})
+    """
+    Real gap found via a full-codebase review: this route used to return
+    a bare JSON API status message, and nothing anywhere in this app --
+    no shell's brand mark, no auth page, no nav -- ever actually linked
+    to it (checked directly: zero matches for url_for('home') or a
+    hardcoded href="/" across every template). /admin, /employer, and
+    /portal each worked fine as their own destination, but a first-time
+    visitor to the bare domain, or anyone trying to point one link at
+    "the YouthChain web app," had no single page that led anywhere.
+    Nothing else depends on the old JSON shape (no test asserts on it,
+    and machine health checks already have their own dedicated route --
+    see /healthz), so this is a clean, safe replacement rather than a
+    breaking one: a real landing page presenting the three real,
+    already-working entry points (portal/employer/admin login) as equal,
+    clearly-labeled choices, not a fourth parallel auth system.
+    """
+    return render_template("home.html")
 
 
 @app.route("/privacy-policy")

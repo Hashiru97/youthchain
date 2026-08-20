@@ -28,6 +28,7 @@
       </div>
       {% block content %}{% endblock %}
     </div>
+    {% block back_link %}{% endblock %}
   </div>
   <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
 </body>
