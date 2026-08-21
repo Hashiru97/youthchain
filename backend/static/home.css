@@ -78,11 +78,14 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* The subject sits in the right ~55-65% of the source frame against a
-     plain wall, with clean open space on her left -- biasing the crop
-     right keeps her face and raised hand in frame at every banner
-     width while leaving that open wall for the text scrim to sit over. */
-  object-position: 66% 14%;
+  /* Mirrored -- see the html comment above -- so the fist-pump/face
+     (originally left-of-frame) ends up on the banner's open right
+     side. object-position is chosen against the ORIGINAL (pre-mirror)
+     image: 50% horizontal is a no-op at every banner width tested (the
+     source is wide enough that full width always shows, only height
+     crops), vertical keeps the face-to-raised-fist span in frame. */
+  object-position: 50% 70%;
+  transform: scaleX(-1);
 }
 
 .home-banner-scrim {
@@ -222,16 +225,6 @@
 
   .home-banner-content {
     padding: 0 20px;
-  }
-
-  /* At this narrow an aspect ratio there isn't enough horizontal crop
-     margin left to fully clear the subject from the text column the
-     way the wide desktop crop does -- favoring more of the open wall
-     on the left (and accepting more of her on the right gets cropped)
-     keeps the text's own left edge clean, backed by the scrim above
-     for whatever overlap remains. */
-  .home-banner-photo {
-    object-position: 30% 10%;
   }
 }
 

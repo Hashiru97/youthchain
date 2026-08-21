@@ -33,13 +33,16 @@
   </div>
 
   <!-- Compact photo banner -- deliberately short (clamp 380-460px), not
-       a full-viewport cinematic hero. Photo credit: Eye for Ebony
-       (unsplash.com/photos/OeXcIHFwtsM), free under the Unsplash
-       License -- self-hosted here rather than hotlinked, matching this
-       app's no-external-CDN discipline everywhere else. A left-side
-       scrim keeps the Fraunces headline legible over the photo. -->
+       a full-viewport cinematic hero. Photo credit: Wundef Media
+       (pexels.com/photo/17666364), free under the Pexels License --
+       self-hosted here rather than hotlinked, matching this app's
+       no-external-CDN discipline everywhere else. Mirrored (the
+       original has her fist-pump on the left) so she sits on the
+       banner's open right side, matching the scrim/text layout below.
+       A left-side scrim keeps the Fraunces headline legible over the
+       photo. -->
   <section class="home-banner" aria-label="YouthChain">
-    <img class="home-banner-photo" src="{{ url_for('static', filename='img/hero-photo.jpg', v=asset_version('img/hero-photo.jpg')) }}" alt="A young woman laughing warmly, having just landed a verified opportunity on YouthChain." />
+    <img class="home-banner-photo" src="{{ url_for('static', filename='img/hero-photo.jpg', v=asset_version('img/hero-photo.jpg')) }}" alt="A young woman pumping her fist in celebration while reading a letter, having just landed a verified opportunity on YouthChain." />
     <div class="home-banner-scrim" aria-hidden="true"></div>
 
     <!-- Faint seal-ring corner motif bled off the banner's own top-right
