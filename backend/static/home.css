@@ -67,7 +67,20 @@
   position: relative;
   isolation: isolate;
   width: 100%;
-  height: clamp(380px, 40vw, 460px);
+  /* aspect-ratio (not a height clamp that freezes past ~1150px width)
+     -- with object-fit: cover, the fraction of the photo's height that
+     stays visible after cropping is governed by the banner's own
+     height-to-width ratio, not its absolute size. A frozen max-height
+     let width keep growing on real, common desktop sizes (1920px+)
+     while the crop window stayed fixed, so the photo rendered
+     dramatically more zoomed-in there than at the 1280px width this
+     was tuned against -- confirmed by screenshotting both. Keeping the
+     ratio constant instead keeps the same framing at any width;
+     min/max-height only guard the extremes (a very narrow phone, a
+     very wide monitor). */
+  aspect-ratio: 1280 / 460;
+  min-height: 380px;
+  max-height: 680px;
   overflow: hidden;
   margin-bottom: 48px;
 }
