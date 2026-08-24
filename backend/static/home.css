@@ -91,14 +91,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Mirrored -- see the html comment above -- so the fist-pump/face
-     (originally left-of-frame) ends up on the banner's open right
-     side. object-position is chosen against the ORIGINAL (pre-mirror)
-     image: 50% horizontal is a no-op at every banner width tested (the
-     source is wide enough that full width always shows, only height
-     crops), vertical keeps the face-to-raised-fist span in frame. */
-  object-position: 50% 70%;
-  transform: scaleX(-1);
+  /* This generation already has her on the right with open space on
+     the left -- no mirroring needed. Vertical position keeps her
+     raised fist, face, and the letter she's holding all in frame
+     rather than cropping to just the face. */
+  object-position: 78% 55%;
 }
 
 .home-banner-scrim {
