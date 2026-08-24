@@ -92,10 +92,14 @@
   height: 100%;
   object-fit: cover;
   /* This generation already has her on the right with open space on
-     the left -- no mirroring needed. Vertical position keeps her
-     raised fist, face, and the letter she's holding all in frame
-     rather than cropping to just the face. */
-  object-position: 78% 55%;
+     the left -- no mirroring needed. Her raised fist sits very close
+     to the top of the source frame (confirmed by cropping and
+     inspecting that region directly) -- the crop window is shorter
+     than the full fist-to-holding-hand span, so something has to give;
+     prioritizing headroom above the fist over the bottom of the paper,
+     since a fist clipped at the wrist reads as a mistake far more than
+     a paper's lower edge running off-frame does. */
+  object-position: 78% 16%;
 }
 
 .home-banner-scrim {
