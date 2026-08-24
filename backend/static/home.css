@@ -21,7 +21,7 @@
   z-index: 1;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 20px 24px 16px;
+  padding: 14px 24px 8px;
   display: flex;
   align-items: center;
 }
@@ -57,12 +57,13 @@
 }
 
 /* ---------- Compact photo banner ----------
-   Deliberately short: clamp(380px, 40vw, 460px), never full-viewport --
-   this is the direct answer to "not as big as a cinematic hero video."
-   img/hero-placeholder.svg is a stand-in gradient until a real portrait
-   photo is sourced; object-fit/object-position crop it to a wide banner
-   exactly as a real photo would be cropped, so swapping the src later
-   needs no other markup or CSS change. */
+   Shorter than the first pass -- on a common laptop viewport (1366x768
+   minus browser chrome, roughly 600-650px of real page height), the
+   banner plus topbar was eating the entire first screen, pushing
+   "Continue as" and the role cards -- the page's actual job -- below
+   the fold entirely. This aspect-ratio keeps the same not-a-cinematic-
+   hero restraint while leaving enough of that first screen for the
+   cards to at least begin appearing without scrolling. */
 .home-banner {
   position: relative;
   isolation: isolate;
@@ -78,11 +79,11 @@
      ratio constant instead keeps the same framing at any width;
      min/max-height only guard the extremes (a very narrow phone, a
      very wide monitor). */
-  aspect-ratio: 1280 / 460;
-  min-height: 380px;
-  max-height: 680px;
+  aspect-ratio: 1280 / 330;
+  min-height: 280px;
+  max-height: 420px;
   overflow: hidden;
-  margin-bottom: 48px;
+  margin-bottom: 20px;
 }
 
 .home-banner-photo {
@@ -95,11 +96,12 @@
      the left -- no mirroring needed. Measured directly (cropped the
      top-right region and inspected it) rather than guessed: her hair
      starts right at the top edge of the source with zero headroom of
-     its own, and her fist (held at shoulder height this time, not
-     fully extended) sits about 38% down -- a small vertical offset
-     leaves a sliver of headroom above the hair without pushing the
-     fist itself out of frame. */
-  object-position: 75% 5%;
+     its own, and her fist (held at shoulder height, not fully
+     extended) sits about 38% down. The shorter banner above means an
+     even smaller vertical crop window than before, so headroom is
+     trimmed to almost nothing -- her hair sits right at the top edge
+     of the banner rather than leaving empty wall space above it. */
+  object-position: 75% 0%;
 }
 
 .home-banner-scrim {
@@ -258,7 +260,7 @@
   display: flex;
   justify-content: center;
   width: 100%;
-  margin: 0 0 18px;
+  margin: 0 0 12px;
 }
 
 .home-section-lead .home-prompt {
@@ -300,7 +302,7 @@
   border: 1px solid var(--outline);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 30px 24px 26px;
+  padding: 22px 22px 20px;
   animation: home-rise 0.5s ease both;
 }
 
@@ -335,21 +337,21 @@
 }
 
 .home-card-icon {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   background: var(--card-accent-light);
   color: var(--card-accent);
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--card-accent-light) 55%, transparent);
 }
 
 .home-card-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .home-card h2 {
@@ -362,9 +364,9 @@
 
 .home-card p {
   font-size: 13.5px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text-secondary);
-  margin: 0 0 22px;
+  margin: 0 0 14px;
   flex: 1;
 }
 
@@ -374,7 +376,7 @@
   justify-content: center;
   gap: 6px;
   width: 100%;
-  height: 44px;
+  height: 40px;
   border: none;
   border-radius: var(--radius-sm);
   background: var(--card-accent);
