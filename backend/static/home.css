@@ -92,14 +92,14 @@
   height: 100%;
   object-fit: cover;
   /* This generation already has her on the right with open space on
-     the left -- no mirroring needed. Her raised fist sits very close
-     to the top of the source frame (confirmed by cropping and
-     inspecting that region directly) -- the crop window is shorter
-     than the full fist-to-holding-hand span, so something has to give;
-     prioritizing headroom above the fist over the bottom of the paper,
-     since a fist clipped at the wrist reads as a mistake far more than
-     a paper's lower edge running off-frame does. */
-  object-position: 78% 16%;
+     the left -- no mirroring needed. Measured directly (cropped the
+     top-right region and inspected it) rather than guessed: her hair
+     starts right at the top edge of the source with zero headroom of
+     its own, and her fist (held at shoulder height this time, not
+     fully extended) sits about 38% down -- a small vertical offset
+     leaves a sliver of headroom above the hair without pushing the
+     fist itself out of frame. */
+  object-position: 75% 5%;
 }
 
 .home-banner-scrim {
