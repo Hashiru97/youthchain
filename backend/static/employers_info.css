@@ -9,13 +9,58 @@
    like home.html, and uses the same primary accent that page does. */
 
 .employers-shell {
+  position: relative;
   max-width: 980px;
   margin: 0 auto;
   padding: 56px 24px 40px;
 }
 
+/* Two engraved seal rings bled off opposite corners of the hero, the
+   same certificate-stamp vocabulary as home.html's banner and job
+   cards -- see the HTML comment above this element for why it exists.
+   Fixed-height, absolutely positioned behind the hero only (not the
+   whole page), so it doesn't bleed into the plain-white feature cards
+   below. */
+.employers-hero-seal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 420px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.employers-seal-ring circle {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.employers-seal-ring-primary circle {
+  stroke: var(--primary);
+}
+
+.employers-seal-ring-tertiary circle {
+  stroke: var(--tertiary);
+}
+
+.employers-seal-ring {
+  opacity: 0.14;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .employers-seal-ring {
+    opacity: 0.26;
+  }
+}
+:root[data-theme="dark"] .employers-seal-ring {
+  opacity: 0.26;
+}
+
 /* ---------- Hero ---------- */
 .employers-hero {
+  position: relative;
+  z-index: 1;
   text-align: center;
   max-width: 640px;
   margin: 0 auto 64px;
@@ -71,6 +116,8 @@
 
 /* ---------- Feature cards ---------- */
 .employers-features {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
@@ -84,11 +131,26 @@
 }
 
 .employers-feature {
+  position: relative;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: 26px 22px;
+}
+
+/* Same engraved tick-mark corner as the featured-jobs cards on the home
+   page (.home-job-corner) -- ties this card to the same visual system
+   instead of being a plain generic icon-tile-plus-paragraph card. */
+.employers-feature-corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  color: var(--outline);
+  pointer-events: none;
 }
 
 .employers-feature-icon {
@@ -160,15 +222,29 @@
 }
 
 .employers-pricing-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: var(--radius-lg);
   padding: 28px 26px;
 }
 
+/* A colored border alone read as a generic "highlighted plan" pricing-
+   table convention -- the stamp glyph (a dashed-ring seal with a
+   checkmark, the same die-cut/verified vocabulary used throughout the
+   rest of the product) carries that signal instead, so the border here
+   stays subtle rather than doubling up on emphasis. */
 .employers-pricing-card.is-current {
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary), var(--shadow-sm);
+}
+
+.employers-pricing-stamp {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 32px;
+  height: 32px;
+  color: var(--primary);
 }
 
 .employers-pricing-badge {

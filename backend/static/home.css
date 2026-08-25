@@ -40,11 +40,11 @@
      ratio constant instead keeps the same framing at any width;
      min/max-height only guard the extremes (a very narrow phone, a
      very wide monitor). */
-  aspect-ratio: 1280 / 330;
-  min-height: 280px;
-  max-height: 420px;
+  aspect-ratio: 1300 / 400;
+  min-height: 430px;
+  max-height: 500px;
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 0px;
 }
 
 .home-banner-photo {
@@ -62,14 +62,14 @@
      even smaller vertical crop window than before, so headroom is
      trimmed to almost nothing -- her hair sits right at the top edge
      of the banner rather than leaving empty wall space above it. */
-  object-position: 75% 35%;
+  object-position: 75% 25%;
   /* This banner's aspect ratio is wide/short enough that object-fit:
      cover already shows the photo's full width at every desktop size
      (only height ever crops) -- object-position's horizontal component
      has no room to do anything. A small scale + translate manufactures
      that room, letting the framing nudge up/right as requested without
      fighting the vertical tuning above. */
-  transform: scale(1.18) translate(3%, -7%);
+  transform: scale(1.18) translate(2.5%, -8%);
 }
 
 .home-banner-scrim {
@@ -154,15 +154,15 @@
 .home-banner-cta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 6px;
+  gap: 7px;
+  margin-top: 4px;
 }
 
 .home-banner-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 44px;
+  height: 45px;
   padding: 0 20px;
   border-radius: var(--radius-sm);
   font-size: 13.5px;
