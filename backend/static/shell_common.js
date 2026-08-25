@@ -91,7 +91,31 @@ document.querySelectorAll("[data-nav-toggle]").forEach((button) => {
     close();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") close();
+    if (!target.classList.contains("is-open")) return;
+    if (event.key === "Escape") {
+      close();
+      button.focus();
+      return;
+    }
+    // Without this, Tab off the target's last link (or Shift+Tab off
+    // the button) walked straight into whatever the target overlays --
+    // on the site header that's the hero's own "Get started" button,
+    // dimmed behind the scrim but still fully focusable, with the
+    // dropdown left visibly open above it. Confirmed live: four Tabs
+    // from the toggle button landed there while is-open was still
+    // true. Treating [button, ...links inside target] as one closed
+    // loop keeps focus from ever leaving the open widget.
+    if (event.key !== "Tab") return;
+    const loop = [button, ...target.querySelectorAll("a[href], button:not([disabled])")];
+    const first = loop[0];
+    const last = loop[loop.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
 });
 
