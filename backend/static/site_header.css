@@ -72,6 +72,12 @@
   display: flex;
   align-items: center;
   gap: 28px;
+  /* Sits after .site-header-actions in the DOM now (see
+     _site_header.html's own comment: keyboard tab order, not visual
+     order, is why) -- `order` puts it back between the wordmark and
+     actions on desktop, where .site-header-inner is a normal flex row
+     and DOM order would otherwise be the visual order too. */
+  order: 1;
 }
 
 .site-nav a {
@@ -97,6 +103,9 @@
   align-items: center;
   gap: 18px;
   margin-left: auto;
+  /* Precedes .site-nav in visual order despite coming first in the DOM
+     -- see .site-nav's own `order` comment. */
+  order: 2;
 }
 
 .site-header-login {
@@ -237,5 +246,18 @@
   .site-header-post {
     padding: 9px 12px;
     font-size: 13px;
+  }
+
+  /* "Connecting youth to work" -- flex-shrink:0 on .home-wordmark keeps
+     the logo lockup at its natural width rather than compressing it
+     into overlap, so on the narrowest common phones (320px, still a
+     real device class here) the wordmark plus "Post a job" + theme
+     toggle + hamburger together ran ~20px past the viewport: a genuine
+     horizontal scrollbar and the hamburger itself half off-screen,
+     confirmed via a real 320px viewport check. Same call already made
+     for .site-header-login above -- drop the tagline, not the logo or
+     any functional control, to make everything else fit. */
+  .home-wordmark-subtitle {
+    display: none;
   }
 }

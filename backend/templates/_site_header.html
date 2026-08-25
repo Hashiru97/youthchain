@@ -21,18 +21,6 @@
       </span>
     </a>
 
-    <nav class="site-nav" id="site-nav" aria-label="Main">
-      <a href="{{ url_for('home') }}#home-jobs">Find jobs</a>
-      <a href="{{ url_for('employers_info') }}">Employers</a>
-      <!-- Mobile-only duplicate of .site-header-login below: at a phone
-           width, Log in + Post a job + the theme toggle + the hamburger
-           itself didn't fit the header row (confirmed by screenshot --
-           the hamburger was getting clipped off the right edge). Moving
-           Log in in here instead of just deleting it keeps it reachable
-           through the one path mobile already has, rather than losing it. -->
-      <a href="{{ url_for('home') }}#home-roles" class="site-nav-mobile-only">Log in</a>
-    </nav>
-
     <div class="site-header-actions">
       <a href="{{ url_for('home') }}#home-roles" class="site-header-login">Log in</a>
       <a href="{{ url_for('employer_register') }}" class="btn primary site-header-post">Post a job</a>
@@ -50,6 +38,28 @@
         {{ icon_menu() }}
       </button>
     </div>
+
+    <!-- Comes after .site-header-actions in DOM order (with CSS `order`
+         restoring its visual position between the wordmark and actions
+         on desktop) so the hamburger button -- .site-header-actions'
+         last child -- immediately precedes it in tab order. Same
+         convention portal_shell.html already uses for its own menu
+         toggle/nav pair. With the nav last in the DOM instead, a
+         keyboard user who opened the dropdown and pressed Tab jumped
+         straight past its three links into the hero's "Get started"
+         button behind it -- confirmed live: the links were reachable
+         only by guessing to Shift+Tab backward, not forward. -->
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="{{ url_for('home') }}#home-jobs">Find jobs</a>
+      <a href="{{ url_for('employers_info') }}">Employers</a>
+      <!-- Mobile-only duplicate of .site-header-login above: at a phone
+           width, Log in + Post a job + the theme toggle + the hamburger
+           itself didn't fit the header row (confirmed by screenshot --
+           the hamburger was getting clipped off the right edge). Moving
+           Log in in here instead of just deleting it keeps it reachable
+           through the one path mobile already has, rather than losing it. -->
+      <a href="{{ url_for('home') }}#home-roles" class="site-nav-mobile-only">Log in</a>
+    </nav>
   </div>
 
   <!-- Dims the page behind the open mobile dropdown -- without it the
