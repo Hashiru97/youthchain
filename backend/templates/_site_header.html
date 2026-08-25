@@ -1,0 +1,38 @@
+<!-- Shared top navigation. Included on home.html and every public info
+     page (employers_info.html and anything added alongside it) so a
+     visitor gets the same nav regardless of which page brought them
+     here, rather than each page inventing its own header. Sticky,
+     --surface background with a bottom border -- the same convention
+     portal_shell.html's own topbar already uses -- so this reads as
+     part of the same product, not a separate marketing site bolted on.
+
+     Only two nav links: Find jobs and Employers. A "Services" and
+     "Meet the team" link were considered and deliberately left out --
+     neither has a real page behind it yet, and this app's own
+     discipline throughout has been never to link to a destination that
+     doesn't exist. Add them back once there's real content to point to. -->
+<header class="site-header">
+  <div class="site-header-inner">
+    <a href="{{ url_for('home') }}" class="home-wordmark">
+      <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
+      <span class="home-wordmark-text">
+        <span class="home-wordmark-title">YouthChain</span>
+        <span class="home-wordmark-subtitle">Connecting youth to work</span>
+      </span>
+    </a>
+
+    <nav class="site-nav" aria-label="Main">
+      <a href="{{ url_for('home') }}#home-jobs">Find jobs</a>
+      <a href="{{ url_for('employers_info') }}">Employers</a>
+    </nav>
+
+    <div class="site-header-actions">
+      <a href="{{ url_for('home') }}#home-roles" class="site-header-login">Log in</a>
+      <a href="{{ url_for('employer_register') }}" class="btn primary site-header-post">Post a job</a>
+      <button type="button" class="shell-theme-toggle site-header-theme" data-theme-toggle aria-label="Toggle dark mode">
+        <span class="icon-sun">{{ icon_sun() }}</span>
+        <span class="icon-moon">{{ icon_moon() }}</span>
+      </button>
+    </div>
+  </div>
+</header>

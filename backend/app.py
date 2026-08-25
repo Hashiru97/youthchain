@@ -3777,6 +3777,26 @@ def health_deep():
     return jsonify({"ok": overall_ok, "checks": checks, "time": datetime.utcnow().isoformat()}), (200 if overall_ok else 503)
 
 
+@app.route("/employers")
+def employers_info():
+    """
+    Public "for employers" page linked from the new shared site header
+    (_site_header.html) and from every employer role card's context.
+    No auth required -- a prospective employer deciding whether to sign
+    up needs to see this before they have an account.
+
+    Pricing is described honestly rather than invented: post_job() has
+    no cost, no listing limit, and never sets Job.application_deadline
+    for an employer-posted job (grep confirms it -- that column is
+    scraped-listing-only), so "free, no forced expiration" is what the
+    platform actually does today, not marketing copy. There is also
+    currently no employer-facing way to close a listing early (only
+    admin_resolve_listing_report() can remove a Job row, via a scam
+    report) -- the page doesn't claim otherwise.
+    """
+    return render_template("employers_info.html")
+
+
 @app.route("/")
 def home():
     """

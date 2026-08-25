@@ -5,56 +5,17 @@
    them (this is the real gap the engineering review found: GET / used
    to return a bare JSON API status message with no link to anything).
 
-   Layout, top to bottom: a quiet wordmark strip -> a short photo banner
-   (the one deliberate hero moment on this page -- see .home-banner's own
-   comment for why it stays restrained rather than a full-viewport
-   cinematic hero) -> the three-card role picker, still the page's actual
-   job -> a "Featured jobs" grid of real, live listings as a secondary
+   Layout, top to bottom: the shared site header (_site_header.html /
+   site_header.css -- also used on employers_info.html, so the wordmark
+   and nav rules live there, not here) -> a short photo banner (the one
+   deliberate hero moment on this page -- see .home-banner's own comment
+   for why it stays restrained rather than a full-viewport cinematic
+   hero) -> the three-card role picker, still the page's actual job ->
+   a "Featured jobs" grid of real, live listings as a secondary
    social-proof layer -> the footer. Every color throughout is a token
    from style.css's :root system, so dark mode and the rest of this
    product's visual identity come along for free rather than needing a
    parallel palette. */
-
-/* ---------- Topbar (wordmark only) ---------- */
-.home-topbar {
-  position: relative;
-  z-index: 1;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 14px 24px 8px;
-  display: flex;
-  align-items: center;
-}
-
-.home-wordmark {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.home-wordmark img {
-  height: 26px;
-  width: auto;
-}
-
-.home-wordmark-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
-.home-wordmark-title {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-}
-
-.home-wordmark-subtitle {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
 
 /* ---------- Compact photo banner ----------
    Shorter than the first pass -- on a common laptop viewport (1366x768
@@ -101,7 +62,14 @@
      even smaller vertical crop window than before, so headroom is
      trimmed to almost nothing -- her hair sits right at the top edge
      of the banner rather than leaving empty wall space above it. */
-  object-position: 75% 0%;
+  object-position: 75% 35%;
+  /* This banner's aspect ratio is wide/short enough that object-fit:
+     cover already shows the photo's full width at every desktop size
+     (only height ever crops) -- object-position's horizontal component
+     has no room to do anything. A small scale + translate manufactures
+     that room, letting the framing nudge up/right as requested without
+     fighting the vertical tuning above. */
+  transform: scale(1.18) translate(3%, -7%);
 }
 
 .home-banner-scrim {
@@ -276,14 +244,14 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   width: 100%;
-  max-width: 920px;
+  max-width: 640px;
   margin-bottom: 48px;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 600px) {
   .home-cards {
     grid-template-columns: 1fr;
     max-width: 420px;
@@ -312,9 +280,6 @@
 .home-cards .home-card:nth-child(2) {
   animation-delay: 0.13s;
 }
-.home-cards .home-card:nth-child(3) {
-  animation-delay: 0.2s;
-}
 
 .home-card:hover {
   transform: translateY(-3px);
@@ -327,13 +292,6 @@
   --card-accent-dark: var(--secondary-dark);
   --card-accent-light: var(--secondary-light);
   --card-glow: rgba(109, 40, 217, 0.22);
-}
-
-.home-card.is-admin {
-  --card-accent: var(--tertiary);
-  --card-accent-dark: var(--tertiary-dark);
-  --card-accent-light: var(--tertiary-light);
-  --card-glow: rgba(29, 99, 201, 0.22);
 }
 
 .home-card-icon {
@@ -419,13 +377,6 @@
 
 .home-card-secondary a:hover {
   color: var(--text-primary);
-}
-
-/* Reserves the same vertical space the other two cards' "New here?"
-   line takes (see home.html's own comment on the admin card), so all
-   three CTA buttons stay pixel-aligned across the row. */
-.home-card-secondary-spacer {
-  visibility: hidden;
 }
 
 /* ---------- Featured jobs ----------
@@ -676,16 +627,6 @@
 
 .home-footer a:hover {
   color: var(--text-primary);
-}
-
-/* Fixed corner placement, same convention as .auth-shell-theme-toggle. */
-.home-theme-toggle {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 2;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
 }
 
 @keyframes home-rise {

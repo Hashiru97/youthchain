@@ -10,27 +10,12 @@
   <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='site_header.css', v=asset_version('site_header.css')) }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_version('home.css')) }}" />
 </head>
 <body>
-  {% from "_admin_icons.html" import icon_sun, icon_moon, icon_users_count, icon_briefcase, icon_shield_check, icon_chevron_right %}
-  <button type="button" class="shell-theme-toggle home-theme-toggle" data-theme-toggle aria-label="Toggle dark mode">
-    <span class="icon-sun">{{ icon_sun() }}</span>
-    <span class="icon-moon">{{ icon_moon() }}</span>
-  </button>
-
-  <!-- Quiet wordmark strip, kept outside the banner below and visually
-       light on purpose: the banner is the page's one deliberate hero
-       moment, so the wordmark doesn't compete with it. -->
-  <div class="home-topbar">
-    <div class="home-wordmark">
-      <img src="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" alt="" />
-      <span class="home-wordmark-text">
-        <span class="home-wordmark-title">YouthChain</span>
-        <span class="home-wordmark-subtitle">Connecting youth to work</span>
-      </span>
-    </div>
-  </div>
+  {% from "_admin_icons.html" import icon_sun, icon_moon, icon_users_count, icon_briefcase, icon_chevron_right %}
+  {% include "_site_header.html" %}
 
   <!-- Compact photo banner -- deliberately short (clamp 380-460px), not
        a full-viewport cinematic hero. AI-generated (Higgsfield,
@@ -74,7 +59,17 @@
          jumping via a links list (a common navigation mode, out of
          surrounding context) would hear "Log in, Log in, Log in" with
          no way to tell them apart. aria-label on each disambiguates
-         without changing what's shown on screen. -->
+         without changing what's shown on screen.
+
+         Job seeker and Employer only -- an Admin card used to sit here
+         as a third, publicly-advertised peer option. No real platform
+         showcases staff/admin login next to customer signup on its
+         public marketing front door: it hands attackers a discovery-
+         free target for credential stuffing and phishing, for an
+         audience (the general public) that has no legitimate reason to
+         know the admin system exists at all. /admin/login still works
+         exactly as before at its direct URL -- staff reach it by
+         bookmark or onboarding instructions, not a public button. -->
     <div class="home-section-lead">
       <p class="home-prompt" id="home-roles-label">Continue as</p>
     </div>
@@ -98,25 +93,6 @@
           Log in {{ icon_chevron_right() }}
         </a>
         <p class="home-card-secondary">New here? <a href="{{ url_for('employer_register') }}" aria-label="Create an employer account">Create an account</a></p>
-      </div>
-
-      <div class="home-card is-admin">
-        <div class="home-card-icon">{{ icon_shield_check() }}</div>
-        <h2>Admin</h2>
-        <p>Platform operations: employer verification, credential oversight, reports, and analytics.</p>
-        <a class="home-card-cta" href="{{ url_for('admin_login') }}" aria-label="Log in as an admin">
-          Log in {{ icon_chevron_right() }}
-        </a>
-        <!-- No self-registration for admin accounts (see admin_login.html's
-             own subtitle) -- this reserves the same vertical space the
-             other two cards' "New here?" line takes, so all three CTA
-             buttons stay pixel-aligned across the row rather than the
-             shorter card's flex-grown description pushing its button
-             lower than its siblings'. A real class, not an inline
-             style="visibility:hidden" -- this app's CSP is style-src
-             'self' with no 'unsafe-inline', so an inline style attribute
-             is silently dropped by the browser rather than applied. -->
-        <p class="home-card-secondary home-card-secondary-spacer" aria-hidden="true">&nbsp;</p>
       </div>
     </div>
 

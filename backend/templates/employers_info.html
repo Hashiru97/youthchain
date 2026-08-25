@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>For Employers &bull; YouthChain</title>
+  <meta name="description" content="Post jobs, reach verified young talent across Sierra Leone, and see exactly what it costs -- today and as YouthChain grows." />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/youthchain-icon.svg', v=asset_version('img/youthchain-icon.svg')) }}" />
+  <script src="{{ url_for('static', filename='theme_init.js', v=asset_version('theme_init.js')) }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=asset_version('style.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell_common.css', v=asset_version('shell_common.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='site_header.css', v=asset_version('site_header.css')) }}" />
+  <!-- home.css only for its .home-footer rule, reused verbatim in the
+       footer below rather than duplicating it a third time. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='home.css', v=asset_version('home.css')) }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='employers_info.css', v=asset_version('employers_info.css')) }}" />
+</head>
+<body>
+  {% from "_admin_icons.html" import icon_sun, icon_moon, icon_briefcase, icon_shield_check, icon_message, icon_check, icon_clock, icon_chevron_right %}
+  {% include "_site_header.html" %}
+
+  <main class="employers-shell">
+    <section class="employers-hero">
+      <p class="employers-kicker">For employers</p>
+      <h1 class="employers-hero-title">Hire verified talent, not just applicants.</h1>
+      <p class="employers-hero-sub">Every job seeker on YouthChain builds a verified employment passport as they work -- so when someone applies, you're seeing more than a CV they wrote themselves.</p>
+      <div class="employers-hero-cta">
+        <a href="{{ url_for('employer_register') }}" class="btn primary">Create your employer account</a>
+        <a href="{{ url_for('employer_login') }}" class="employers-hero-login">Already registered? Log in</a>
+      </div>
+    </section>
+
+    <section class="employers-features" aria-label="What you get">
+      <div class="employers-feature">
+        <div class="employers-feature-icon">{{ icon_briefcase() }}</div>
+        <h2>Post formal roles or gig work</h2>
+        <p>List a CV-required position or informal/gig work -- tailoring, okada transport, market vending, construction labor, domestic work -- whatever the role actually is.</p>
+      </div>
+      <div class="employers-feature">
+        <div class="employers-feature-icon">{{ icon_message() }}</div>
+        <h2>Message candidates directly</h2>
+        <p>Reply to applicants in real time, right through the platform -- no juggling a separate phone number or email thread per applicant.</p>
+      </div>
+      <div class="employers-feature">
+        <div class="employers-feature-icon">{{ icon_shield_check() }}</div>
+        <h2>A verified badge, once reviewed</h2>
+        <p>Business registration or tax ID gets your account a verified mark job seekers can see before they apply -- the same trust signal that makes the platform worth using in the first place.</p>
+      </div>
+    </section>
+
+    <!-- Pricing, described exactly as the platform behaves today rather
+         than aspirational marketing copy -- see employers_info() in
+         app.py for the code-level evidence (post_job() has no cost, no
+         listing cap, and never sets an expiration on an employer-posted
+         job). The phased-pricing note is honest about the roadmap
+         without inventing specific numbers that haven't been decided. -->
+    <section class="employers-pricing" aria-labelledby="employers-pricing-title">
+      <div class="employers-pricing-head">
+        <h2 id="employers-pricing-title">Pricing</h2>
+        <p>Simple, and honest about where it's headed.</p>
+      </div>
+
+      <div class="employers-pricing-grid">
+        <div class="employers-pricing-card is-current">
+          <p class="employers-pricing-badge">Right now</p>
+          <p class="employers-pricing-amount">Free</p>
+          <p class="employers-pricing-detail">Post as many jobs as you need, formal or gig. No card required, no listing cap, no cost to you while YouthChain is in early access.</p>
+          <ul class="employers-pricing-list">
+            <li>{{ icon_check() }} Unlimited job posts</li>
+            <li>{{ icon_check() }} Full messaging with applicants</li>
+            <li>{{ icon_check() }} No forced expiration -- your listing stays visible until the role is filled</li>
+          </ul>
+        </div>
+        <div class="employers-pricing-card">
+          <p class="employers-pricing-badge">As we grow</p>
+          <p class="employers-pricing-amount">Introduced in phases</p>
+          <p class="employers-pricing-detail">Paid plans come later, priced far below what this costs elsewhere -- starting small and rolling out gradually, never sprung on employers already posting here without advance notice.</p>
+        </div>
+      </div>
+
+      <p class="employers-pricing-note">
+        {{ icon_clock() }}
+        There's currently no self-service way to close a listing early once it's posted -- that's on our roadmap. If you need one taken down sooner, reach out and we'll handle it directly.
+      </p>
+    </section>
+
+    <section class="employers-cta">
+      <h2>Ready to post your first role?</h2>
+      <a href="{{ url_for('employer_register') }}" class="btn primary">
+        Create your employer account {{ icon_chevron_right() }}
+      </a>
+    </section>
+  </main>
+
+  <div class="home-footer employers-footer">
+    <a href="{{ url_for('get_app') }}">Get the app</a>
+    <a href="{{ url_for('privacy_policy') }}">Privacy policy</a>
+    <a href="{{ url_for('terms_of_service') }}">Terms of service</a>
+  </div>
+
+  <script src="{{ url_for('static', filename='shell_common.js', v=asset_version('shell_common.js')) }}"></script>
+</body>
+</html>

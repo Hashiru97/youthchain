@@ -1,0 +1,135 @@
+/* Shared top navigation -- see _site_header.html for why this is a
+   separate include/stylesheet rather than living inside home.css: the
+   home page isn't the only page that needs this nav (employers_info.html
+   does too), so the wordmark and header rules moved here as the single
+   source of truth instead of being duplicated or dragging the rest of
+   home.css's page-specific rules along for the ride. */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--outline);
+}
+
+.site-header-inner {
+  max-width: 1180px;
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* ---------- Wordmark (also used standalone in the photo banner's
+   topbar strip before this shared header existed -- kept the same
+   class names so nothing else needed to change) ---------- */
+.home-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.home-wordmark img {
+  height: 26px;
+  width: auto;
+}
+
+.home-wordmark-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.home-wordmark-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.home-wordmark-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---------- Nav links ---------- */
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.site-nav a {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--text-primary);
+}
+
+/* ---------- Right-side actions ---------- */
+.site-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.site-header-login {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-header-login:hover {
+  color: var(--text-primary);
+}
+
+.site-header-post {
+  white-space: nowrap;
+}
+
+/* .shell-theme-toggle (shell_common.css) claims its own margin-left:
+   auto to push itself to the far side of a plain flex row that has no
+   dedicated spacer -- .site-header-actions already is that spacer, so
+   the toggle's own auto-margin is switched off here to keep it sitting
+   right next to "Post a job" instead of splitting away from it. */
+.site-header-theme {
+  margin-left: 0;
+}
+
+@media (max-width: 760px) {
+  /* Nav links collapse first -- Find jobs/Employers are both reachable
+     other ways (the role cards below the banner, and the featured-jobs
+     section itself) on the home page. "Log in" and "Post a job" stay --
+     they're the two actions a visitor to any other page (employers_info
+     has no role-card fallback) still needs a direct path to. */
+  .site-nav {
+    display: none;
+  }
+
+  .site-header-inner {
+    gap: 12px;
+    padding: 0 16px;
+  }
+
+  .site-header-actions {
+    gap: 10px;
+  }
+
+  .site-header-post {
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+}
