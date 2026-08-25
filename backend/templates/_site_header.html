@@ -21,9 +21,16 @@
       </span>
     </a>
 
-    <nav class="site-nav" aria-label="Main">
+    <nav class="site-nav" id="site-nav" aria-label="Main">
       <a href="{{ url_for('home') }}#home-jobs">Find jobs</a>
       <a href="{{ url_for('employers_info') }}">Employers</a>
+      <!-- Mobile-only duplicate of .site-header-login below: at a phone
+           width, Log in + Post a job + the theme toggle + the hamburger
+           itself didn't fit the header row (confirmed by screenshot --
+           the hamburger was getting clipped off the right edge). Moving
+           Log in in here instead of just deleting it keeps it reachable
+           through the one path mobile already has, rather than losing it. -->
+      <a href="{{ url_for('home') }}#home-roles" class="site-nav-mobile-only">Log in</a>
     </nav>
 
     <div class="site-header-actions">
@@ -32,6 +39,15 @@
       <button type="button" class="shell-theme-toggle site-header-theme" data-theme-toggle aria-label="Toggle dark mode">
         <span class="icon-sun">{{ icon_sun() }}</span>
         <span class="icon-moon">{{ icon_moon() }}</span>
+      </button>
+      <!-- Mobile only (site_header.css's own breakpoint hides .site-nav
+           there by default) -- without this, Find jobs/Employers were
+           simply unreachable on a phone: no fallback, not a generic
+           hamburger placeholder. Employers especially matters -- "Post
+           a job" skips straight to registration, so a mobile visitor
+           had no way to see what they'd be signing up for first. -->
+      <button type="button" class="site-header-menu-toggle" data-nav-toggle="#site-nav" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation menu">
+        {{ icon_menu() }}
       </button>
     </div>
   </div>

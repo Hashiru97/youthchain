@@ -67,6 +67,34 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
   });
 });
 
+// Mobile nav dropdown -- <button data-nav-toggle="#selector"> shows/hides
+// the target nav (site_header.css's own mobile breakpoint hides .site-nav
+// there by default, since the desktop layout renders it inline) and keeps
+// aria-expanded in sync for screen readers. Closes on an outside click or
+// Escape so it doesn't linger open after the visitor taps elsewhere or
+// scrolls past it -- the same expectation any native menu meets.
+document.querySelectorAll("[data-nav-toggle]").forEach((button) => {
+  const target = document.querySelector(button.dataset.navToggle);
+  if (!target) return;
+  const close = () => {
+    target.classList.remove("is-open");
+    button.setAttribute("aria-expanded", "false");
+  };
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = target.classList.toggle("is-open");
+    button.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (event) => {
+    if (!target.classList.contains("is-open")) return;
+    if (target.contains(event.target) || button.contains(event.target)) return;
+    close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+  });
+});
+
 // Registration channel choice (portal_register.html's "contact" step) --
 // a radio pair (data-otp-channel-radio) toggles the single identifier
 // field's type/autocomplete/placeholder and its label between email and

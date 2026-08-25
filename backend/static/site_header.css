@@ -76,6 +76,12 @@
   color: var(--text-primary);
 }
 
+/* Only ever shown inside the mobile dropdown panel -- see the mobile
+   breakpoint below and _site_header.html's own comment on why. */
+.site-nav-mobile-only {
+  display: none;
+}
+
 /* ---------- Right-side actions ---------- */
 .site-header-actions {
   display: flex;
@@ -109,27 +115,102 @@
   margin-left: 0;
 }
 
+/* Hamburger toggle for .site-nav on narrow viewports -- hidden on
+   desktop, where the nav already renders inline. See shell_common.js's
+   [data-nav-toggle] handler for the open/close behavior. */
+.site-header-menu-toggle {
+  display: none;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 0;
+}
+
+.site-header-menu-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg);
+}
+
+.site-header-menu-toggle svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
 @media (max-width: 760px) {
-  /* Nav links collapse first -- Find jobs/Employers are both reachable
-     other ways (the role cards below the banner, and the featured-jobs
-     section itself) on the home page. "Log in" and "Post a job" stay --
-     they're the two actions a visitor to any other page (employers_info
-     has no role-card fallback) still needs a direct path to. */
+  /* Nav links collapse into the hamburger below, not simply vanish --
+     Find jobs is reachable another way on the home page (the featured-
+     jobs section itself), but Employers has no fallback on any other
+     page ("Post a job" skips straight to registration), so hiding it
+     outright would have made the pricing page undiscoverable on a
+     phone. .is-open (toggled by shell_common.js) turns it into a
+     dropdown panel anchored under the header instead of an inline row. */
   .site-nav {
     display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--outline);
+    box-shadow: var(--shadow-sm);
+    padding: 8px 16px 14px;
+  }
+
+  .site-nav.is-open {
+    display: flex;
+  }
+
+  .site-nav a {
+    padding: 10px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .site-nav a:hover {
+    background: var(--bg);
+  }
+
+  .site-nav-mobile-only {
+    display: block;
+    border-top: 1px solid var(--outline);
+    margin-top: 4px;
+    padding-top: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .site-header-menu-toggle {
+    display: flex;
   }
 
   .site-header-inner {
-    gap: 12px;
+    gap: 8px;
     padding: 0 16px;
   }
 
   .site-header-actions {
-    gap: 10px;
+    gap: 6px;
+  }
+
+  /* Login moved into the dropdown above (.site-nav-mobile-only) -- the
+     header row itself only has room for one primary action plus the
+     utility icons at this width. */
+  .site-header-login {
+    display: none;
   }
 
   .site-header-post {
-    padding: 9px 14px;
+    padding: 9px 12px;
     font-size: 13px;
   }
 }
