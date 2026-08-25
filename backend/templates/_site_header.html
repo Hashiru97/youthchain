@@ -51,4 +51,14 @@
       </button>
     </div>
   </div>
+
+  <!-- Dims the page behind the open mobile dropdown -- without it the
+       hero heading/body copy showed straight through the gap under the
+       dropdown's own height, since .site-nav only covers its own three
+       links, not the rest of the viewport. Shown via :has() rather than
+       a JS-toggled body class (the pattern admin/employer/portal use)
+       because data-nav-toggle is a generic, opt-in behavior that only
+       knows about the one target it's given -- teaching it about a
+       scrim would make it page-specific for the sake of one consumer. -->
+  <div class="site-header-scrim" aria-hidden="true"></div>
 </header>

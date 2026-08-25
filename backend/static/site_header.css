@@ -13,6 +13,15 @@
   border-bottom: 1px solid var(--outline);
 }
 
+/* Base state is "off" at every width -- the mobile breakpoint below is
+   the only place that ever turns this on, but a div's default display
+   is "block", not "none", so without this rule the scrim would sit in
+   the DOM unstyled-but-present outside that breakpoint rather than
+   cleanly absent. */
+.site-header-scrim {
+  display: none;
+}
+
 .site-header-inner {
   max-width: 1180px;
   height: 64px;
@@ -165,10 +174,26 @@
     border-bottom: 1px solid var(--outline);
     box-shadow: var(--shadow-sm);
     padding: 8px 16px 14px;
+    /* Above .site-header-scrim's z-index: 35 -- without an explicit
+       value here this stays "auto", which paints BELOW any descendant
+       that has a real positive z-index (the scrim), leaving the scrim
+       covering the dropdown itself instead of just the page behind it. */
+    z-index: 40;
   }
 
   .site-nav.is-open {
     display: flex;
+  }
+
+  .site-header-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(21, 33, 30, 0.4);
+    z-index: 35;
+  }
+
+  header:has(.site-nav.is-open) .site-header-scrim {
+    display: block;
   }
 
   .site-nav a {
