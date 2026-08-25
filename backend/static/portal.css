@@ -374,6 +374,37 @@ body.portal-shell-body {
   box-shadow: var(--shadow-md);
 }
 
+/* ---------- Work history summary (portal_work_history.html) ----------
+   All five of these were style="..." attributes -- silently dropped by
+   this app's CSP (style-src 'self', no unsafe-inline; same bug class
+   style.css's own .tight-above comment documents elsewhere). Without
+   them the summary rendered as a plain white .card with four stacked,
+   unstyled lines instead of a colored banner with two readable stat
+   pairs -- confirmed live logged in as a real job seeker. */
+.portal-work-summary-card {
+  background: var(--secondary);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.portal-work-summary-stat {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.portal-work-summary-label {
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.portal-work-summary-right {
+  text-align: right;
+}
+
 .portal-search-form input,
 .portal-search-form select {
   border: none;

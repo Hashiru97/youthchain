@@ -53,7 +53,7 @@
           </div>
           {% endif %}
           {% if trust and trust.trust_tier and trust.trust_tier != 'good' %}
-          <span class="badge {{ 'badge-warn' if trust.trust_tier == 'fair' else 'badge-error' }}" style="padding: 2px 8px; margin-top: 2px; font-size: 11px;">
+          <span class="badge {{ 'badge-warn' if trust.trust_tier == 'fair' else 'badge-error' }}">
             {{ "Fair standing" if trust.trust_tier == "fair" else "Use caution" }}
           </span>
           {% endif %}

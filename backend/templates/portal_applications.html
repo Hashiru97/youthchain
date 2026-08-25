@@ -4,10 +4,10 @@
 {% block title %}My Applications{% endblock %}
 
 {% block content %}
-  <header class="page-header" style="padding-top: 28px;">
+  <header class="page-header">
     <h1>📋 My Applications</h1>
     <p class="subtitle">Track the status of every job you've applied to.</p>
-    <a href="{{ url_for('portal_work_history') }}" class="btn secondary outline" style="margin-top: 8px;">{{ icon_star() }} View Work History</a>
+    <a href="{{ url_for('portal_work_history') }}" class="btn secondary outline">{{ icon_star() }} View Work History</a>
   </header>
 
   {% if rows %}

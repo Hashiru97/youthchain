@@ -4,7 +4,7 @@
 {% block title %}Devices{% endblock %}
 
 {% block content %}
-  <header class="page-header" style="padding-top: 28px;">
+  <header class="page-header">
     <h1>{{ icon_smartphone() }} Connected devices</h1>
     <p class="subtitle">Every phone and browser currently signed into your account. If you don't recognize one, revoke it — that signs it out immediately.</p>
   </header>
@@ -23,7 +23,7 @@
             &middot; last active {{ s.last_seen_at.strftime("%d %b %Y, %H:%M") if s.last_seen_at else "just now" }}
             {% if s.ip_address %}&middot; {{ s.ip_address }}{% endif %}
           </div>
-          <form method="POST" action="{{ url_for('portal_revoke_device', session_id=s.id) }}" style="margin-top: 10px;">
+          <form method="POST" action="{{ url_for('portal_revoke_device', session_id=s.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <button type="submit" class="btn small reject"
               data-confirm="{{ 'Revoke this device? You will be signed out immediately.' if s.session_token == current_token else 'Revoke this device? It will be signed out immediately.' }}">

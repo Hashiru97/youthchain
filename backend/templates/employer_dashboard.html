@@ -8,7 +8,7 @@
   {% set has_jobs = jobs|length > 0 %}
 
   {% if trust and trust.rating_count %}
-  <section class="card" style="background: var(--secondary); color: white; display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+  <section class="card employer-trust-rating-card">
     {{ icon_star() }}
     <span>Workers rate you <strong>{{ trust.avg_rating }}/5</strong> on average, from {{ trust.rating_count }} completed gig{{ "s" if trust.rating_count != 1 }}. Youth browsing gig jobs see this too.</span>
   </section>
@@ -22,7 +22,7 @@
      start -- this is the one place an employer can see, and act on,
      the same signal youth see about them elsewhere in the product. #}
   {% if trust and trust.trust_tier %}
-  <section class="card" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+  <section class="card employer-trust-tier-card">
     <span class="badge {{ 'badge-success' if trust.trust_tier == 'good' else ('badge-warn' if trust.trust_tier == 'fair' else 'badge-error') }}">
       {{ {"good": "Good standing", "fair": "Fair standing", "caution": "Use caution"}[trust.trust_tier] }}
     </span>
@@ -66,7 +66,7 @@
   </section>
   {% endif %}
 
-  <div class="admin-section-header" style="margin-bottom: 16px;">
+  <div class="admin-section-header">
     <h2>Your job listings</h2>
     <p>Visible to youth on the YouthChain app. New applications appear here in real time.</p>
   </div>

@@ -4,27 +4,27 @@
 {% block title %}Work History{% endblock %}
 
 {% block content %}
-  <header class="page-header" style="padding-top: 28px;">
+  <header class="page-header">
     <h1>⭐ Work History</h1>
     <p class="subtitle">Your portable trust record from completed gig work — no CV needed, this is built from ratings instead.</p>
   </header>
 
-  <section class="card" style="background: var(--secondary); color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+  <section class="card portal-work-summary-card">
     <div>
-      <div style="font-size: 1.6rem; font-weight: 800;">
+      <div class="portal-work-summary-stat">
         {% if summary.rating_count %}★ {{ summary.avg_rating }}{% else %}No ratings yet{% endif %}
       </div>
-      <div style="opacity: 0.85; font-size: 13px;">
+      <div class="portal-work-summary-label">
         {% if summary.rating_count %}from {{ summary.rating_count }} rating{{ "s" if summary.rating_count != 1 }}{% else %}Complete a gig to earn your first rating{% endif %}
       </div>
     </div>
-    <div style="text-align: right;">
-      <div style="font-size: 1.6rem; font-weight: 800;">{{ summary.completed_gigs }}</div>
-      <div style="opacity: 0.85; font-size: 13px;">completed gig{{ "s" if summary.completed_gigs != 1 }}</div>
+    <div class="portal-work-summary-right">
+      <div class="portal-work-summary-stat">{{ summary.completed_gigs }}</div>
+      <div class="portal-work-summary-label">completed gig{{ "s" if summary.completed_gigs != 1 }}</div>
     </div>
   </section>
 
-  <h2 class="card-title" style="margin-top: 28px;">Rated gigs</h2>
+  <h2 class="card-title">Rated gigs</h2>
   {% if rated_gigs %}
     <div class="portal-credential-grid">
       {% for application, job, rating in rated_gigs %}
@@ -33,7 +33,7 @@
           {% if job.category %}<div class="portal-credential-card-sub">{{ job.category }}</div>{% endif %}
           <span class="portal-skill-pill portal-skill-pill-gig">{{ rating.score }}/5</span>
           {% if rating.comment %}
-            <p class="muted" style="margin-top: 8px;">&ldquo;{{ rating.comment }}&rdquo;</p>
+            <p class="muted">&ldquo;{{ rating.comment }}&rdquo;</p>
           {% endif %}
         </div>
       {% endfor %}

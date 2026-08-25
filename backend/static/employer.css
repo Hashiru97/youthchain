@@ -327,6 +327,31 @@ body.employer-shell-body {
   gap: 12px;
 }
 
+/* ---------- Dashboard trust cards (employer_dashboard.html) ----------
+   Both were style="..." attributes -- silently dropped by this app's CSP
+   (style-src 'self', no unsafe-inline; same class of bug style.css's own
+   .tight-above comment already documents for three login pages). The
+   ratings-average card rendered as a plain white .card instead of the
+   colored, readable-at-a-glance banner it's meant to be; the trust-tier
+   row stacked its badge above its description instead of sitting beside
+   it. Confirmed live, logged in as a real employer with rating_count>0
+   and a trust_tier set, before writing these. */
+.employer-trust-rating-card {
+  background: var(--secondary);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.employer-trust-tier-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
 .employer-verify-banner-inner svg {
   width: 20px;
   height: 20px;

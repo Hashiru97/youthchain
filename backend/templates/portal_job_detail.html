@@ -4,24 +4,24 @@
 {% block title %}{{ job.title }}{% endblock %}
 
 {% block content %}
-  <a href="{{ url_for('portal_dashboard') }}" class="btn secondary outline" style="margin-top: 24px;">⬅ Back to jobs</a>
+  <a href="{{ url_for('portal_dashboard') }}" class="btn secondary outline">⬅ Back to jobs</a>
 
   <div class="portal-job-detail-header">
     <h1>{{ job.title }}</h1>
     {% if employer %}
-    <div class="portal-job-card-employer" style="margin-bottom: 4px;">
+    <div class="portal-job-card-employer">
       {{ employer.name }}
       {% if employer.verification_status == 'verified' %}
         <span class="verified-badge" title="Verified {{ 'Individual' if employer.verification_type == 'individual' else 'Business' }}">{{ icon_shield_check() }}</span>
       {% endif %}
     </div>
     {% if employer_trust and employer_trust.rating_count %}
-    <div class="portal-job-card-employer-rating" style="margin-bottom: 10px;">
+    <div class="portal-job-card-employer-rating">
       {{ icon_star() }} {{ employer_trust.avg_rating }} · {{ employer_trust.rating_count }} rating{{ "s" if employer_trust.rating_count != 1 }} from past workers
     </div>
     {% endif %}
     {% if employer_trust and employer_trust.trust_tier %}
-    <div style="margin-bottom: 10px;">
+    <div>
       <span class="badge {{ 'badge-success' if employer_trust.trust_tier == 'good' else ('badge-warn' if employer_trust.trust_tier == 'fair' else 'badge-error') }}">
         {{ {"good": "Good standing", "fair": "Fair standing", "caution": "Use caution"}[employer_trust.trust_tier] }}
       </span>
@@ -44,7 +44,7 @@
   {% endif %}
 
   {% if job.required_skills %}
-  <div class="portal-job-card-skills" style="margin: 10px 0 20px;">
+  <div class="portal-job-card-skills">
     {% for s in job.required_skills.split(',') %}
       {% if s.strip() %}<span class="portal-skill-pill">{{ s.strip() }}</span>{% endif %}
     {% endfor %}

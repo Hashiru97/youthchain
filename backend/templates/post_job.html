@@ -3,7 +3,7 @@
 {% block title %}Post a Job{% endblock %}
 
 {% block content %}
-  <div class="admin-section-header" style="margin-bottom: 20px;">
+  <div class="admin-section-header">
     <h2>➕ Post a Job</h2>
     <p>Create a new opportunity and let YouthChain find verified, skills-matched youth for you.</p>
   </div>
@@ -60,7 +60,7 @@
         </label>
       </div>
 
-      <div id="gig-category-field" style="display:none;">
+      <div id="gig-category-field">
         <label for="category">Gig Category</label>
         <select id="category" name="category">
           {% for c in gig_categories %}
@@ -90,7 +90,7 @@
     </form>
   </section>
 
-  <p class="muted" style="margin-top: 16px;">
+  <p class="muted">
     Tip: You can always edit or repost a job later if requirements change.
   </p>
 {% endblock %}
