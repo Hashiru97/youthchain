@@ -471,6 +471,17 @@
   box-shadow: var(--shadow-sm);
   padding: 20px 20px 18px;
   overflow: hidden;
+  /* Was an <article>, not a link -- the hover lift/shadow/corner-color
+     change just below implied every card was clickable, but nothing
+     happened on click. The real destination (portal_job_detail) has
+     never required login -- it already renders its own "Log in to
+     apply" CTA for a logged-out visitor -- so this was a missing href,
+     not a deliberate teaser. Now a real <a>; text-decoration/color
+     reset since every child element already sets its own explicit
+     color (verified via home.css itself), so this can't leak the
+     browser's default link-blue anywhere. */
+  text-decoration: none;
+  color: inherit;
 }
 
 .home-job-card:hover {
