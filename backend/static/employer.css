@@ -345,6 +345,18 @@ body.employer-shell-body {
   margin-bottom: 20px;
 }
 
+/* icon_star()'s raw <svg> has a viewBox but no width/height -- without
+   this it rendered at full card size (confirmed live with a real
+   rating seeded: the star filled the entire purple banner). Same bug
+   class as .page-header h1 svg (style.css) and .portal-app-row-sub svg
+   (portal.css). */
+.employer-trust-rating-card svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
 .employer-trust-tier-card {
   display: flex;
   align-items: center;

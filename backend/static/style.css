@@ -275,6 +275,21 @@ body {
   color: var(--primary);
 }
 
+/* Real bug found live on Devices (portal_devices.html is the only
+   .page-header h1 that uses a real icon_*() svg instead of an emoji
+   character): icon_smartphone()'s raw <svg> has a viewBox but no
+   width/height, so with nothing here to constrain it, it rendered at
+   full viewport width, pushing "Connected devices" and its subtitle
+   hundreds of pixels down the page. Same bug class as
+   .portal-app-row-sub svg (portal.css) and .portal-credential-card-title
+   svg below it. */
+.page-header h1 svg {
+  width: 28px;
+  height: 28px;
+  stroke: currentColor;
+  vertical-align: -4px;
+}
+
 .subtitle {
   color: var(--text-secondary);
   font-size: 1rem;

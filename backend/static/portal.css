@@ -771,6 +771,20 @@ body.portal-shell-body {
   margin-top: 2px;
 }
 
+/* Real bug found live on My Applications: icon_map_pin()'s raw <svg>
+   has a viewBox but no width/height, so with nothing here to constrain
+   it, it rendered at its unconstrained intrinsic size -- filling the
+   entire row, hundreds of pixels tall, pushing the status badge and
+   date far below the fold. Same fix .portal-job-detail-meta svg
+   already applies to the same icon elsewhere on this page's sibling
+   templates. */
+.portal-app-row-sub svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  vertical-align: -2px;
+}
+
 .portal-app-row-message-teaser {
   font-size: 11.5px;
   color: var(--text-muted);
