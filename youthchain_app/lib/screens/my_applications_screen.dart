@@ -276,7 +276,7 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
               StatusBadge(
                 label: isFailed ? context.l10n.failedBadge : context.l10n.queuedOfflineBadge,
                 color: isFailed ? context.colors.error : context.colors.warning,
-                background: Colors.white,
+                background: isFailed ? context.colors.errorBg : context.colors.warningBg,
                 icon: isFailed
                     ? Icons.error_outline_rounded
                     : Icons.cloud_upload_outlined,

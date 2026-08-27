@@ -43,6 +43,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _searchQuery = "";
   Timer? _debounce;
   bool _savingSearch = false;
+  // Bumped on every fetchJobs() call so a slow, superseded request can tell
+  // it's stale once it resolves and skip applying its (now out-of-date)
+  // results -- otherwise two overlapping searches (debounce fires again
+  // while the previous request is still in flight) can race, and whichever
+  // response lands last wins even if it's for a search term no longer in
+  // the box.
+  int _fetchGeneration = 0;
 
   @override
   void initState() {
@@ -74,6 +81,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> fetchJobs() async {
+    final generation = ++_fetchGeneration;
     if (!isLoading) setState(() => isLoading = true);
     try {
       final params = <String, String>{
@@ -84,25 +92,25 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       // failure shows the last successfully loaded copy instead of an
       // empty screen, not a new behavior invented for this screen.
       final result = await ApiClient.instance.getWithCache(path);
-      if (!mounted) return;
+      if (!mounted || generation != _fetchGeneration) return;
       jobs = json.decode(result.body) as List;
       _showingCachedJobs = result.fromCache;
     } on NoCachedDataException {
-      if (!mounted) return;
+      if (!mounted || generation != _fetchGeneration) return;
       jobs = [];
       _showingCachedJobs = false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.noConnectionNoPreviousJobs)),
       );
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _fetchGeneration) return;
       jobs = [];
       _showingCachedJobs = false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.networkErrorLoadingJobs)),
       );
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted && generation == _fetchGeneration) setState(() => isLoading = false);
     }
   }
 
