@@ -33,7 +33,7 @@
             <span class="portal-skill-pill portal-skill-pill-gig">{{ icon_star() }} You were rated {{ received.score }}/5</span>
             <form method="POST" action="{{ url_for('portal_flag_rating', rating_id=received.id) }}" class="portal-app-row-dispute">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-              <input type="text" name="reason" placeholder="Why is this unfair?" required />
+              <input type="text" name="reason" placeholder="Why is this unfair?" aria-label="Reason this rating is unfair" required />
               <button type="submit" class="btn small secondary outline">Dispute</button>
             </form>
           {% endif %}
@@ -48,7 +48,7 @@
                 <option value="{{ n }}">{{ n }}/5</option>
                 {% endfor %}
               </select>
-              <input type="text" name="comment" placeholder="Comment (optional)" />
+              <input type="text" name="comment" placeholder="Comment (optional)" aria-label="Comment (optional)" />
               <button type="submit" class="btn small primary">Submit</button>
             </form>
           {% endif %}

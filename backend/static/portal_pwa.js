@@ -112,8 +112,17 @@ document.querySelectorAll("[data-low-data-toggle]").forEach((button) => {
 // themselves.
 let _deferredInstallPrompt = null;
 
+function _alreadyInstalled() {
+  try {
+    return localStorage.getItem("yc-app-installed") === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
+  if (_alreadyInstalled()) return;
   _deferredInstallPrompt = event;
   document.querySelectorAll("[data-install-app-button]").forEach((button) => {
     button.hidden = false;
