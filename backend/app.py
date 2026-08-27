@@ -9176,19 +9176,22 @@ def employer_applications(job_id):
                 status=application.status,
             )
 
-            # Only the applicant this status change is actually about --
-            # see _socketio_connect's docstring.
+            # The applicant this status change is about, plus the owning
+            # employer -- so a second tab/session on the same employer
+            # account (employer_dashboard_live.js / employer_applications_
+            # live.js) sees it too, not just whichever tab made the change.
+            # Still scoped, per _socketio_connect's docstring: never a
+            # global broadcast, and only this job's own employer, not
+            # every employer on the platform.
             try:
-                socketio.emit(
-                    "application_status_changed",
-                    {
-                        "app_id": application.id,
-                        "user_id": application.user_id,
-                        "job_id": application.job_id,
-                        "status": application.status,
-                    },
-                    room=f"user:{application.user_id}",
-                )
+                status_payload = {
+                    "app_id": application.id,
+                    "user_id": application.user_id,
+                    "job_id": application.job_id,
+                    "status": application.status,
+                }
+                socketio.emit("application_status_changed", status_payload, room=f"user:{application.user_id}")
+                socketio.emit("application_status_changed", status_payload, room=f"employer:{job.employer_id}")
             except Exception:
                 logger.exception("socketio emit application_status_changed failed")
 
@@ -9309,11 +9312,11 @@ def employer_complete_application(app_id):
         application_id=application.id,
     )
     try:
-        socketio.emit(
-            "application_status_changed",
-            {"app_id": application.id, "user_id": application.user_id, "job_id": application.job_id, "status": "Completed"},
-            room=f"user:{application.user_id}",
-        )
+        complete_payload = {
+            "app_id": application.id, "user_id": application.user_id, "job_id": application.job_id, "status": "Completed",
+        }
+        socketio.emit("application_status_changed", complete_payload, room=f"user:{application.user_id}")
+        socketio.emit("application_status_changed", complete_payload, room=f"employer:{job.employer_id}")
     except Exception:
         logger.exception("socketio emit application_status_changed (complete) failed")
     return redirect(url_for("employer_applications", job_id=job.id))

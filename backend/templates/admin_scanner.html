@@ -37,7 +37,7 @@
     </div>
     <div class="admin-stat-card">
       <div class="admin-stat-icon tone-secondary">{{ icon_clock() }}</div>
-      <div class="admin-stat-value">{{ health.last_successful_scan_at or "Never" }}</div>
+      <div class="admin-stat-value">{{ health.last_successful_scan_at.strftime("%d %b %Y, %H:%M") if health.last_successful_scan_at else "Never" }}</div>
       <div class="admin-stat-label">Last successful scan</div>
     </div>
   </div>
@@ -68,7 +68,7 @@
           <td data-label="Name">{{ source.name }}</td>
           <td data-label="URL"><span class="muted">{{ source.base_url }}</span></td>
           <td data-label="Frequency">every {{ source.scan_frequency_minutes }}m</td>
-          <td data-label="Last scan">{{ source.last_scan_started_at or "Never" }}</td>
+          <td data-label="Last scan">{{ source.last_scan_started_at.strftime("%d %b %Y, %H:%M") if source.last_scan_started_at else "Never" }}</td>
           <td data-label="Status">
             <span class="admin-role-pill {{ 'role-admin' if source.active else 'role-verifier' }}">
               {{ "Active" if source.active else "Paused" }}
@@ -140,7 +140,7 @@
             </span>
           </td>
           <td data-label="Trigger">{{ run.trigger | capitalize }}</td>
-          <td data-label="Queued"><span class="admin-icon-inline">{{ icon_clock() }}</span> {{ run.queued_at }}</td>
+          <td data-label="Queued"><span class="admin-icon-inline">{{ icon_clock() }}</span> {{ run.queued_at.strftime("%d %b %Y, %H:%M") if run.queued_at else "" }}</td>
           <td data-label="Results">
             {% if run.status == "success" %}
               found {{ run.jobs_found }}, created {{ run.jobs_created }}, updated {{ run.jobs_updated }}
