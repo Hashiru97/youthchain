@@ -7921,17 +7921,22 @@ def verify():
         "verify.html", result=result, credential=credential, onchain_status=onchain_status
     )
 
-# Verify by credential ID (shareable URL)
+# Verify by credential ID (shareable URL) -- deliberately public/unauthenticated
+# (no @employer_login_required) so anyone holding a physical certificate can
+# check it, per passport_screen.dart's docstring on why this link is shared
+# outside the employer portal. public=True tells verify.html to skip the
+# employer-dashboard link that would otherwise dead-end a job seeker or
+# third party at an employer login wall they have no reason to cross.
 @app.route("/verify/<int:cred_id>")
 def verify_by_id(cred_id):
     cred = Credential.query.get(cred_id)
     if not cred:
-        return render_template("verify.html", result="not_found", onchain_status=None)
+        return render_template("verify.html", result="not_found", onchain_status=None, public=True)
 
     onchain_status = _check_onchain_valid(cred.hash)
     log_event("credential_verified", user_id=cred.user_id, credential_id=cred.id, onchain_status=onchain_status)
     return render_template(
-        "verify.html", result="ok", credential=cred, onchain_status=onchain_status
+        "verify.html", result="ok", credential=cred, onchain_status=onchain_status, public=True
     )
 
 

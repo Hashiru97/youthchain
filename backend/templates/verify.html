@@ -112,9 +112,15 @@
       {% endif %}
     </section>
 
+    {% if public %}
+    <a href="{{ url_for('home') }}" class="link">
+      ⬅ Back to Home
+    </a>
+    {% else %}
     <a href="{{ url_for('employer_dashboard') }}" class="link">
       ⬅ Back to Employer Dashboard
     </a>
+    {% endif %}
   </div>
 </body>
 </html>

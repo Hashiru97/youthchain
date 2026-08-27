@@ -850,6 +850,7 @@ class JobScreenState extends State<JobScreen> {
                   decoration: InputDecoration(
                     labelText: l10n.passwordLabel,
                     suffixIcon: IconButton(
+                      tooltip: obscure ? l10n.showPassword : l10n.hidePassword,
                       icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
                       onPressed: () => setDialogState(() => obscure = !obscure),
                     ),

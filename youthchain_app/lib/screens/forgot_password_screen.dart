@@ -390,6 +390,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           labelText: l10n.newPasswordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
+            tooltip: _obscurePassword ? l10n.showPassword : l10n.hidePassword,
             icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
           ),
@@ -403,6 +404,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           labelText: l10n.confirmNewPasswordLabel,
           prefixIcon: const Icon(Icons.lock_outline_rounded),
           suffixIcon: IconButton(
+            tooltip: _obscureConfirm ? l10n.showPassword : l10n.hidePassword,
             icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
             onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
           ),
