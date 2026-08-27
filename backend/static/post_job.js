@@ -8,7 +8,7 @@
   if (!gigRadio || !formalRadio || !categoryField) return;
 
   function sync() {
-    categoryField.style.display = gigRadio.checked ? "" : "none";
+    categoryField.hidden = !gigRadio.checked;
   }
 
   gigRadio.addEventListener("change", sync);

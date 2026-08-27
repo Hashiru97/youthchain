@@ -60,7 +60,7 @@
         </label>
       </div>
 
-      <div id="gig-category-field">
+      <div id="gig-category-field" {{ "hidden" if employer.account_type != "individual" }}>
         <label for="category">Gig Category</label>
         <select id="category" name="category">
           {% for c in gig_categories %}

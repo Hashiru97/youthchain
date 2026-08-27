@@ -48,7 +48,7 @@
       <label class="admin-auto-refresh">
         <input type="checkbox" id="scanner-auto-refresh-toggle" />
         Auto-refresh
-        <select id="scanner-auto-refresh-interval">
+        <select id="scanner-auto-refresh-interval" aria-label="Refresh interval">
           <option value="10">10s</option>
           <option value="30" selected>30s</option>
           <option value="60">60s</option>
@@ -164,54 +164,5 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>
-    // Auto-refresh toggle + interval selector, persisted in localStorage so
-    // it survives the reload it itself triggers. Plain setInterval +
-    // location.reload(), matching this admin console's existing
-    // server-rendered-Jinja style everywhere else — no new JS framework
-    // for one diagnostics page.
-    (function () {
-      var toggle = document.getElementById("scanner-auto-refresh-toggle");
-      var intervalSelect = document.getElementById("scanner-auto-refresh-interval");
-      var STORAGE_KEY = "youthchain_scanner_auto_refresh";
-      var timer = null;
-
-      function stored() {
-        try {
-          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-        } catch (e) {
-          return null;
-        }
-      }
-
-      function save(enabled, seconds) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({ enabled: enabled, seconds: seconds }));
-        } catch (e) {}
-      }
-
-      function apply() {
-        if (timer) {
-          clearInterval(timer);
-          timer = null;
-        }
-        if (toggle.checked) {
-          var seconds = parseInt(intervalSelect.value, 10) || 30;
-          timer = setInterval(function () {
-            window.location.reload();
-          }, seconds * 1000);
-        }
-        save(toggle.checked, parseInt(intervalSelect.value, 10) || 30);
-      }
-
-      var saved = stored();
-      if (saved) {
-        toggle.checked = !!saved.enabled;
-        intervalSelect.value = String(saved.seconds || 30);
-      }
-      toggle.addEventListener("change", apply);
-      intervalSelect.addEventListener("change", apply);
-      apply();
-    })();
-  </script>
+  <script src="{{ url_for('static', filename='admin_scanner.js', v=asset_version('admin_scanner.js')) }}"></script>
 {% endblock %}
