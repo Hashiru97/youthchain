@@ -2069,7 +2069,13 @@ def content_matches_extension(file_storage, filename: str) -> bool:
     expected = _EXPECTED_CONTENT_EXTENSIONS.get(ext)
     if not expected:
         return False
-    header = file_storage.stream.read(261)  # longest signature filetype needs
+    # 261 bytes covers every signature here EXCEPT .doc: filetype's own Doc
+    # matcher (filetype/types/document.py) needs buf[512:516], and its
+    # fallback signature needs buf[2075:2142] -- with only 261 bytes, every
+    # real .doc file's match() call was silently returning False, so
+    # legitimate .doc uploads were being rejected outright. 2200 covers the
+    # longest signature actually in use (.doc's 2142-byte fallback).
+    header = file_storage.stream.read(2200)
     file_storage.stream.seek(0)
     kind = filetype.guess(header)
     if kind is None:
@@ -3733,7 +3739,43 @@ def _security_headers(resp):
 # ----------------- ERROR HANDLERS -----------------
 @app.errorhandler(RequestEntityTooLarge)
 def _too_large(e):
-    return jsonify({"success": False, "error": "File too large (max 16 MB)"}), 413
+    """
+    MAX_CONTENT_LENGTH trips before the view function body runs, so a
+    route's own render_template(..., error=...) calls (see portal_apply,
+    portal_passport, employer_verification) never get a chance to fire for
+    this specific failure. Left as a bare jsonify for every route, a
+    browser user on one of those plain HTML forms got Flask's raw JSON
+    error body on an unstyled page instead of the site's normal error
+    banner -- confusing and inconsistent with every other upload-validation
+    failure on the same form. Mirror each HTML route's own error-render
+    call here; anything else (the mobile JSON API, unrecognized routes)
+    keeps the original JSON response.
+    """
+    error = "File too large (max 16 MB)."
+    view_args = request.view_args or {}
+
+    if request.endpoint == "portal_apply":
+        job = Job.query.get(view_args.get("job_id"))
+        if job:
+            return render_template(
+                "portal_job_detail.html", job=job,
+                employer=Employer.query.get(job.employer_id) if job.employer_id else None,
+                already_applied=False, active_page="jobs", error=error,
+            ), 413
+
+    elif request.endpoint == "portal_passport":
+        uid = _current_portal_user_id()
+        if uid:
+            creds = Credential.query.filter_by(user_id=uid).order_by(Credential.id.desc()).all()
+            return render_template("portal_passport.html", credentials=creds, active_page="passport", error=error), 413
+
+    elif request.endpoint == "employer_verification":
+        eid = _current_employer_id()
+        if eid:
+            employer = Employer.query.get(eid)
+            return render_template("employer_verification.html", employer=employer, active_page="verification", error=error), 413
+
+    return jsonify({"success": False, "error": error}), 413
 
 
 # ----------------- API ROUTES -----------------
