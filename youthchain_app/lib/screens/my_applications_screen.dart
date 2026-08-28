@@ -566,14 +566,16 @@ class MyApplicationsScreenState extends State<MyApplicationsScreen> {
                                   else if (employerRating != null)
                                     Row(
                                       children: [
-                                        StatusBadge(
-                                          label: context.l10n.youRatedLabel(
-                                            "${employerRating["score"]}",
+                                        Flexible(
+                                          child: StatusBadge(
+                                            label: context.l10n.youRatedLabel(
+                                              "${employerRating["score"]}",
+                                            ),
+                                            color: context.colors.secondary,
+                                            background: context.colors.secondaryLight,
+                                            icon: Icons.star_rounded,
+                                            dense: true,
                                           ),
-                                          color: context.colors.secondary,
-                                          background: context.colors.secondaryLight,
-                                          icon: Icons.star_rounded,
-                                          dense: true,
                                         ),
                                         const Spacer(),
                                         TextButton(
