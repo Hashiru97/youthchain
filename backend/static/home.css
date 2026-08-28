@@ -593,6 +593,8 @@
 }
 
 .home-job-employer-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   color: var(--text-primary);
   overflow: hidden;
