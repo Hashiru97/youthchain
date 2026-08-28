@@ -166,3 +166,108 @@ def test_message_created_is_delivered_only_to_the_two_real_parties(client):
     finally:
         alice_socket.disconnect()
         mallory_socket.disconnect()
+
+
+def test_application_status_changed_reaches_both_the_applicant_and_the_owning_employer_only():
+    """
+    Regression test for a real bug found this pass: application_status_changed
+    was only ever emitted to room=f"user:{applicant_id}", but
+    employer_dashboard_live.js and employer_applications_live.js both listen
+    for it too -- and per _socketio_connect, an employer's socket only ever
+    joins employer:<id>, never a user:<id> room, so that listener could
+    literally never fire. A second tab/session on the same employer account
+    watching the applicants list would never see an accept/reject reflected
+    live. Fixed by also emitting to the owning employer's room. This test
+    proves both the fix (employer's own socket now receives it) and that the
+    original privacy scoping still holds (a different, unrelated employer's
+    socket does not).
+    """
+    import re
+    import app as app_module
+    from tests.conftest import FAKE_PDF_BYTES
+    from io import BytesIO
+
+    def csrf_token(html):
+        match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+        assert match, "csrf token not found in page"
+        return match.group(1)
+
+    def register_employer(c, email, name):
+        page = c.get("/employer/register")
+        resp = c.post(
+            "/employer/register",
+            data={
+                "csrf_token": csrf_token(page.get_data(as_text=True)),
+                "name": name,
+                "email": email,
+                "password": "password123",
+            },
+        )
+        assert resp.status_code == 302
+
+    owning_employer_client = app_module.app.test_client()
+    other_employer_client = app_module.app.test_client()
+    applicant_client = app_module.app.test_client()
+
+    register_employer(owning_employer_client, "owner-sock@test.com", "Owning Co")
+    register_employer(other_employer_client, "other-sock@test.com", "Unrelated Co")
+
+    post_page = owning_employer_client.get("/employer/post")
+    post_resp = owning_employer_client.post(
+        "/employer/post",
+        data={
+            "csrf_token": csrf_token(post_page.get_data(as_text=True)),
+            "title": "Mason",
+            "location": "Freetown",
+            "duration": "3mo",
+        },
+        follow_redirects=False,
+    )
+    assert post_resp.status_code == 302
+
+    with app_module.app.app_context():
+        job_id = app_module.Job.query.filter_by(title="Mason").first().id
+
+    alice = register_user(applicant_client, email="alice-status@sock.com", phone="7006", name="Alice")
+    apply_resp = applicant_client.post(
+        "/apply",
+        data={"job_id": str(job_id), "cv": (BytesIO(FAKE_PDF_BYTES), "cv.pdf")},
+        headers={"Authorization": f"Bearer {alice['access_token']}"},
+        content_type="multipart/form-data",
+    )
+    assert apply_resp.status_code == 201
+
+    with app_module.app.app_context():
+        app_id = app_module.Application.query.filter_by(user_id=alice["user"]["id"], job_id=job_id).first().id
+
+    alice_socket = app_module.socketio.test_client(
+        app_module.app, auth={"token": alice["access_token"]}, flask_test_client=applicant_client
+    )
+    owner_socket = app_module.socketio.test_client(app_module.app, flask_test_client=owning_employer_client)
+    other_socket = app_module.socketio.test_client(app_module.app, flask_test_client=other_employer_client)
+    try:
+        alice_socket.get_received()
+        owner_socket.get_received()
+        other_socket.get_received()
+
+        applicants_page = owning_employer_client.get(f"/employer/applications/{job_id}")
+        owning_employer_client.post(
+            f"/employer/applications/{job_id}",
+            data={
+                "csrf_token": csrf_token(applicants_page.get_data(as_text=True)),
+                "app_id": str(app_id),
+                "action": "accept",
+            },
+        )
+
+        alice_events = [e["name"] for e in alice_socket.get_received()]
+        owner_events = [e["name"] for e in owner_socket.get_received()]
+        other_events = [e["name"] for e in other_socket.get_received()]
+
+        assert "application_status_changed" in alice_events
+        assert "application_status_changed" in owner_events
+        assert "application_status_changed" not in other_events
+    finally:
+        alice_socket.disconnect()
+        owner_socket.disconnect()
+        other_socket.disconnect()
