@@ -334,3 +334,32 @@ def test_svg_bar_chart_escapes_a_malicious_value_formatter():
 
     assert "<script>" not in svg
     assert "&lt;script&gt;" in svg
+
+
+def test_svg_bar_chart_has_no_inline_style_attribute():
+    """
+    Regression test for a real bug found via live browser testing (not
+    caught by any grep-based CSP sweep, since this markup is generated
+    from Python, not a .html template file): _svg_bar_chart() used to emit
+    its own responsive sizing as an inline style="..." attribute on the
+    <svg> root. This app's own CSP is style-src 'self' with no
+    'unsafe-inline' -- confirmed live, the browser silently blocked it,
+    and with no working width/height/max-width at all, a chart with only
+    one non-empty bar (the real, common case on a fresh install) stretched
+    to fill its flex column at whatever width that happened to be instead
+    of rendering at its intended compact size.
+
+    Fixed by using real width/height SVG presentation attributes (which
+    CSP does not restrict) for the intrinsic size, plus a shared
+    .admin-chart-svg CSS class (admin.css) for the responsive half
+    (max-width: 100%; height: auto) -- the same pattern a responsive <img>
+    uses.
+    """
+    import app as app_module
+
+    svg = app_module._svg_bar_chart([("Pending", 2)], width=180, height=140)
+
+    assert 'style="' not in svg
+    assert 'width="180"' in svg
+    assert 'height="140"' in svg
+    assert 'class="admin-chart-svg"' in svg

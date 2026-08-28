@@ -8958,9 +8958,25 @@ def _svg_bar_chart(pairs, width=600, height=180, bar_color="#0f7a5c", value_fmt=
         )
 
     svg_body = "".join(bars)
+    # width/height here are real SVG presentation attributes (the element's
+    # actual intrinsic size), not a style= attribute -- CSP's style-src
+    # only restricts inline CSS, not these. Found live, not in any earlier
+    # sweep: this used to be exactly that, an inline style="width:100%;
+    # height:auto; max-width:{width}px; ..." attribute, silently blocked
+    # by this app's own script-src/style-src 'self' CSP, same class of bug
+    # already fixed elsewhere in templates -- just never caught here since
+    # it's generated from Python, not a .html file, so it was invisible to
+    # every grep-for-style= sweep. Real visual damage confirmed live: with
+    # no working width/height/max-width at all, a chart with no CSS-level
+    # size constraint stretched to fill its flex column at whatever size
+    # that happened to be -- the single-status Application Funnel case
+    # rendered nearly 900px wide instead of its intended compact ~180px.
+    # The .admin-chart-svg class (admin.css) supplies the responsive half
+    # (max-width:100%; height:auto — shrink on a narrow column, never grow
+    # past the intrinsic size these attributes now give it).
     return (
-        f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Bar chart" '
-        f'style="width:100%; height:auto; max-width:{width}px; color:#5b6b67;">{svg_body}</svg>'
+        f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
+        f'class="admin-chart-svg" role="img" aria-label="Bar chart">{svg_body}</svg>'
     )
 
 

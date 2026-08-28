@@ -583,6 +583,15 @@ body.admin-shell-body {
   flex: 1;
   min-width: 140px;
 }
+/* The chart SVGs (_svg_bar_chart in app.py) carry real width/height
+   attributes for their intrinsic size -- this is the CSS half of that
+   same responsive-embed pattern: shrink on a narrow column, never grow
+   past the intrinsic size, same as a responsive <img>. */
+.admin-chart-svg {
+  max-width: 100%;
+  height: auto;
+  color: #5b6b67;
+}
 .admin-row-flagged {
   background: var(--error-bg);
 }
