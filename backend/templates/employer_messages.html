@@ -24,7 +24,7 @@
             <div><a href="{{ url_for('download_message_attachment', filename=m.attachment_file) }}" class="link">📎 Attachment</a></div>
           {% endif %}
           <span class="meta">
-            {{ "You (employer)" if m.sender_type == "employer" else (applicant.name if applicant else "Applicant") }} · {{ m.created_at }}
+            {{ "You (employer)" if m.sender_type == "employer" else (applicant.name if applicant else "Applicant") }} · {{ m.created_at.strftime("%d %b %Y, %H:%M") if m.created_at else "" }}
             {% if m.sender_type == "employer" %} · {{ "✓ Read" if m.read else "Sent" }}{% endif %}
           </span>
         </div>

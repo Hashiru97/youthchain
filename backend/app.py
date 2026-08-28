@@ -6870,7 +6870,7 @@ def _notify_admins_of_new_appeal(appeal: "EmployerAppeal", employer: "Employer")
         body = (
             f"{employer.name} has appealed their suspension.\n\n"
             f"{appeal.message}\n\n"
-            "Review it at /admin/appeals."
+            f"Review it at {url_for('admin_appeals', _external=True)}."
         )
         for admin in admins:
             _send_email(admin.email, subject, body)
@@ -6888,7 +6888,7 @@ def _notify_admins_of_new_user_appeal(appeal: "UserAppeal", user: "User") -> Non
         body = (
             f"{user.name} ({user.email}) has appealed their suspension.\n\n"
             f"{appeal.message}\n\n"
-            "Review it at /admin/user_appeals."
+            f"Review it at {url_for('admin_user_appeals', _external=True)}."
         )
         for admin in admins:
             _send_email(admin.email, subject, body)
@@ -8456,7 +8456,7 @@ def _notify_admins_of_new_report(report: "EmployerReport", employer: "Employer")
         body = (
             f"A youth has reported {employer.name} ({report.category}).\n\n"
             f"{report.details or '(no additional details provided)'}\n\n"
-            "Review it at /admin/reports."
+            f"Review it at {url_for('admin_reports', _external=True)}."
         )
         for admin in admins:
             _send_email(admin.email, subject, body)
@@ -8477,7 +8477,7 @@ def _notify_admins_of_new_rating_flag(flag: "RatingFlag", rating: "Rating") -> N
         body = (
             f"A {flag.flagged_by_role} flagged a {rating.score}/5 rating as unfair.\n\n"
             f"Reason: {flag.reason}\n\n"
-            "Review it at /admin/rating_flags."
+            f"Review it at {url_for('admin_rating_flags', _external=True)}."
         )
         for admin in admins:
             _send_email(admin.email, subject, body)
@@ -8563,7 +8563,7 @@ def _notify_admins_of_new_listing_report(report: "ScrapedListingReport", job: "J
         body = (
             f"A youth has reported the listing \"{job.title}\" ({report.category}).\n\n"
             f"{report.details or '(no additional details provided)'}\n\n"
-            "Review it at /admin/listing_reports."
+            f"Review it at {url_for('admin_listing_reports', _external=True)}."
         )
         for admin in admins:
             _send_email(admin.email, subject, body)

@@ -32,7 +32,7 @@
             </span>
           </span>
           <span class="employer-thread-meta">
-            {% if t.last_message %}<span class="employer-thread-time">{{ t.last_message.created_at }}</span>{% endif %}
+            {% if t.last_message %}<span class="employer-thread-time">{{ t.last_message.created_at.strftime("%d %b %Y, %H:%M") if t.last_message.created_at else "" }}</span>{% endif %}
             {% if t.unread_count %}<span class="shell-nav-badge">{{ t.unread_count }}</span>{% endif %}
           </span>
         </a>
