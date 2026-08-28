@@ -60,6 +60,18 @@ class JobScreenState extends State<JobScreen> {
   // Formal vs gig/hire-based (see Job.job_type in app.py) -- "" means both.
   String _jobTypeFilter = "";
 
+  // Real layout bug found live on a physical device, not a simulator: the
+  // three FloatingActionButton.extended widgets below used to be
+  // permanently expanded, stacked in a Column. Since a floating action
+  // button sits at a fixed screen position regardless of scroll, that
+  // meant they permanently covered part of whichever job cards happened
+  // to render underneath them -- not just the last cards in the list (a
+  // bottom-padding fix alone doesn't touch this), at every scroll
+  // position. Collapsed behind one toggle FAB by default instead, the
+  // standard Flutter "expandable FAB" pattern -- frees the screen by
+  // default, same three destinations still one tap away.
+  bool _fabExpanded = false;
+
   sio.Socket? _socket;
 
   @override
@@ -1319,11 +1331,19 @@ class JobScreenState extends State<JobScreen> {
                             ],
                           )
                         : ListView.builder(
+                      // 96 only cleared roughly one FAB's height -- this
+                      // screen docks THREE stacked FloatingActionButton.
+                      // extended widgets (myApplications/passport/
+                      // workHistory below, ~56 each + 8 gaps between),
+                      // so the last couple of cards sat behind them,
+                      // genuinely uncoverable/untappable (confirmed live
+                      // on a real device: the "Apply" button on the last
+                      // visible cards was hidden under the FAB stack).
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.md,
                         AppSpacing.sm,
                         AppSpacing.md,
-                        96,
+                        216,
                       ),
                       itemCount: jobs.length,
                       itemBuilder: (context, index) {
@@ -1484,14 +1504,17 @@ class JobScreenState extends State<JobScreen> {
                                                         const SizedBox(
                                                           width: 3,
                                                         ),
-                                                        Text(
-                                                          context.l10n.employerRatingSummary(
-                                                            "${employer["avg_rating"]}",
-                                                            employerRatingCount,
+                                                        Flexible(
+                                                          child: Text(
+                                                            context.l10n.employerRatingSummary(
+                                                              "${employer["avg_rating"]}",
+                                                              employerRatingCount,
+                                                            ),
+                                                            style: Theme.of(
+                                                              context,
+                                                            ).textTheme.bodySmall,
+                                                            overflow: TextOverflow.ellipsis,
                                                           ),
-                                                          style: Theme.of(
-                                                            context,
-                                                          ).textTheme.bodySmall,
                                                         ),
                                                       ],
                                                     ),
@@ -1711,59 +1734,74 @@ class JobScreenState extends State<JobScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          FloatingActionButton.extended(
-            heroTag: "myApplications",
-            backgroundColor: context.colors.tertiary,
-            icon: const Icon(Icons.history_rounded),
-            label: Text(context.l10n.myApplicationsFab),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      MyApplicationsScreen(userId: widget.userId),
-                ),
-              ).then((_) async {
-                await fetchAppliedJobs();
-              });
-            },
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          FloatingActionButton.extended(
-            heroTag: "passport",
-            backgroundColor: context.colors.passport,
-            icon: const Icon(Icons.card_membership_rounded),
-            label: Text(context.l10n.passportFab),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PassportScreen(userId: widget.userId),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          // Gig-work trust record (see Job.job_type) -- deliberately its
-          // own entry point rather than folded into Passport, since
-          // diploma credentials are on-chain-verified and gig ratings are
-          // peer-review-based; merging them would blur a distinction users
-          // need to trust both independently.
-          FloatingActionButton.extended(
-            heroTag: "workHistory",
-            backgroundColor: context.colors.secondary,
-            icon: const Icon(Icons.star_rounded),
-            label: Text(context.l10n.workHistoryFab),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      WorkHistoryScreen(userId: widget.userId),
-                ),
-              );
-            },
+          if (_fabExpanded) ...[
+            FloatingActionButton.extended(
+              heroTag: "myApplications",
+              backgroundColor: context.colors.tertiary,
+              icon: const Icon(Icons.history_rounded),
+              label: Text(context.l10n.myApplicationsFab),
+              onPressed: () {
+                setState(() => _fabExpanded = false);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        MyApplicationsScreen(userId: widget.userId),
+                  ),
+                ).then((_) async {
+                  await fetchAppliedJobs();
+                });
+              },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            FloatingActionButton.extended(
+              heroTag: "passport",
+              backgroundColor: context.colors.passport,
+              icon: const Icon(Icons.card_membership_rounded),
+              label: Text(context.l10n.passportFab),
+              onPressed: () {
+                setState(() => _fabExpanded = false);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PassportScreen(userId: widget.userId),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // Gig-work trust record (see Job.job_type) -- deliberately its
+            // own entry point rather than folded into Passport, since
+            // diploma credentials are on-chain-verified and gig ratings are
+            // peer-review-based; merging them would blur a distinction users
+            // need to trust both independently.
+            FloatingActionButton.extended(
+              heroTag: "workHistory",
+              backgroundColor: context.colors.secondary,
+              icon: const Icon(Icons.star_rounded),
+              label: Text(context.l10n.workHistoryFab),
+              onPressed: () {
+                setState(() => _fabExpanded = false);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        WorkHistoryScreen(userId: widget.userId),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          FloatingActionButton(
+            heroTag: "fabToggle",
+            tooltip: _fabExpanded
+                ? context.l10n.closeQuickActionsTooltip
+                : context.l10n.openQuickActionsTooltip,
+            onPressed: () => setState(() => _fabExpanded = !_fabExpanded),
+            child: Icon(_fabExpanded ? Icons.close_rounded : Icons.menu_rounded),
           ),
         ],
       ),

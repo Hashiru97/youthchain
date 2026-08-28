@@ -240,6 +240,8 @@
   "myApplicationsFab": "My Applications",
   "passportFab": "Passport",
   "workHistoryFab": "Work History",
+  "openQuickActionsTooltip": "Open quick actions",
+  "closeQuickActionsTooltip": "Close quick actions",
   "docRequiredSuffix": "{title} (required)",
   "@docRequiredSuffix": {"placeholders": {"title": {"type": "String"}}},
   "docOptionalSuffix": "{title} (optional)",

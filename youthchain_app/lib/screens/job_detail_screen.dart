@@ -236,12 +236,15 @@ class JobDetailScreen extends StatelessWidget {
                                 color: context.colors.secondary,
                               ),
                               const SizedBox(width: 3),
-                              Text(
-                                l10n.employerRatingSummary(
-                                  "${employer["avg_rating"]}",
-                                  employer["rating_count"] as num,
+                              Flexible(
+                                child: Text(
+                                  l10n.employerRatingSummary(
+                                    "${employer["avg_rating"]}",
+                                    employer["rating_count"] as num,
+                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
                           ),

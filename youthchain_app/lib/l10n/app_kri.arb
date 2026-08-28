@@ -190,6 +190,8 @@
   "myApplicationsFab": "Mi Aplikeshɔn dɛn",
   "passportFab": "Paspɔt",
   "workHistoryFab": "Wok Istri",
+  "openQuickActionsTooltip": "Opin kwik menu",
+  "closeQuickActionsTooltip": "Klos kwik menu",
   "docRequiredSuffix": "{title} (i nid dis)",
   "docOptionalSuffix": "{title} (nɔ ɔbliget)",
   "noFileSelected": "Nɔ fail pik",
