@@ -102,6 +102,26 @@ class ScanOutcome:
     created_job_ids: list[int] = field(default_factory=list)
 
 
+def _strip_control_chars(s: str) -> str:
+    """
+    Removes embedded CR/LF and other control characters from a scraped
+    single-line field before it's stored -- defense-in-depth so a
+    scraped Job.title (Claude-extracted from arbitrary third-party page
+    content, so not sanitized by anything upstream of this) can't reach
+    app.py's admin-notification emails (_notify_admins_of_new_listing_report
+    builds a subject from job.title) with an embedded newline. The actual
+    header-injection vulnerability is already closed at the email layer
+    (app._send_email uses EmailMessage, which rejects embedded newlines in
+    header values outright); this just keeps a malformed scraped title
+    from silently dropping that admin notification instead, and keeps the
+    title from rendering as multi-line text anywhere else it's displayed.
+    Small, local copy rather than importing from app.py -- see this
+    module's own docstring on why it takes every dependency explicitly
+    rather than importing from app.py.
+    """
+    return "".join(ch for ch in s if ch == "\t" or ch >= " ")
+
+
 def _content_hash(job_data: dict) -> str:
     """
     Fallback de-dup key when Claude doesn't identify a stable per-listing
@@ -282,7 +302,7 @@ def run_scan_for_source(
         existing = Job.query.filter_by(source_id=source.id, external_id=external_id).first()
 
         if existing:
-            existing.title = job_data["title"]
+            existing.title = _strip_control_chars(job_data["title"])
             existing.location = job_data.get("location") or existing.location
             existing.company_name = job_data.get("company_name")
             # Prefer whatever's already there over the listing pass's
@@ -305,7 +325,7 @@ def run_scan_for_source(
             job_row = existing
         else:
             job_row = Job(
-                title=job_data["title"],
+                title=_strip_control_chars(job_data["title"]),
                 # location/duration are NOT NULL on Job (pre-dating this
                 # feature) — scraped listings don't always state either,
                 # so a plain placeholder keeps the insert valid without

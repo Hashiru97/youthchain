@@ -17,6 +17,7 @@ import json
 import logging
 import requests
 import os, re, hashlib, secrets, shutil, smtplib, ssl, subprocess, difflib, threading
+from email.message import EmailMessage
 import base64
 import io
 import pyotp
@@ -2524,18 +2525,57 @@ def _spawn_background_onchain_write(credential_id: int) -> None:
     ).start()
 
 
+def _strip_control_chars(s: str) -> str:
+    """
+    Removes embedded CR/LF and other control characters from a single-line
+    display field (a name, a job title) -- defense-in-depth alongside the
+    EmailMessage fix in _send_email() just below, which already closes the
+    actual header-injection vulnerability by construction regardless of
+    what this misses. Applied at User.name/Employer.name/Job.title's
+    write sites (the three fields the confirmed finding traced into email
+    subjects) so a value containing a raw \\r\\n doesn't silently drop the
+    admin notification that field would otherwise feed (EmailMessage
+    raises rather than sends on an embedded newline), and so these fields
+    can't render as multi-line text anywhere else they're displayed either.
+    """
+    return "".join(ch for ch in s if ch == "\t" or ch >= " ")
+
+
 def _send_email(to_email: str, subject: str, body: str) -> bool:
-    """Send email if SMTP configured; else log and return False (non-fatal)."""
+    """
+    Send email if SMTP configured; else log and return False (non-fatal).
+
+    Real header-injection vulnerability found via a full security review and
+    closed here: this used to hand-build the raw SMTP message with an
+    f-string ("Subject: {subject}\r\n\r\n{body}") and pass it straight to
+    smtplib.sendmail(). smtplib performs no header/body validation of its
+    own -- it only normalizes bare \n/\r to \r\n before writing the DATA
+    payload -- so any \r\n an attacker got into `subject` became a literal
+    line break in the actual transmitted message, letting them inject
+    arbitrary extra headers (a Bcc:, a spoofed body) into mail sent from
+    this app's own SMTP credentials. subject is built at several call
+    sites from user-controlled fields (Employer.name, User.name, Job.title)
+    that were only ever .strip()'d, not validated against embedded CRLFs --
+    and reachable with zero admin interaction, e.g. any authenticated youth
+    calling POST /api/report_employer against an employer whose name they
+    chose at registration. EmailMessage rejects embedded newlines in header
+    values by construction, closing this regardless of what any caller
+    passes.
+    """
     if not (SMTP_HOST and SMTP_USER and SMTP_PASS and SMTP_FROM):
         logger.info("SMTP not configured; would send to %s: %s\n%s", to_email, subject, body)
         return False
     try:
+        msg = EmailMessage()
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.set_content(body)
         ctx = ssl.create_default_context()
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
             server.starttls(context=ctx)
             server.login(SMTP_USER, SMTP_PASS)
-            msg = f"From: {SMTP_FROM}\r\nTo: {to_email}\r\nSubject: {subject}\r\n\r\n{body}"
-            server.sendmail(SMTP_FROM, [to_email], msg)
+            server.send_message(msg)
         return True
     except Exception:
         logger.exception("Failed to send email to %s", to_email)
@@ -3991,7 +4031,7 @@ def register():
     # conftest.register_user helper).
     first_name = (data.get("first_name") or "").strip()
     last_name = (data.get("last_name") or "").strip()
-    name = f"{first_name} {last_name}".strip() or data.get("name")
+    name = _strip_control_chars(f"{first_name} {last_name}".strip() or data.get("name") or "") or None
     phone = data.get("phone")
     email = data.get("email")
     password = data.get("password")
@@ -6207,7 +6247,7 @@ def portal_passport():
 def employer_register():
     if request.method == "POST":
         csrf.protect()
-        name = (request.form.get("name") or "").strip()
+        name = _strip_control_chars((request.form.get("name") or "").strip())
         email = (request.form.get("email") or "").strip()
         password = request.form.get("password") or ""
         industry = (request.form.get("industry") or "").strip() or None
@@ -7884,7 +7924,7 @@ def admin_revoke_issuer():
 @employer_login_required
 def post_job():
     if request.method == "POST":
-        title = request.form.get("title")
+        title = _strip_control_chars((request.form.get("title") or "").strip()) or None
         location = request.form.get("location")
         duration = request.form.get("duration")
         if not title or not location or not duration:
