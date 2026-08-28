@@ -1982,6 +1982,35 @@ def valid_email(email: str) -> bool:
     return bool(EMAIL_RE.match((email or "").strip()))
 
 
+def _safe_next_path(next_url: str | None) -> str | None:
+    """
+    Validates a `?next=` login-redirect target is a same-origin relative
+    path, or returns None. Real gap found via a full security review: all
+    four login routes that honor `?next=` (portal_login, employer_login,
+    admin_login, admin_2fa_verify) used to pass request.args.get("next")
+    straight into redirect() with no validation at all — since none of
+    Flask/Werkzeug's redirect(), request.args, or this app's own code did
+    any scheme/host checking, `?next=https://evil.example/phish` redirected
+    a user who just authenticated with real credentials straight to an
+    attacker-controlled page. (This app's own CSP `form-action 'self'`
+    already blocked the worst of this in Chromium/WebKit browsers, since
+    every one of these redirects follows a same-origin form POST — but not
+    in Firefox, which doesn't enforce form-action against the redirect
+    that follows a submission.) Only a path starting with exactly one `/`
+    (not `//`, which browsers can treat as protocol-relative to a
+    different host) and carrying no scheme/netloc of its own is accepted;
+    anything else is rejected outright rather than guessed at.
+    """
+    if not next_url:
+        return None
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        return None
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc:
+        return None
+    return next_url
+
+
 def _password_is_breached(password: str) -> bool | None:
     """
     Checks a password against Have I Been Pwned's Pwned Passwords API
@@ -5686,7 +5715,7 @@ def portal_login():
         portal_token = secrets.token_urlsafe(32)
         session["portal_session_token"] = portal_token
         _create_user_session(user.id, "web", portal_token)
-        next_url = request.args.get("next") or url_for("portal_dashboard")
+        next_url = _safe_next_path(request.args.get("next")) or url_for("portal_dashboard")
         return redirect(next_url)
 
     return render_template("portal_login.html", error=None, suspended=False)
@@ -6325,7 +6354,7 @@ def employer_login():
         session.clear()
         session.permanent = True  # see PERMANENT_SESSION_LIFETIME's comment above
         session["employer_id"] = employer.id
-        next_url = request.args.get("next") or url_for("employer_dashboard")
+        next_url = _safe_next_path(request.args.get("next")) or url_for("employer_dashboard")
         return redirect(next_url)
 
     return render_template("employer_login.html", error=None, suspended=False)
@@ -8699,11 +8728,11 @@ def admin_login():
             # admin_access_required treats this as an authenticated
             # session until the TOTP step below also passes.
             session["admin_pending_2fa_id"] = admin.id
-            next_url = request.args.get("next")
+            next_url = _safe_next_path(request.args.get("next"))
             return redirect(url_for("admin_2fa_verify", next=next_url) if next_url else url_for("admin_2fa_verify"))
 
         session["admin_id"] = admin.id
-        next_url = request.args.get("next") or url_for("admin_analytics")
+        next_url = _safe_next_path(request.args.get("next")) or url_for("admin_analytics")
         return redirect(next_url)
 
     return render_template("admin_login.html", error=None)
@@ -8875,7 +8904,7 @@ def admin_2fa_verify():
 
         session.pop("admin_pending_2fa_id", None)
         session["admin_id"] = admin.id
-        next_url = request.args.get("next") or url_for("admin_analytics")
+        next_url = _safe_next_path(request.args.get("next")) or url_for("admin_analytics")
         return redirect(next_url)
 
     return render_template("admin_2fa_verify.html", error=None)
