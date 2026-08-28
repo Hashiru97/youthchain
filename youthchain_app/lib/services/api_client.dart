@@ -71,6 +71,19 @@ class ApiClient {
     await _storage.write(key: _userIdKey, value: userId.toString());
   }
 
+  /// Real cross-account data leak found via a full security review, not
+  /// assumed: this used to clear only the secure-storage session keys,
+  /// never the getWithCache() SharedPreferences cache below -- on a
+  /// shared/family device (the norm this app is built for, not an edge
+  /// case; see PendingApplication's own per-userId scoping for the
+  /// identical class of bug already found and fixed for the offline-
+  /// application queue), User A's cached profile/saved-jobs/saved-searches
+  /// responses survived their logout and could be shown to User B if
+  /// their network happened to be down when a getWithCache() call fired
+  /// right after logging in -- no attacker action needed, just an
+  /// ordinary flaky-connectivity moment. Cache entries are now also
+  /// scoped per-user (see _cacheKeyFor), so this full wipe is
+  /// belt-and-suspenders on top of that, not the only fix.
   Future<void> clearSession() async {
     _cachedToken = null;
     _cachedUserId = null;
@@ -78,6 +91,18 @@ class ApiClient {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _candidateIdKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // _cacheTimePrefix ("yc_cache_time_") already starts with
+      // _cachePrefix ("yc_cache_"), so this one check covers both.
+      final cacheKeys = prefs.getKeys().where((k) => k.startsWith(_cachePrefix));
+      for (final key in cacheKeys) {
+        await prefs.remove(key);
+      }
+    } catch (_) {
+      // Best-effort, same reasoning as _saveCache below -- a cache-clear
+      // failure must never block logout itself.
+    }
   }
 
   /// Real gap found via a full-codebase review: nothing in this app ever
@@ -223,8 +248,19 @@ class ApiClient {
   static const _cachePrefix = 'yc_cache_';
   static const _cacheTimePrefix = 'yc_cache_time_';
 
-  String _cacheKeyFor(String path) =>
-      _cachePrefix + path.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+  /// Scoped by the currently logged-in user's id (see clearSession's own
+  /// comment for the cross-account leak this closes) -- two different
+  /// accounts on the same device get entirely separate cache entries for
+  /// the same path, instead of the second account's request silently
+  /// falling back to the first account's cached response for it. "anon"
+  /// covers the (currently theoretical, since every getWithCache call
+  /// site requires a session) case of no logged-in user at all, so this
+  /// never collides with a real user id.
+  Future<String> _cacheKeyFor(String path) async {
+    final userId = await getUserId();
+    final scope = userId != null ? 'u$userId' : 'anon';
+    return '$_cachePrefix${scope}_${path.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')}';
+  }
 
   /// Tries the network first; on success, caches the response body for this
   /// path and returns it. On any network failure, falls back to the last
@@ -255,9 +291,10 @@ class ApiClient {
   Future<void> _saveCache(String path, String body) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKeyFor(path), body);
+      final key = await _cacheKeyFor(path);
+      await prefs.setString(key, body);
       await prefs.setString(
-        _cacheTimePrefix + _cacheKeyFor(path),
+        _cacheTimePrefix + key,
         DateTime.now().toIso8601String(),
       );
     } catch (_) {
@@ -269,9 +306,10 @@ class ApiClient {
   Future<CachedResult?> _loadCache(String path) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final body = prefs.getString(_cacheKeyFor(path));
+      final key = await _cacheKeyFor(path);
+      final body = prefs.getString(key);
       if (body == null) return null;
-      final timeRaw = prefs.getString(_cacheTimePrefix + _cacheKeyFor(path));
+      final timeRaw = prefs.getString(_cacheTimePrefix + key);
       final cachedAt = timeRaw != null ? DateTime.tryParse(timeRaw) : null;
       return CachedResult(body: body, fromCache: true, cachedAt: cachedAt);
     } catch (_) {

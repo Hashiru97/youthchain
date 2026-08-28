@@ -118,6 +118,65 @@ void main() {
     expect(filteredCached.body, contains('Solar Tech'));
     expect(plainCached.body, contains('ICT Trainer'));
   });
+
+  // Regression coverage for a real cross-account data leak found via a full
+  // security review: getWithCache used to key its SharedPreferences cache
+  // by URL path alone, with no user-id component, and clearSession() never
+  // touched that cache at all. On a shared/family device, User A's cached
+  // profile/saved-jobs/saved-searches response would survive their logout
+  // and could be shown to User B if their network happened to be down when
+  // the same screen loaded right after login. Fixed by scoping cache keys
+  // per logged-in user and wiping all yc_cache_* entries in clearSession().
+
+  test(
+    'two different accounts on the same device do not see each other\'s cached response for the same path',
+    () async {
+      // User A (id 1) loads /api/candidate/me successfully.
+      await ApiClient.instance.saveSession(token: 'token-a', userId: 1);
+      ApiClient.testClient = MockClient((request) async {
+        return http.Response(jsonEncode({"candidate": {"name": "Alice"}}), 200);
+      });
+      final aResult = await ApiClient.instance.getWithCache('/api/candidate/me');
+      expect(aResult.body, contains('Alice'));
+
+      // User A logs out; User B (id 2) logs in on the same device.
+      await ApiClient.instance.clearSession();
+      await ApiClient.instance.saveSession(token: 'token-b', userId: 2);
+
+      // User B's network is down right when their profile screen loads --
+      // getWithCache falls back to "cache". It must NOT see Alice's data.
+      ApiClient.testClient = MockClient((request) async {
+        throw const SocketExceptionStub();
+      });
+      expect(
+        () => ApiClient.instance.getWithCache('/api/candidate/me'),
+        throwsA(isA<NoCachedDataException>()),
+        reason: 'User B has no cached entry of their own yet -- falling back to '
+            'User A\'s cached response instead of throwing would be the leak.',
+      );
+    },
+  );
+
+  test(
+    'clearSession wipes every cached response, not just the session tokens',
+    () async {
+      await ApiClient.instance.saveSession(token: 'token-a', userId: 1);
+      ApiClient.testClient = MockClient((request) async {
+        return http.Response(jsonEncode({"candidate": {"name": "Alice"}}), 200);
+      });
+      await ApiClient.instance.getWithCache('/api/candidate/me');
+
+      await ApiClient.instance.clearSession();
+
+      final prefs = await SharedPreferences.getInstance();
+      final leftoverCacheKeys = prefs.getKeys().where((k) => k.startsWith('yc_cache_'));
+      expect(
+        leftoverCacheKeys,
+        isEmpty,
+        reason: 'logout must not leave any cached response readable afterwards',
+      );
+    },
+  );
 }
 
 /// A minimal stand-in for a real network failure (e.g. SocketException),

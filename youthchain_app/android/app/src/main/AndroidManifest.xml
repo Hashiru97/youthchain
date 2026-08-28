@@ -14,9 +14,18 @@
          will actually show anything. Requested via firebase_messaging in
          PushNotificationService, lib/services. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Real gap found via a full security review: with no allowBackup
+         value set, Android defaults it to true, which includes this app's
+         SharedPreferences (candidate profile, work history, saved jobs/
+         searches, credentials -- see ApiClient.getWithCache's offline
+         cache) in `adb backup` on a device with USB debugging enabled.
+         The JWT itself was never at risk (flutter_secure_storage is
+         excluded from backups by design), but the cached PII was.
+         false closes that extraction path outright. -->
     <application
         android:label="youthchain_app"
         android:name="${applicationName}"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
