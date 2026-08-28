@@ -32,6 +32,24 @@ contract YouthChainRegistry is Ownable2Step {
         uint256 issuedAt;
     }
 
+    // Keyed by credentialKey(issuer, credentialHash), NOT credentialHash
+    // alone -- real front-running vulnerability found via a full security
+    // review and closed here: registerCredential() used to key this map
+    // by hash only, and permanently blocked any future registration of
+    // that same hash the instant the first transaction mined ("already
+    // exists" forever after, with no way to fix a misattributed record).
+    // Since accreditIssuer() already supports multiple, mutually
+    // independent accredited issuers, a second accredited issuer watching
+    // the public mempool could front-run a real issuer's own
+    // registerCredential(hash) transaction with higher gas, permanently
+    // stealing that document's registration and locking the true issuer
+    // out of ever registering it. Keying by (issuer, hash) instead means
+    // each issuer's registration of a given document lives in its own
+    // slot -- a verifier now confirms "did THIS specific issuer register
+    // this exact document" rather than the ambiguous, hijackable "has
+    // this hash been registered by *someone*", which is arguably the more
+    // honest claim this platform was always trying to make anyway (see
+    // isValid's own docstring).
     mapping(bytes32 => Credential) public credentials;
     mapping(address => bool) public accreditedIssuers;
     // Real gap found via a full-codebase review: this registry had no way
@@ -41,7 +59,12 @@ contract YouthChainRegistry is Ownable2Step {
     // with no recourse. A separate mapping (not deleting/mutating the
     // Credential struct itself) so the original registration -- who
     // issued it and when -- remains a permanent, auditable fact even
-    // after revocation; only its current trust status changes.
+    // after revocation; only its current trust status changes. Keyed the
+    // same composite way as `credentials` above -- keeping this one
+    // hash-only after fixing `credentials` would have reopened an
+    // equivalent bug in the other direction: revoking one issuer's
+    // credential would have also silently revoked a different issuer's
+    // unrelated registration that happens to share the same hash.
     mapping(bytes32 => bool) public revokedCredentials;
 
     event CredentialRegistered(
@@ -53,6 +76,7 @@ contract YouthChainRegistry is Ownable2Step {
     event IssuerRevoked(address indexed issuer);
     event CredentialRevoked(
         bytes32 indexed credentialHash,
+        address indexed issuer,
         address indexed revokedBy,
         uint256 revokedAt
     );
@@ -93,7 +117,19 @@ contract YouthChainRegistry is Ownable2Step {
         emit IssuerRevoked(issuer);
     }
 
-    /// @notice Register a new credential hash on-chain.
+    /// @notice Derives the storage key a given (issuer, credentialHash)
+    /// pair is stored under. Exposed publicly (not just used internally)
+    /// so off-chain tooling never has to replicate this encoding itself
+    /// and risk a subtle mismatch (abi.encode vs abi.encodePacked,
+    /// argument order, ...) against what the contract actually computes.
+    function credentialKey(address issuer, bytes32 credentialHash) public pure returns (bytes32) {
+        return keccak256(abi.encode(issuer, credentialHash));
+    }
+
+    /// @notice Register a new credential hash on-chain, under the calling
+    /// issuer's own slot (see credentialKey()) -- does not touch, and
+    /// cannot collide with, any other issuer's registration of the same
+    /// hash.
     /// @param credentialHash SHA-256 hash of the credential file.
     function registerCredential(bytes32 credentialHash)
         external
@@ -101,9 +137,10 @@ contract YouthChainRegistry is Ownable2Step {
         returns (bytes32)
     {
         require(credentialHash != bytes32(0), "empty hash");
-        require(credentials[credentialHash].issuedAt == 0, "already exists");
+        bytes32 key = credentialKey(msg.sender, credentialHash);
+        require(credentials[key].issuedAt == 0, "already exists");
 
-        credentials[credentialHash] = Credential({
+        credentials[key] = Credential({
             credentialHash: credentialHash,
             issuer: msg.sender,
             issuedAt: block.timestamp
@@ -113,10 +150,15 @@ contract YouthChainRegistry is Ownable2Step {
         return credentialHash;
     }
 
-    /// @notice Check if a credential hash is already recorded (regardless
+    /// @notice Check if THIS issuer registered this exact hash (regardless
     /// of whether it has since been revoked -- see isValid() for that).
-    function isRegistered(bytes32 credentialHash) external view returns (bool) {
-        return credentials[credentialHash].issuedAt != 0;
+    /// Deliberately takes `issuer` explicitly rather than searching across
+    /// every accredited issuer for a match -- see credentialKey()'s own
+    /// docstring for why "did this specific issuer register this
+    /// document" is the actual claim this platform makes, not the
+    /// ambiguous (and, before this fix, hijackable) "has anyone".
+    function isRegistered(address issuer, bytes32 credentialHash) external view returns (bool) {
+        return credentials[credentialKey(issuer, credentialHash)].issuedAt != 0;
     }
 
     /// @notice Revoke a previously-registered credential (e.g. found to be
@@ -127,18 +169,24 @@ contract YouthChainRegistry is Ownable2Step {
     /// this contract has already gone through the platform's own admin
     /// review, and an issuer should not be able to unilaterally erase
     /// evidence of their own mistake or misconduct by revoking it
-    /// themselves.
-    function revokeCredential(bytes32 credentialHash) external onlyOwner {
-        require(credentials[credentialHash].issuedAt != 0, "credential does not exist");
-        require(!revokedCredentials[credentialHash], "already revoked");
-        revokedCredentials[credentialHash] = true;
-        emit CredentialRevoked(credentialHash, msg.sender, block.timestamp);
+    /// themselves. Takes `issuer` explicitly (not just the hash) for the
+    /// same reason isRegistered()/isValid() do -- the owner must specify
+    /// exactly whose registration of this hash is being revoked, now that
+    /// more than one issuer can hold a registration for the same hash.
+    function revokeCredential(address issuer, bytes32 credentialHash) external onlyOwner {
+        bytes32 key = credentialKey(issuer, credentialHash);
+        require(credentials[key].issuedAt != 0, "credential does not exist");
+        require(!revokedCredentials[key], "already revoked");
+        revokedCredentials[key] = true;
+        emit CredentialRevoked(credentialHash, issuer, msg.sender, block.timestamp);
     }
 
-    /// @notice The check a verifier should actually rely on: registered
-    /// AND not revoked. isRegistered() alone only tells you a record
-    /// exists, not whether it should still be trusted.
-    function isValid(bytes32 credentialHash) external view returns (bool) {
-        return credentials[credentialHash].issuedAt != 0 && !revokedCredentials[credentialHash];
+    /// @notice The check a verifier should actually rely on: THIS issuer
+    /// registered this hash, AND that registration is not revoked.
+    /// isRegistered() alone only tells you a record exists, not whether
+    /// it should still be trusted.
+    function isValid(address issuer, bytes32 credentialHash) external view returns (bool) {
+        bytes32 key = credentialKey(issuer, credentialHash);
+        return credentials[key].issuedAt != 0 && !revokedCredentials[key];
     }
 }

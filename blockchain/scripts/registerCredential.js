@@ -1,28 +1,8 @@
 import { network } from "hardhat";
-import { resolveContractAddress, normalizeHash } from "./_shared.js";
+import { resolveContractAddress, normalizeHash, resolveIssuerSigner } from "./_shared.js";
 
 const connection = await network.create();
 const { ethers } = connection;
-
-async function resolveIssuer() {
-    if (process.env.ISSUER_PRIVATE_KEY) {
-        return new ethers.Wallet(process.env.ISSUER_PRIVATE_KEY, ethers.provider);
-    }
-    // Falling back to the node's default signer is only acceptable on the
-    // local, ephemeral Hardhat network — that signer is the well-known
-    // public test account. Using it on any real network would mean every
-    // credential is "issued" by a key anyone in the world already has
-    // (S-12). Fail loudly instead of silently doing that.
-    if (connection.networkName !== "localhost" && connection.networkName !== "hardhatMainnet") {
-        console.error(
-            `❌ ERROR: ISSUER_PRIVATE_KEY must be set when running against network "${connection.networkName}". ` +
-                "Falling back to the default Hardhat signer is only safe on localhost/hardhatMainnet."
-        );
-        process.exit(1);
-    }
-    const [defaultSigner] = await ethers.getSigners();
-    return defaultSigner;
-}
 
 async function main() {
     const fullHash = normalizeHash(process.env.HASH);
@@ -32,7 +12,7 @@ async function main() {
     const Contract = await ethers.getContractFactory("YouthChainRegistry");
     const registry = await Contract.attach(address);
 
-    const issuer = await resolveIssuer();
+    const issuer = await resolveIssuerSigner(ethers, connection);
     console.log("➡ Using issuer:", issuer.address);
     console.log("➡ Using contract:", address);
 

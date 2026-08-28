@@ -1,5 +1,5 @@
 import { network } from "hardhat";
-import { resolveContractAddress, normalizeHash } from "./_shared.js";
+import { resolveContractAddress, normalizeHash, resolveIssuerAddress } from "./_shared.js";
 
 const connection = await network.create();
 const { ethers } = connection;
@@ -10,7 +10,11 @@ const { ethers } = connection;
  * since an issuer should not be able to unilaterally erase evidence of
  * their own mistake or misconduct. Needs the contract OWNER's key
  * (DEPLOYER_PRIVATE_KEY, per .env.example -- "the account that deploys the
- * contract and becomes its owner").
+ * contract and becomes its owner"). Separately, WHOSE registration of this
+ * hash is being revoked is resolved via resolveIssuerAddress (see
+ * checkRegistered.js's own comment) -- front-running fix, now that more
+ * than one issuer can hold a registration for the same hash, the owner
+ * must specify exactly which one.
  */
 async function resolveOwner() {
     if (process.env.DEPLOYER_PRIVATE_KEY) {
@@ -35,6 +39,9 @@ async function main() {
     console.log("➡ Revoking hash:", fullHash);
 
     const address = resolveContractAddress();
+    const issuerAddress = await resolveIssuerAddress(ethers, connection);
+    console.log("➡ Revoking registration by issuer:", issuerAddress);
+
     const Contract = await ethers.getContractFactory("YouthChainRegistry");
     const registry = await Contract.attach(address);
 
@@ -42,7 +49,7 @@ async function main() {
     console.log("➡ Using owner:", owner.address);
     console.log("➡ Using contract:", address);
 
-    const tx = await registry.connect(owner).revokeCredential(fullHash);
+    const tx = await registry.connect(owner).revokeCredential(issuerAddress, fullHash);
     console.log("📤 Sent tx:", tx.hash);
 
     const receipt = await tx.wait();

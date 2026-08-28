@@ -86,6 +86,56 @@ export function ownerAddressSafetyError({ ownerAddress, networkName, hasCode, is
     return null;
 }
 
+/**
+ * Resolves the issuer signer from ISSUER_PRIVATE_KEY, falling back to the
+ * node's default signer only on a local, non-publicly-reachable network.
+ * Extracted here (was previously duplicated inline in registerCredential.js)
+ * so checkRegistered.js/checkValid.js/revokeCredential.js can share it too --
+ * part of the front-running fix (YouthChainRegistry.sol's credentials
+ * mapping is now keyed by (issuer, hash), not hash alone), since a read/
+ * revoke call now needs to know WHICH issuer's registration it's asking
+ * about, and this backend's own credentials are always registered under
+ * its own ISSUER_PRIVATE_KEY -- so that's the correct default whenever the
+ * caller doesn't explicitly override it with an ADDRESS env var (e.g. an
+ * admin checking a different, independently-controlled issuer's
+ * credential).
+ */
+export async function resolveIssuerSigner(ethers, connection) {
+    if (process.env.ISSUER_PRIVATE_KEY) {
+        return new ethers.Wallet(process.env.ISSUER_PRIVATE_KEY, ethers.provider);
+    }
+    // Falling back to the node's default signer is only acceptable on the
+    // local, ephemeral Hardhat network -- that signer is the well-known
+    // public test account. Using it on any real network would mean every
+    // credential is "issued" by a key anyone in the world already has
+    // (S-12). Fail loudly instead of silently doing that.
+    if (connection.networkName !== "localhost" && connection.networkName !== "hardhatMainnet") {
+        console.error(
+            `❌ ERROR: ISSUER_PRIVATE_KEY must be set when running against network "${connection.networkName}". ` +
+                "Falling back to the default Hardhat signer is only safe on localhost/hardhatMainnet."
+        );
+        process.exit(1);
+    }
+    const [defaultSigner] = await ethers.getSigners();
+    return defaultSigner;
+}
+
+/**
+ * Resolves the address a read (isRegistered/isValid) or revoke call should
+ * check/act against: an explicit ADDRESS env var wins (checking a specific,
+ * possibly different issuer), otherwise defaults to this backend's own
+ * issuer address (see resolveIssuerSigner above) -- the correct default
+ * for the overwhelmingly common case of the backend checking/revoking its
+ * own credentials.
+ */
+export async function resolveIssuerAddress(ethers, connection) {
+    if (process.env.ADDRESS) {
+        return normalizeAddress(process.env.ADDRESS);
+    }
+    const signer = await resolveIssuerSigner(ethers, connection);
+    return signer.address;
+}
+
 export function normalizeAddress(address) {
     if (!address) {
         console.error("❌ ERROR: ADDRESS environment variable not set");

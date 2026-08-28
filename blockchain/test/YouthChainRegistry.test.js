@@ -34,7 +34,7 @@ describe("YouthChainRegistry", function () {
       .to.emit(registry, "CredentialRegistered")
       .withArgs(HASH_A, owner.address, anyValue);
 
-    expect(await registry.isRegistered(HASH_A)).to.equal(true);
+    expect(await registry.isRegistered(owner.address, HASH_A)).to.equal(true);
   });
 
   it("rejects a zero hash", async function () {
@@ -43,7 +43,7 @@ describe("YouthChainRegistry", function () {
     ).to.be.revertedWith("empty hash");
   });
 
-  it("rejects registering the same hash twice", async function () {
+  it("rejects registering the same hash twice from the same issuer", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
     await expect(
       registry.connect(owner).registerCredential(HASH_A)
@@ -51,7 +51,57 @@ describe("YouthChainRegistry", function () {
   });
 
   it("isRegistered returns false for an unknown hash", async function () {
-    expect(await registry.isRegistered(HASH_B)).to.equal(false);
+    expect(await registry.isRegistered(owner.address, HASH_B)).to.equal(false);
+  });
+
+  it("isRegistered returns false when checked against the wrong issuer", async function () {
+    // Real front-running vulnerability found via a full security review,
+    // and the core property its fix (keying by (issuer, hash) instead of
+    // hash alone) has to guarantee: registering a hash under one issuer
+    // must not make it appear registered under a DIFFERENT issuer.
+    await registry.connect(owner).registerCredential(HASH_A);
+    expect(await registry.isRegistered(owner.address, HASH_A)).to.equal(true);
+    expect(await registry.isRegistered(issuer.address, HASH_A)).to.equal(false);
+  });
+
+  it(
+    "two independent accredited issuers can each register the SAME hash -- the actual front-running fix",
+    async function () {
+      // Before this fix: credentials was keyed by hash alone, so whichever
+      // of these two transactions mined first would permanently win the
+      // hash, and the second issuer's identical call would revert
+      // ("already exists") forever -- a front-runnable, unrecoverable
+      // collision between two entirely unrelated, legitimate issuers (a
+      // real, common case: "Sales Officer x3" postings, or two different
+      // institutions coincidentally producing byte-identical documents).
+      // Keying by (issuer, hash) means neither can block or steal the
+      // other's registration.
+      await registry.connect(owner).accreditIssuer(issuer.address);
+
+      await expect(registry.connect(owner).registerCredential(HASH_A))
+        .to.emit(registry, "CredentialRegistered")
+        .withArgs(HASH_A, owner.address, anyValue);
+      await expect(registry.connect(issuer).registerCredential(HASH_A))
+        .to.emit(registry, "CredentialRegistered")
+        .withArgs(HASH_A, issuer.address, anyValue);
+
+      expect(await registry.isRegistered(owner.address, HASH_A)).to.equal(true);
+      expect(await registry.isRegistered(issuer.address, HASH_A)).to.equal(true);
+
+      const ownerKey = await registry.credentialKey(owner.address, HASH_A);
+      const issuerKey = await registry.credentialKey(issuer.address, HASH_A);
+      expect(ownerKey).to.not.equal(issuerKey);
+      expect((await registry.credentials(ownerKey)).issuer).to.equal(owner.address);
+      expect((await registry.credentials(issuerKey)).issuer).to.equal(issuer.address);
+    }
+  );
+
+  it("credentialKey is a pure function of (issuer, hash) -- same inputs always produce the same key", async function () {
+    const a = await registry.credentialKey(owner.address, HASH_A);
+    const b = await registry.credentialKey(owner.address, HASH_A);
+    const different = await registry.credentialKey(owner.address, HASH_B);
+    expect(a).to.equal(b);
+    expect(a).to.not.equal(different);
   });
 
   it("lets the owner accredit a new issuer, who can then register credentials", async function () {
@@ -64,7 +114,7 @@ describe("YouthChainRegistry", function () {
       .withArgs(issuer.address);
 
     await registry.connect(issuer).registerCredential(HASH_A);
-    expect(await registry.isRegistered(HASH_A)).to.equal(true);
+    expect(await registry.isRegistered(issuer.address, HASH_A)).to.equal(true);
   });
 
   it("rejects accreditIssuer/revokeIssuer from a non-owner", async function () {
@@ -109,8 +159,9 @@ describe("YouthChainRegistry", function () {
       .withArgs(issuer.address);
 
     await registry.connect(issuer).registerCredential(HASH_A);
-    expect(await registry.isRegistered(HASH_A)).to.equal(true);
-    const stored = await registry.credentials(HASH_A);
+    expect(await registry.isRegistered(issuer.address, HASH_A)).to.equal(true);
+    const key = await registry.credentialKey(issuer.address, HASH_A);
+    const stored = await registry.credentials(key);
     expect(stored.issuer).to.equal(issuer.address);
   });
 
@@ -119,8 +170,9 @@ describe("YouthChainRegistry", function () {
     await registry.connect(issuer).registerCredential(HASH_A);
     await registry.connect(owner).revokeIssuer(issuer.address);
 
-    expect(await registry.isRegistered(HASH_A)).to.equal(true);
-    const stored = await registry.credentials(HASH_A);
+    expect(await registry.isRegistered(issuer.address, HASH_A)).to.equal(true);
+    const key = await registry.credentialKey(issuer.address, HASH_A);
+    const stored = await registry.credentials(key);
     expect(stored.issuer).to.equal(issuer.address);
   });
 
@@ -174,55 +226,75 @@ describe("YouthChainRegistry", function () {
 
   it("isValid is true for a freshly registered credential", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
-    expect(await registry.isValid(HASH_A)).to.equal(true);
+    expect(await registry.isValid(owner.address, HASH_A)).to.equal(true);
   });
 
   it("isValid is false for a hash that was never registered", async function () {
-    expect(await registry.isValid(HASH_B)).to.equal(false);
+    expect(await registry.isValid(owner.address, HASH_B)).to.equal(false);
   });
 
   it("lets the owner revoke a registered credential, emitting CredentialRevoked", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
 
-    await expect(registry.connect(owner).revokeCredential(HASH_A))
+    await expect(registry.connect(owner).revokeCredential(owner.address, HASH_A))
       .to.emit(registry, "CredentialRevoked")
-      .withArgs(HASH_A, owner.address, anyValue);
+      .withArgs(HASH_A, owner.address, owner.address, anyValue);
 
-    expect(await registry.revokedCredentials(HASH_A)).to.equal(true);
+    const key = await registry.credentialKey(owner.address, HASH_A);
+    expect(await registry.revokedCredentials(key)).to.equal(true);
   });
 
   it("isRegistered stays true after revocation, but isValid becomes false", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
-    await registry.connect(owner).revokeCredential(HASH_A);
+    await registry.connect(owner).revokeCredential(owner.address, HASH_A);
 
     // The original registration is a permanent, auditable fact --
     // revoking doesn't erase that it was once issued, only that it
     // should still be trusted.
-    expect(await registry.isRegistered(HASH_A)).to.equal(true);
-    expect(await registry.isValid(HASH_A)).to.equal(false);
-    const stored = await registry.credentials(HASH_A);
+    expect(await registry.isRegistered(owner.address, HASH_A)).to.equal(true);
+    expect(await registry.isValid(owner.address, HASH_A)).to.equal(false);
+    const key = await registry.credentialKey(owner.address, HASH_A);
+    const stored = await registry.credentials(key);
     expect(stored.issuer).to.equal(owner.address); // record itself is untouched
   });
+
+  it(
+    "revoking one issuer's credential does not affect a different issuer's registration of the same hash",
+    async function () {
+      // The other half of the front-running fix: revokedCredentials had to
+      // move to the same composite key as credentials, or fixing
+      // registration alone would have just moved the cross-issuer
+      // collision bug from registration to revocation instead.
+      await registry.connect(owner).accreditIssuer(issuer.address);
+      await registry.connect(owner).registerCredential(HASH_A);
+      await registry.connect(issuer).registerCredential(HASH_A);
+
+      await registry.connect(owner).revokeCredential(owner.address, HASH_A);
+
+      expect(await registry.isValid(owner.address, HASH_A)).to.equal(false);
+      expect(await registry.isValid(issuer.address, HASH_A)).to.equal(true);
+    }
+  );
 
   it("rejects revokeCredential from a non-owner", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
     await expect(
-      registry.connect(stranger).revokeCredential(HASH_A)
+      registry.connect(stranger).revokeCredential(owner.address, HASH_A)
     ).to.be.revert(ethers);
-    expect(await registry.isValid(HASH_A)).to.equal(true); // unaffected
+    expect(await registry.isValid(owner.address, HASH_A)).to.equal(true); // unaffected
   });
 
   it("rejects revoking a hash that was never registered", async function () {
     await expect(
-      registry.connect(owner).revokeCredential(HASH_B)
+      registry.connect(owner).revokeCredential(owner.address, HASH_B)
     ).to.be.revertedWith("credential does not exist");
   });
 
   it("rejects revoking the same credential twice", async function () {
     await registry.connect(owner).registerCredential(HASH_A);
-    await registry.connect(owner).revokeCredential(HASH_A);
+    await registry.connect(owner).revokeCredential(owner.address, HASH_A);
     await expect(
-      registry.connect(owner).revokeCredential(HASH_A)
+      registry.connect(owner).revokeCredential(owner.address, HASH_A)
     ).to.be.revertedWith("already revoked");
   });
 
@@ -231,8 +303,8 @@ describe("YouthChainRegistry", function () {
     await registry.connect(issuer).registerCredential(HASH_A);
 
     await expect(
-      registry.connect(issuer).revokeCredential(HASH_A)
+      registry.connect(issuer).revokeCredential(issuer.address, HASH_A)
     ).to.be.revert(ethers);
-    expect(await registry.isValid(HASH_A)).to.equal(true);
+    expect(await registry.isValid(issuer.address, HASH_A)).to.equal(true);
   });
 });
