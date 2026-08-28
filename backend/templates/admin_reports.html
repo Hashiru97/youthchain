@@ -31,7 +31,7 @@
           <td data-label="Reported by">{{ reporter.name if reporter else "Unknown user" }}<br /><span class="muted">{{ reporter.email if reporter else "" }}</span></td>
           <td data-label="Category"><span class="admin-role-pill role-verifier">{{ report.category | replace("_", " ") | capitalize }}</span></td>
           <td data-label="Details">{{ report.details or "—" }}</td>
-          <td data-label="When">{{ report.created_at }}</td>
+          <td data-label="When">{{ report.created_at.strftime("%d %b %Y, %H:%M") if report.created_at else "—" }}</td>
           <td data-label="Action">
             <form method="POST" action="{{ url_for('admin_resolve_report', report_id=report.id) }}" class="inline-actions">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -78,7 +78,7 @@
             {{ "Employer suspended" if report.status == "actioned" else "Dismissed" }}
           </td>
           <td data-label="Reviewed by">{{ reviewer.name if reviewer else "—" }}</td>
-          <td data-label="When">{{ report.reviewed_at }}</td>
+          <td data-label="When">{{ report.reviewed_at.strftime("%d %b %Y, %H:%M") if report.reviewed_at else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

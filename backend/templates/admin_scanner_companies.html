@@ -18,8 +18,8 @@
         {% for company in unverified %}
         <tr>
           <td data-label="Company">{{ company.name }}</td>
-          <td data-label="First seen">{{ company.first_seen_at }}</td>
-          <td data-label="Last seen">{{ company.last_seen_at }}</td>
+          <td data-label="First seen">{{ company.first_seen_at.strftime("%d %b %Y, %H:%M") if company.first_seen_at else "—" }}</td>
+          <td data-label="Last seen">{{ company.last_seen_at.strftime("%d %b %Y, %H:%M") if company.last_seen_at else "—" }}</td>
           <td data-label="Action">
             <form method="POST" action="{{ url_for('admin_scanner_verify_company', company_id=company.id) }}" class="inline-actions">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -51,7 +51,7 @@
         {% for company in verified %}
         <tr>
           <td data-label="Company">{{ company.name }}</td>
-          <td data-label="Verified">{{ company.verified_at }}</td>
+          <td data-label="Verified">{{ company.verified_at.strftime("%d %b %Y, %H:%M") if company.verified_at else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

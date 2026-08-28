@@ -22,7 +22,7 @@
         <tr>
           <td data-label="Youth">{{ user.name if user else "Unknown account" }}<br /><span class="muted">{{ user.email if user else "" }}</span></td>
           <td data-label="Message">{{ appeal.message }}</td>
-          <td data-label="Submitted">{{ appeal.created_at }}</td>
+          <td data-label="Submitted">{{ appeal.created_at.strftime("%d %b %Y, %H:%M") if appeal.created_at else "—" }}</td>
           <td data-label="Action">
             <form method="POST" action="{{ url_for('admin_resolve_user_appeal', appeal_id=appeal.id) }}" class="inline-actions">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -59,7 +59,7 @@
           <td class="status {{ 'accepted' if appeal.status == 'reinstated' else 'rejected' }}">
             {{ "Reinstated" if appeal.status == "reinstated" else "Denied" }}
           </td>
-          <td data-label="When">{{ appeal.reviewed_at }}</td>
+          <td data-label="When">{{ appeal.reviewed_at.strftime("%d %b %Y, %H:%M") if appeal.reviewed_at else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

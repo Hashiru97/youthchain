@@ -34,7 +34,7 @@
           </td>
           <td data-label="Flagged by">{{ flag.flagged_by_role | capitalize }}</td>
           <td data-label="Reason">{{ flag.reason }}</td>
-          <td data-label="When">{{ flag.created_at }}</td>
+          <td data-label="When">{{ flag.created_at.strftime("%d %b %Y, %H:%M") if flag.created_at else "—" }}</td>
           <td data-label="Action">
             <form method="POST" action="{{ url_for('admin_resolve_rating_flag', flag_id=flag.id) }}" class="inline-actions">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -81,7 +81,7 @@
             {{ "Rating hidden" if flag.status == "actioned" else "Dismissed" }}
           </td>
           <td data-label="Reviewed by">{{ reviewer.name if reviewer else "—" }}</td>
-          <td data-label="When">{{ flag.reviewed_at }}</td>
+          <td data-label="When">{{ flag.reviewed_at.strftime("%d %b %Y, %H:%M") if flag.reviewed_at else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

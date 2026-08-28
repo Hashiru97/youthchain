@@ -75,7 +75,7 @@
               {{ employer.verification_status | capitalize }}
             {% endif %}
           </td>
-          <td data-label="When">{{ employer.verification_reviewed_at }}</td>
+          <td data-label="When">{{ employer.verification_reviewed_at.strftime("%d %b %Y, %H:%M") if employer.verification_reviewed_at else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>
