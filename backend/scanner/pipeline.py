@@ -108,8 +108,26 @@ def _content_hash(job_data: dict) -> str:
     URL for a job (external_id). Not cryptographically meaningful — just
     stable across re-scans of the same unchanged listing so it doesn't
     get re-created as a duplicate every scan interval.
+
+    title|company_name|location alone collides for a real, common case:
+    an employer posting multiple genuinely distinct openings with the
+    same title at the same location ("Sales Officer x3", or a school
+    with several "Teacher" postings) — the second and later listings
+    would silently match the first via the external_id lookup below and
+    never get their own Job row. employment_type and deadline are also
+    stated per-listing at extraction time (not backfill-only fields like
+    description/salary, which are usually empty at this pass — see the
+    upsert loop's own comment), so including them meaningfully reduces
+    collisions for distinct postings while staying just as stable across
+    a rescan of the same unchanged listing.
     """
-    basis = f"{job_data.get('title', '')}|{job_data.get('company_name', '')}|{job_data.get('location', '')}"
+    basis = "|".join([
+        job_data.get("title") or "",
+        job_data.get("company_name") or "",
+        job_data.get("location") or "",
+        job_data.get("employment_type") or "",
+        job_data.get("deadline") or "",
+    ])
     return "hash:" + hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
 

@@ -35,6 +35,22 @@ _FEE_RE = re.compile("|".join(_FEE_PATTERNS), re.IGNORECASE)
 # check it would be flagged identically to an actual fee demand.
 _NEGATION_RE = re.compile(r"\b(?:no|not|never|without|free of)\s+\S*\s*$", re.IGNORECASE)
 _NEGATION_LOOKBACK_CHARS = 24
+# The equally natural, equally legitimate phrasing the other way round
+# ("registration fee is not required", "processing fee waived") -- a plain
+# lookback alone missed this, since the negation word comes AFTER the fee
+# phrase here, not before it. Anchored at the start of the lookahead
+# window and requiring the negation to sit right next to a
+# requirement/waiver word (not just "not" appearing anywhere nearby) so
+# this can't accidentally clear a real fee demand followed by unrelated
+# text that happens to contain "not" (e.g. "...fee must be paid, do not
+# delay applying.").
+_NEGATION_AHEAD_RE = re.compile(
+    r"^\s*(?:is|are|was|were|will be)?\s*"
+    r"(?:(?:not|no longer|never)\s*(?:required|necessary|applicable|needed|charged|payable|due)\b"
+    r"|waived\b|not applicable\b|n/a\b)",
+    re.IGNORECASE,
+)
+_NEGATION_LOOKAHEAD_CHARS = 30
 
 _PERSONAL_EMAIL_DOMAINS = {
     "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
@@ -58,7 +74,8 @@ _HAS_NUMBER_RE = re.compile(r"\d")
 def _has_fee_request(text: str) -> bool:
     for match in _FEE_RE.finditer(text):
         preceding = text[max(0, match.start() - _NEGATION_LOOKBACK_CHARS):match.start()]
-        if _NEGATION_RE.search(preceding):
+        following = text[match.end():match.end() + _NEGATION_LOOKAHEAD_CHARS]
+        if _NEGATION_RE.search(preceding) or _NEGATION_AHEAD_RE.search(following):
             continue
         return True
     return False

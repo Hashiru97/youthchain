@@ -9013,7 +9013,15 @@ def admin_analytics():
     """
     total_users = User.query.count()
     total_employers = Employer.query.count()
-    total_jobs = Job.query.count()
+    # employer-posted only, not scraped Discover listings -- matches the
+    # template's own "Jobs posted" label (an employer posts a job; a
+    # scraper finds one) and every other source-aware job count in this
+    # codebase. An unfiltered Job.query.count() here silently inflated
+    # this donor/government-facing number with scraped listings, and
+    # made it inconsistent with "Jobs Posted per Employer" right below it
+    # on the same page, which already excludes them via its employer_id
+    # join.
+    total_jobs = Job.query.filter_by(source="employer").count()
     total_applications = Application.query.count()
 
     status_counts = dict(
