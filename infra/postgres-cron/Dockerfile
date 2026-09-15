@@ -22,3 +22,16 @@ FROM postgres:16
 RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-16-cron \
     && rm -rf /var/lib/apt/lists/*
+
+# Baked in as CMD (not hardcoded via an orchestrator-level start-command
+# override) so the base image's own ENTRYPOINT (docker-entrypoint.sh) stays
+# in charge of the normal secure boot sequence -- initdb, then dropping to
+# the unprivileged `postgres` user via gosu before actually exec'ing this
+# command. An orchestrator that replaces the container's entrypoint outright
+# to inject these flags (rather than only overriding CMD, the way
+# docker-compose.yml's own `command:` does) skips that gosu step entirely
+# and crash-loops on "root execution of the PostgreSQL server is not
+# permitted" -- found via a real deploy, not assumed. docker-compose.yml's
+# `command:` still overrides this identically for local/dev use; this CMD
+# is only what actually runs where no such override is supplied.
+CMD ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.database_name=youthchain"]
