@@ -118,7 +118,7 @@ def test_admin_can_view_and_dismiss_a_flag(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        flag = app_module.DuplicateFlag.query.get(flag_id)
+        flag = app_module.db.session.get(app_module.DuplicateFlag, flag_id)
         assert flag.resolved is True
         assert flag.resolved_at is not None
         assert flag.resolved_by_admin_id is not None

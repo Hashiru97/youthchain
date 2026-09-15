@@ -84,7 +84,7 @@ def test_certificate_download_requires_ownership(client):
     # not the original upload name — look up the real one rather than
     # assuming it matches what was uploaded.
     with app_module.app.app_context():
-        filename = app_module.Credential.query.get(credential_id).file_path
+        filename = app_module.db.session.get(app_module.Credential, credential_id).file_path
 
     as_owner = client.get(f"/certificate/{filename}", headers=auth_headers(a["access_token"]))
     as_stranger = client.get(f"/certificate/{filename}", headers=auth_headers(b["access_token"]))
@@ -165,7 +165,7 @@ def test_unrelated_employer_cannot_manage_a_job_they_did_not_post(client):
 
     # Can't download the applicant's CV.
     with app_module.app.app_context():
-        cv_filename = app_module.Application.query.get(app_id).cv_file
+        cv_filename = app_module.db.session.get(app_module.Application, app_id).cv_file
     cv_resp = client.get(f"/application_file/{cv_filename}")
     assert cv_resp.status_code == 403
 
@@ -179,5 +179,5 @@ def test_unrelated_employer_cannot_manage_a_job_they_did_not_post(client):
 
     # And the application itself was never actually touched.
     with app_module.app.app_context():
-        application = app_module.Application.query.get(app_id)
+        application = app_module.db.session.get(app_module.Application, app_id)
         assert application.status == "Pending"

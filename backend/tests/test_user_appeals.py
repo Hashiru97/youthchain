@@ -198,10 +198,10 @@ def test_admin_can_deny_an_appeal_leaving_user_suspended(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        appeal = app_module.UserAppeal.query.get(appeal_id)
+        appeal = app_module.db.session.get(app_module.UserAppeal, appeal_id)
         assert appeal.status == "denied"
         assert appeal.reviewed_by_admin_id is not None
-        assert app_module.User.query.get(user_id).active is False
+        assert app_module.db.session.get(app_module.User, user_id).active is False
 
 
 def test_admin_can_reinstate_user_from_an_appeal(client):
@@ -222,9 +222,9 @@ def test_admin_can_reinstate_user_from_an_appeal(client):
     client.post(f"/admin/user_appeals/{appeal_id}/resolve", data={"csrf_token": token, "decision": "reinstate"})
 
     with app_module.app.app_context():
-        appeal = app_module.UserAppeal.query.get(appeal_id)
+        appeal = app_module.db.session.get(app_module.UserAppeal, appeal_id)
         assert appeal.status == "reinstated"
-        assert app_module.User.query.get(user_id).active is True
+        assert app_module.db.session.get(app_module.User, user_id).active is True
 
     # Can actually log back in -- not just a flag flip the login path ignores.
     login_resp = client.post("/login", json={"email": "reinstateme@test.com", "password": "password123"})

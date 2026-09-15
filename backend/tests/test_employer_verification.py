@@ -193,7 +193,7 @@ def test_admin_sees_pending_employer_in_queue_and_can_approve(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.verification_status == "verified"
         assert employer.verification_reviewed_at is not None
         assert employer.verification_reviewed_by_admin_id is not None
@@ -229,7 +229,7 @@ def test_admin_can_reject_employer_document(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.verification_status == "rejected"
 
 

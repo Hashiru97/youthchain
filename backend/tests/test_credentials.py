@@ -116,8 +116,8 @@ def test_two_users_uploading_same_original_filename_do_not_collide_on_disk(clien
     assert alice_cred_id != bob_cred_id
 
     with app_module.app.app_context():
-        alice_cred = app_module.Credential.query.get(alice_cred_id)
-        bob_cred = app_module.Credential.query.get(bob_cred_id)
+        alice_cred = app_module.db.session.get(app_module.Credential, alice_cred_id)
+        bob_cred = app_module.db.session.get(app_module.Credential, bob_cred_id)
         # Different saved filenames despite the identical original upload
         # name ("c.pdf", from the shared _issue() helper) -- this is what
         # actually prevents the collision.

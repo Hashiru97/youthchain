@@ -160,10 +160,10 @@ def test_admin_can_view_and_dismiss_a_rating_flag(client):
     assert resp.status_code == 302
 
     with app_module.app.app_context():
-        flag = app_module.RatingFlag.query.get(flag_id)
+        flag = app_module.db.session.get(app_module.RatingFlag, flag_id)
         assert flag.status == "dismissed"
         assert flag.reviewed_by_admin_id is not None
-        rating = app_module.Rating.query.get(rating_id)
+        rating = app_module.db.session.get(app_module.Rating, rating_id)
         assert rating.hidden is False
 
 
@@ -189,9 +189,9 @@ def test_admin_can_hide_rating_via_flag_action(client):
     })
 
     with app_module.app.app_context():
-        flag = app_module.RatingFlag.query.get(flag_id)
+        flag = app_module.db.session.get(app_module.RatingFlag, flag_id)
         assert flag.status == "actioned"
-        rating = app_module.Rating.query.get(rating_id)
+        rating = app_module.db.session.get(app_module.Rating, rating_id)
         assert rating.hidden is True
 
 

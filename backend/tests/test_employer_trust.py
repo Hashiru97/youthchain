@@ -327,7 +327,7 @@ def test_responding_to_applicants_keeps_the_outcomes_component_full(client):
 
     with app_module.app.app_context():
         for app_id in app_ids:
-            app_module.Application.query.get(app_id).status = "Rejected"
+            app_module.db.session.get(app_module.Application, app_id).status = "Rejected"
         app_module.db.session.commit()
 
         # outcomes component rises from the neutral 10 (insufficient data)
@@ -386,7 +386,7 @@ def test_portal_job_listing_shows_the_trust_badge_when_not_good(client):
     reporter = register_user(client, email="badgereporter@test.com", phone="288888884")
     import app as app_module
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         employer.verification_status = "rejected"
         for _ in range(5):
             app_module.db.session.add(app_module.EmployerReport(

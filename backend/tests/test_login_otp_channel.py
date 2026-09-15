@@ -113,7 +113,7 @@ def test_login_via_sms_otp_for_a_suspended_user_is_blocked(client, monkeypatch):
     monkeypatch.setattr(app_module, "send_sms", lambda *a, **kw: True)
     user = register_user(client, email="suspendedsms@test.com", phone="23279004455")
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.active = False
         app_module.db.session.commit()
 

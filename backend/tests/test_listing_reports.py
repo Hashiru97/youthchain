@@ -180,10 +180,10 @@ def test_admin_can_dismiss_a_listing_report(client):
     assert resp.status_code == 302
 
     with app_module.app.app_context():
-        report = app_module.ScrapedListingReport.query.get(report_id)
+        report = app_module.db.session.get(app_module.ScrapedListingReport, report_id)
         assert report.status == "dismissed"
         # The job itself must still exist -- dismissing is not removal.
-        assert app_module.Job.query.get(job_id) is not None
+        assert app_module.db.session.get(app_module.Job, job_id) is not None
 
 
 def test_reviewed_listing_report_shows_which_admin_resolved_it(client):
@@ -266,14 +266,14 @@ def test_admin_removing_a_listing_deletes_the_job_and_any_saved_copies(client):
     assert resp.status_code == 302
 
     with app_module.app.app_context():
-        assert app_module.Job.query.get(job_id) is None
+        assert app_module.db.session.get(app_module.Job, job_id) is None
         assert app_module.SavedJob.query.filter_by(job_id=job_id).count() == 0
         # The report itself survives the job it was filed against being
         # deleted -- job_id is a real FK (nullable, unlike
         # saved_job.job_id, precisely so this row can outlive the job)
         # that a real Postgres deployment enforces, so it must be nulled
         # rather than left dangling.
-        report = app_module.ScrapedListingReport.query.get(report_id)
+        report = app_module.db.session.get(app_module.ScrapedListingReport, report_id)
         assert report.status == "actioned"
         assert report.job_id is None
 
@@ -319,9 +319,9 @@ def test_admin_removing_a_listing_with_multiple_open_reports_nulls_all_of_them(c
     assert resp.status_code == 302
 
     with app_module.app.app_context():
-        assert app_module.Job.query.get(job_id) is None
-        first = app_module.ScrapedListingReport.query.get(first_report_id)
-        second = app_module.ScrapedListingReport.query.get(second_report_id)
+        assert app_module.db.session.get(app_module.Job, job_id) is None
+        first = app_module.db.session.get(app_module.ScrapedListingReport, first_report_id)
+        second = app_module.db.session.get(app_module.ScrapedListingReport, second_report_id)
         assert first.status == "actioned" and first.job_id is None
         # Not resolved via this action, but still must not be left
         # dangling -- this is the row that would trip a Postgres FK

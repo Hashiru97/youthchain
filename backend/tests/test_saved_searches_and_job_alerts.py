@@ -236,7 +236,7 @@ def test_dispatch_sends_sms_to_a_saved_search_user_who_opted_into_sms(client, mo
     monkeypatch.setattr(app_module, "_TWILIO_FROM_NUMBER", "+15005550006")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.sms_alerts_enabled = True
         app_module.db.session.add(app_module.SavedSearch(user_id=user["user"]["id"], skill="excel"))
         app_module.db.session.commit()

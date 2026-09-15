@@ -82,7 +82,7 @@ def test_employer_can_mark_gig_application_complete(client):
 
     job_id, _employer_id, app_id, _worker = _setup_completed_gig(client)
     with app_module.app.app_context():
-        application = app_module.Application.query.get(app_id)
+        application = app_module.db.session.get(app_module.Application, app_id)
         assert application.status == "Completed"
 
 
@@ -96,7 +96,7 @@ def test_cannot_mark_complete_before_accepted(client):
     resp = _complete(client, job_id, app_id)
     assert resp.status_code == 403
     with app_module.app.app_context():
-        assert app_module.Application.query.get(app_id).status == "Pending"
+        assert app_module.db.session.get(app_module.Application, app_id).status == "Pending"
 
 
 def test_cannot_mark_complete_for_formal_job(client):
@@ -326,4 +326,4 @@ def test_unrelated_employer_cannot_mark_another_employers_application_complete(c
 
     import app as app_module
     with app_module.app.app_context():
-        assert app_module.Application.query.get(app_id).status == "Accepted"
+        assert app_module.db.session.get(app_module.Application, app_id).status == "Accepted"

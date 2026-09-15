@@ -93,7 +93,7 @@ class TestJWTChannel:
         resp = client.post(f"/api/devices/{victim_session_id}/revoke", headers=auth_headers(attacker["access_token"]))
         assert resp.status_code == 403
         with app_module.app.app_context():
-            row = app_module.UserSession.query.get(victim_session_id)
+            row = app_module.db.session.get(app_module.UserSession, victim_session_id)
             assert row.revoked_at is None
 
     def test_logout_marks_its_own_session_row_revoked(self, client):
@@ -219,7 +219,7 @@ class TestWebChannel:
         )
         assert resp.status_code == 403
         with app_module.app.app_context():
-            row = app_module.UserSession.query.get(victim_session_id)
+            row = app_module.db.session.get(app_module.UserSession, victim_session_id)
             assert row.revoked_at is None
         # And the victim's own session is still genuinely usable.
         assert client.get("/portal/devices").status_code == 200

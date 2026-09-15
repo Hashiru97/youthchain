@@ -231,10 +231,10 @@ def test_admin_can_deny_an_appeal_leaving_employer_suspended(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        appeal = app_module.EmployerAppeal.query.get(appeal_id)
+        appeal = app_module.db.session.get(app_module.EmployerAppeal, appeal_id)
         assert appeal.status == "denied"
         assert appeal.reviewed_by_admin_id is not None
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.active is False
 
 
@@ -261,9 +261,9 @@ def test_admin_can_reinstate_employer_from_an_appeal(client):
     )
 
     with app_module.app.app_context():
-        appeal = app_module.EmployerAppeal.query.get(appeal_id)
+        appeal = app_module.db.session.get(app_module.EmployerAppeal, appeal_id)
         assert appeal.status == "reinstated"
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.active is True
 
     # The employer can now actually log back in -- proving this isn't just a

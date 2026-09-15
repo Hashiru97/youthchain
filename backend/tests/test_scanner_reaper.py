@@ -37,7 +37,7 @@ def test_deletes_jobs_past_the_grace_period(client):
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 1
-        assert app_module.Job.query.get(old_job.id) is None
+        assert app_module.db.session.get(app_module.Job, old_job.id) is None
 
 
 def test_does_not_delete_a_job_still_within_the_grace_period(client):
@@ -52,7 +52,7 @@ def test_does_not_delete_a_job_still_within_the_grace_period(client):
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 0
-        assert app_module.Job.query.get(recent_job.id) is not None
+        assert app_module.db.session.get(app_module.Job, recent_job.id) is not None
 
 
 def test_never_deletes_a_job_with_no_deadline(client):
@@ -64,7 +64,7 @@ def test_never_deletes_a_job_with_no_deadline(client):
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 0
-        assert app_module.Job.query.get(job.id) is not None
+        assert app_module.db.session.get(app_module.Job, job.id) is not None
 
 
 def test_never_touches_employer_jobs_even_with_a_deadline_column_populated(client):
@@ -86,7 +86,7 @@ def test_never_touches_employer_jobs_even_with_a_deadline_column_populated(clien
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 0
-        assert app_module.Job.query.get(job_id) is not None
+        assert app_module.db.session.get(app_module.Job, job_id) is not None
 
 
 def test_deletes_saved_job_rows_for_a_reaped_job_first(client):
@@ -108,7 +108,7 @@ def test_deletes_saved_job_rows_for_a_reaped_job_first(client):
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 1
-        assert app_module.Job.query.get(job.id) is None
+        assert app_module.db.session.get(app_module.Job, job.id) is None
         assert app_module.SavedJob.query.filter_by(job_id=job.id).count() == 0
 
 
@@ -142,8 +142,8 @@ def test_nulls_report_job_id_for_a_reaped_job_instead_of_leaving_a_dangling_fk(c
         )
 
         assert deleted == 1
-        assert app_module.Job.query.get(job.id) is None
-        survived = app_module.ScrapedListingReport.query.get(report_id)
+        assert app_module.db.session.get(app_module.Job, job.id) is None
+        survived = app_module.db.session.get(app_module.ScrapedListingReport, report_id)
         assert survived is not None
         assert survived.job_id is None
 
@@ -163,7 +163,7 @@ def test_a_job_exactly_at_the_grace_boundary_is_not_yet_deleted(client):
         deleted = reaper.reap_expired_jobs(app_module.db, app_module.Job, app_module.SavedJob, app_module.ScrapedListingReport, grace_days=7)
 
         assert deleted == 0
-        assert app_module.Job.query.get(job.id) is not None
+        assert app_module.db.session.get(app_module.Job, job.id) is not None
 
 
 def test_returns_zero_when_nothing_is_expired(client):

@@ -375,7 +375,7 @@ def test_admin_can_suspend_and_reinstate_an_employer(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        assert app_module.Employer.query.get(employer_id).active is False
+        assert app_module.db.session.get(app_module.Employer, employer_id).active is False
 
     # Suspended employer can no longer log in, with an honest reason.
     logout_page = client.get("/admin/employer_verifications")
@@ -398,7 +398,7 @@ def test_admin_can_suspend_and_reinstate_an_employer(client):
         data={"csrf_token": reinstate_token},
     )
     with app_module.app.app_context():
-        assert app_module.Employer.query.get(employer_id).active is True
+        assert app_module.db.session.get(app_module.Employer, employer_id).active is True
 
     logout_page = client.get("/admin/employer_verifications")
     client.post("/admin/logout", data={"csrf_token": _csrf_token(logout_page.get_data(as_text=True))})
@@ -430,7 +430,7 @@ def test_suspending_an_employer_revokes_an_already_open_session_immediately(clie
     assert client.get("/employer").status_code == 200
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         employer.active = False
         app_module.db.session.commit()
 
@@ -460,4 +460,4 @@ def test_verifier_role_admin_cannot_suspend_an_employer(client):
     assert resp.status_code == 403
 
     with app_module.app.app_context():
-        assert app_module.Employer.query.get(employer_id).active is True
+        assert app_module.db.session.get(app_module.Employer, employer_id).active is True

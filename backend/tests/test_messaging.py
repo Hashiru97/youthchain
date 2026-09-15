@@ -289,7 +289,7 @@ def test_messages_response_includes_raw_employer_id_for_reporting(client):
     assert fetch.status_code == 200
     body = fetch.get_json()
     with app_module.app.app_context():
-        job = app_module.Job.query.get(_job_id)
+        job = app_module.db.session.get(app_module.Job, _job_id)
         assert body["employer_id"] == job.employer_id
         assert body["employer_id"] is not None
 

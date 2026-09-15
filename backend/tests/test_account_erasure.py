@@ -84,7 +84,7 @@ def test_erase_requires_the_correct_password(client):
     )
     assert resp.status_code == 403
     with app_module.app.app_context():
-        row = app_module.User.query.get(user["user"]["id"])
+        row = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert row.erased_at is None
         assert row.name != "Deleted user"
 
@@ -124,7 +124,7 @@ def test_erase_is_rate_limited_after_five_bad_password_attempts(client):
     assert other_resp.status_code == 403
 
     with app_module.app.app_context():
-        row = app_module.User.query.get(user["user"]["id"])
+        row = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert row.erased_at is None
 
 
@@ -133,7 +133,7 @@ def test_erase_scrubs_pii_deletes_credential_and_its_file(client):
     cred_id = _issue_credential(client, user["access_token"])
 
     with app_module.app.app_context():
-        cred = app_module.Credential.query.get(cred_id)
+        cred = app_module.db.session.get(app_module.Credential, cred_id)
         file_path = os.path.join(app_module.UPLOAD_FOLDER, cred.file_path)
     assert os.path.exists(file_path)
 
@@ -146,14 +146,14 @@ def test_erase_scrubs_pii_deletes_credential_and_its_file(client):
     assert resp.get_json()["success"] is True
 
     with app_module.app.app_context():
-        row = app_module.User.query.get(user["user"]["id"])
+        row = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert row.erased_at is not None
         assert row.active is False
         assert row.name == "Deleted user"
         assert row.email != "erase-me@test.com"
         assert row.phone != "444"
         assert row.ncra_id is None
-        assert app_module.Credential.query.get(cred_id) is None
+        assert app_module.db.session.get(app_module.Credential, cred_id) is None
 
     assert not os.path.exists(file_path)
 
@@ -191,7 +191,7 @@ def test_erase_is_blocked_while_an_open_appeal_exists(client):
     assert "open" in resp.get_json()["error"].lower()
 
     with app_module.app.app_context():
-        row = app_module.User.query.get(user["user"]["id"])
+        row = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert row.erased_at is None
 
 
@@ -199,7 +199,7 @@ def test_erase_redacts_application_files_but_keeps_the_row_for_the_employer(clie
     job_id, app_id, youth = _setup_application(client, email="worker@test.com", phone="777")
 
     with app_module.app.app_context():
-        application = app_module.Application.query.get(app_id)
+        application = app_module.db.session.get(app_module.Application, app_id)
         cv_filename = application.cv_file
         cv_path = os.path.join(app_module.APPLICATION_FOLDER, cv_filename)
     assert os.path.exists(cv_path)
@@ -214,7 +214,7 @@ def test_erase_redacts_application_files_but_keeps_the_row_for_the_employer(clie
     with app_module.app.app_context():
         # The row survives -- job_id/status are the employer's own hiring
         # record -- only the uploaded file and its reference are gone.
-        application = app_module.Application.query.get(app_id)
+        application = app_module.db.session.get(app_module.Application, app_id)
         assert application is not None
         assert application.job_id == job_id
         assert application.cv_file is None
@@ -272,7 +272,7 @@ def test_admin_can_erase_a_user(client):
     assert resp.get_json()["success"] is True
 
     with app_module.app.app_context():
-        row = app_module.User.query.get(user["user"]["id"])
+        row = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert row.erased_at is not None
 
 

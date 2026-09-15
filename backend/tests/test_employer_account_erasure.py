@@ -95,7 +95,7 @@ def test_employer_erase_scrubs_pii_and_deletes_verification_document(client):
     assert resp.get_json()["success"] is True
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.erased_at is not None
         assert employer.active is False
         assert employer.name == "Deleted employer"
@@ -132,7 +132,7 @@ def test_employer_erase_is_blocked_while_an_open_report_exists(client):
     assert "open" in resp.get_json()["error"].lower()
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.erased_at is None
 
 
@@ -222,5 +222,5 @@ def test_admin_can_erase_an_employer(client):
     assert resp.get_json()["success"] is True
 
     with app_module.app.app_context():
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.erased_at is not None

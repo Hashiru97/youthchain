@@ -107,7 +107,7 @@ def test_issue_credential_compresses_an_oversized_jpeg_certificate(client):
     credential_id = resp.get_json()["credential_id"]
 
     with app_module.app.app_context():
-        credential = app_module.Credential.query.get(credential_id)
+        credential = app_module.db.session.get(app_module.Credential, credential_id)
         stored_path = os.path.join(app_module.UPLOAD_FOLDER, credential.file_path)
         with Image.open(stored_path) as img:
             assert max(img.size) <= app_module._MAX_IMAGE_UPLOAD_DIMENSION
@@ -132,6 +132,6 @@ def test_issue_credential_pdf_certificate_is_unaffected(client):
     credential_id = resp.get_json()["credential_id"]
 
     with app_module.app.app_context():
-        credential = app_module.Credential.query.get(credential_id)
+        credential = app_module.db.session.get(app_module.Credential, credential_id)
         stored_path = os.path.join(app_module.UPLOAD_FOLDER, credential.file_path)
         assert open(stored_path, "rb").read() == FAKE_PDF_BYTES

@@ -84,7 +84,7 @@ def test_admin_can_suspend_a_user(client):
     resp = _suspend_user(client, user_id)
     assert resp.status_code == 302
     with app_module.app.app_context():
-        assert app_module.User.query.get(user_id).active is False
+        assert app_module.db.session.get(app_module.User, user_id).active is False
 
     # Immediate, not just "next login": the already-issued JWT is now dead.
     still_works = client.get("/api/candidate/me", headers=auth_headers(a["access_token"]))
@@ -160,7 +160,7 @@ def test_admin_can_reinstate_a_suspended_user(client):
     _reinstate_user(client, user_id)
 
     with app_module.app.app_context():
-        assert app_module.User.query.get(user_id).active is True
+        assert app_module.db.session.get(app_module.User, user_id).active is True
     resp = client.post("/login", json={"email": "comeback@test.com", "password": "password123"})
     assert resp.status_code == 200
 
@@ -174,7 +174,7 @@ def test_verifier_role_cannot_suspend_a_user(client):
     resp = _suspend_user(client, user_id, admin_email="verifier@youthchain.test", role="verifier")
     assert resp.status_code == 403
     with app_module.app.app_context():
-        assert app_module.User.query.get(user_id).active is True
+        assert app_module.db.session.get(app_module.User, user_id).active is True
 
 
 def test_suspending_a_user_notifies_them_by_email(client, monkeypatch):

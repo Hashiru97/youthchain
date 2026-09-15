@@ -227,10 +227,10 @@ def run_scan_for_source(
     every scan attempt — scheduled, manually triggered, or CLI-run — has
     a real record.
     """
-    source = JobSource.query.get(source_id)
+    source = db.session.get(JobSource, source_id)
 
     if scan_run_id is not None:
-        scan_run = ScanRun.query.get(scan_run_id)
+        scan_run = db.session.get(ScanRun, scan_run_id)
         if scan_run is None:
             # Not reachable via the poller today (it claims a row and
             # passes that same, now-committed id straight through), but

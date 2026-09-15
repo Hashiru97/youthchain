@@ -84,7 +84,7 @@ def test_admin_can_deactivate_another_admin(client):
 
     import app as app_module
     with app_module.app.app_context():
-        target = app_module.Admin.query.get(target_id)
+        target = app_module.db.session.get(app_module.Admin, target_id)
         assert target.active is False
 
 
@@ -107,7 +107,7 @@ def test_admin_cannot_deactivate_own_account(client):
 
     import app as app_module
     with app_module.app.app_context():
-        me = app_module.Admin.query.get(admin_id)
+        me = app_module.db.session.get(app_module.Admin, admin_id)
         assert me.active is True
 
 
@@ -128,7 +128,7 @@ def test_deactivated_admin_session_is_revoked_immediately_not_just_blocked_at_ne
     # under them.
     import app as app_module
     with app_module.app.app_context():
-        target = app_module.Admin.query.get(target_id)
+        target = app_module.db.session.get(app_module.Admin, target_id)
         target.active = False
         app_module.db.session.commit()
 
@@ -142,7 +142,7 @@ def test_deactivated_admin_cannot_log_in(client):
     admin_id, email, password = _create_admin("deactivated@youthchain.test", role="verifier")
     import app as app_module
     with app_module.app.app_context():
-        admin = app_module.Admin.query.get(admin_id)
+        admin = app_module.db.session.get(app_module.Admin, admin_id)
         admin.active = False
         app_module.db.session.commit()
 

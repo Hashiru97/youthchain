@@ -275,7 +275,7 @@ def test_verify_company_sets_verified_fields(client):
     assert resp.status_code == 302
 
     with app_module.app.app_context():
-        company = app_module.ScrapedCompany.query.get(company_id)
+        company = app_module.db.session.get(app_module.ScrapedCompany, company_id)
         assert company.verified is True
         assert company.verified_at is not None
         assert company.verified_by_admin_id is not None

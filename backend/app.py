@@ -949,7 +949,7 @@ def _employer_trust_summary(employer_id: int) -> dict:
     the module-level comment just above for what each component means
     and why the weights are what they are.
     """
-    employer = Employer.query.get(employer_id)
+    employer = db.session.get(Employer, employer_id)
 
     ratings = Rating.query.filter(
         Rating.employer_id == employer_id, Rating.direction == "worker_to_employer", Rating.hidden.is_(False),
@@ -1196,14 +1196,14 @@ class Job(db.Model):
     def to_dict(self):
         employer_info = None
         if self.employer_id:
-            employer = Employer.query.get(self.employer_id)
+            employer = db.session.get(Employer, self.employer_id)
             if employer:
                 employer_info = _employer_summary(employer)
         source_name = None
         company_verified = False
         if self.source == "scraped":
             if self.source_id:
-                job_source = JobSource.query.get(self.source_id)
+                job_source = db.session.get(JobSource, self.source_id)
                 source_name = job_source.name if job_source else None
             if self.company_name:
                 # Same case-insensitive exact-name match scanner.pipeline
@@ -2641,7 +2641,7 @@ def _current_user_id():
         return None
     if uid is None:
         return None
-    user = User.query.get(uid)
+    user = db.session.get(User, uid)
     if user is None or not user.active:
         return None
     return uid
@@ -2684,7 +2684,7 @@ def send_push_notification(user_id: int, title: str, body: str) -> bool:
         logger.info("[PUSH STUB] Would push to user %s: %s — %s", user_id, title, body)
         return False
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or not user.push_token:
         logger.info("[PUSH SKIPPED] User %s has no registered push token", user_id)
         return False
@@ -2856,7 +2856,7 @@ def notify_user(user_id, ntype, title, body=None, push=True, sms=False, whatsapp
         send_push_notification(user_id, title, body or "")
 
     if sms or whatsapp:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if sms and user and user.sms_alerts_enabled:
             send_sms(user.phone, f"{title} — {body}" if body else title)
         if whatsapp and user and user.whatsapp_alerts_enabled:
@@ -2982,7 +2982,7 @@ def _current_employer_id():
         return None
     if eid is None:
         return None
-    employer = Employer.query.get(eid)
+    employer = db.session.get(Employer, eid)
     if employer is None or not employer.active:
         session.pop("employer_id", None)
         return None
@@ -3008,7 +3008,7 @@ def _inject_employer_identity():
     youth/anonymous traffic never pays for the extra queries.
     """
     eid = _current_employer_id()
-    employer = Employer.query.get(eid) if eid is not None else None
+    employer = db.session.get(Employer, eid) if eid is not None else None
     unread = 0
     if employer is not None:
         job_ids = [row[0] for row in db.session.query(Job.id).filter(Job.employer_id == employer.id).all()]
@@ -3085,7 +3085,7 @@ def _current_portal_user_id():
         return None
     if uid is None:
         return None
-    user = User.query.get(uid)
+    user = db.session.get(User, uid)
     if user is None or not user.active:
         session.pop("portal_user_id", None)
         session.pop("portal_session_token", None)
@@ -3144,7 +3144,7 @@ def _current_admin_id():
         return None
     if aid is None:
         return None
-    admin = Admin.query.get(aid)
+    admin = db.session.get(Admin, aid)
     if admin is None or not admin.active:
         session.pop("admin_id", None)
         return None
@@ -3196,7 +3196,7 @@ def _inject_admin_identity():
     fraction who are a logged-in admin.
     """
     admin_id = _current_admin_id()
-    admin = Admin.query.get(admin_id) if admin_id is not None else None
+    admin = db.session.get(Admin, admin_id) if admin_id is not None else None
     is_admin_role = admin is not None and admin.role == "admin"
     admin_pending = _admin_pending_counts() if is_admin_role else {}
     return {
@@ -3239,7 +3239,7 @@ def admin_role_required(role):
             aid = _current_admin_id()
             if aid is None:
                 return redirect(url_for("admin_login", next=request.path))
-            admin = Admin.query.get(aid)
+            admin = db.session.get(Admin, aid)
             if admin is None or admin.role != role:
                 return _forbidden("Admins with the '%s' role only" % role)
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
@@ -3824,11 +3824,11 @@ def _too_large(e):
     view_args = request.view_args or {}
 
     if request.endpoint == "portal_apply":
-        job = Job.query.get(view_args.get("job_id"))
+        job = db.session.get(Job, view_args.get("job_id"))
         if job:
             return render_template(
                 "portal_job_detail.html", job=job,
-                employer=Employer.query.get(job.employer_id) if job.employer_id else None,
+                employer=db.session.get(Employer, job.employer_id) if job.employer_id else None,
                 already_applied=False, active_page="jobs", error=error,
             ), 413
 
@@ -3841,7 +3841,7 @@ def _too_large(e):
     elif request.endpoint == "employer_verification":
         eid = _current_employer_id()
         if eid:
-            employer = Employer.query.get(eid)
+            employer = db.session.get(Employer, eid)
             return render_template("employer_verification.html", employer=employer, active_page="verification", error=error), 413
 
     return jsonify({"success": False, "error": error}), 413
@@ -4862,7 +4862,7 @@ def api_discover_jobs_old():
 @jwt_required()
 def save_job(job_id):
     user_id = _current_user_id()
-    Job.query.get_or_404(job_id)
+    db.get_or_404(Job, job_id)
     try:
         db.session.add(SavedJob(user_id=user_id, job_id=job_id))
         db.session.commit()
@@ -4965,7 +4965,7 @@ def delete_saved_search(search_id):
     # POST, not DELETE — this file uses no DELETE routes anywhere else
     # (see save_job()/unsave_job()'s own comment on why), kept consistent
     # rather than introducing the verb for just this one endpoint.
-    row = SavedSearch.query.get_or_404(search_id)
+    row = db.get_or_404(SavedSearch, search_id)
     if row.user_id != _current_user_id():
         return _forbidden()
     db.session.delete(row)
@@ -4993,7 +4993,7 @@ def apply():
     # can gate whether a CV is required at all -- gig/informal-work jobs
     # (see Job.job_type) don't require one, matching how trust actually
     # works for that kind of work (see the Rating model's docstring).
-    job = Job.query.get(job_id)
+    job = db.session.get(Job, job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     # A Discover (scraped) listing has no employer account behind it to
@@ -5259,12 +5259,12 @@ def _submit_worker_rating_flag(rating, user_id, reason):
 @jwt_required()
 def rate_employer(app_id):
     """Worker's half of the bidirectional gig rating -- see Rating's docstring."""
-    application = Application.query.get_or_404(app_id)
+    application = db.get_or_404(Application, app_id)
     # IDOR guard, same shape as employer_rate_worker's ownership check --
     # a worker may only rate the employer on THEIR OWN application.
     if application.user_id != _current_user_id():
         return _forbidden()
-    job = Job.query.get_or_404(application.job_id)
+    job = db.get_or_404(Job, application.job_id)
 
     data = request.get_json(silent=True) or request.form
     rating, error = _submit_gig_rating(application, "worker_to_employer", job.employer_id, data)
@@ -5288,7 +5288,7 @@ def flag_rating(rating_id):
     worker_to_employer submission, which isn't a real dispute at all, just
     noise in the admin queue.
     """
-    rating = Rating.query.get_or_404(rating_id)
+    rating = db.get_or_404(Rating, rating_id)
     user_id = _current_user_id()
     if rating.user_id != user_id or rating.direction != "employer_to_worker":
         return _forbidden()
@@ -5323,7 +5323,7 @@ def api_devices():
 def api_revoke_device(session_id):
     """Mobile counterpart to portal_revoke_device() -- see that route's docstring."""
     user_id = _current_user_id()
-    row = UserSession.query.get_or_404(session_id)
+    row = db.get_or_404(UserSession, session_id)
     if row.user_id != user_id:
         return _forbidden()
     if row.revoked_at is None:
@@ -5498,7 +5498,7 @@ def download_application(filename):
 
     eid = _current_employer_id()
     if eid is not None:
-        job = Job.query.get(row.job_id)
+        job = db.session.get(Job, row.job_id)
         if _employer_owns_job(job, eid):
             return send_from_directory(APPLICATION_FOLDER, filename, as_attachment=True)
 
@@ -5948,7 +5948,7 @@ def _inject_portal_identity():
     session lookup so anonymous/employer/admin traffic never pays for it.
     """
     uid = _current_portal_user_id()
-    return {"current_portal_user": User.query.get(uid) if uid is not None else None}
+    return {"current_portal_user": db.session.get(User, uid) if uid is not None else None}
 
 
 _PORTAL_PAGE_SIZE = 24  # grid-friendly page size for the human-facing job feed, vs GET /jobs' 100-row API default
@@ -6005,8 +6005,8 @@ def portal_dashboard():
 
 @app.route("/portal/jobs/<int:job_id>")
 def portal_job_detail(job_id):
-    job = Job.query.get_or_404(job_id)
-    employer = Employer.query.get(job.employer_id) if job.employer_id else None
+    job = db.get_or_404(Job, job_id)
+    employer = db.session.get(Employer, job.employer_id) if job.employer_id else None
     employer_trust = _employer_trust_summary(employer.id) if employer else None
 
     already_applied = False
@@ -6023,7 +6023,7 @@ def portal_job_detail(job_id):
 @app.route("/portal/jobs/<int:job_id>/apply", methods=["POST"])
 @portal_login_required
 def portal_apply(job_id):
-    job = Job.query.get_or_404(job_id)
+    job = db.get_or_404(Job, job_id)
     user_id = _current_portal_user_id()
     cv_file = request.files.get("cv")
     supporting_file = request.files.get("supporting")
@@ -6031,7 +6031,7 @@ def portal_apply(job_id):
     def _fail(error):
         return render_template(
             "portal_job_detail.html", job=job,
-            employer=Employer.query.get(job.employer_id) if job.employer_id else None,
+            employer=db.session.get(Employer, job.employer_id) if job.employer_id else None,
             already_applied=False, active_page="jobs", error=error,
         )
 
@@ -6149,11 +6149,11 @@ def portal_rate_employer(app_id):
     feature, see portal_applications.html) -- so unlike messaging, this
     belongs on the web portal too, not just the app.
     """
-    application = Application.query.get_or_404(app_id)
+    application = db.get_or_404(Application, app_id)
     uid = _current_portal_user_id()
     if application.user_id != uid:
         return _forbidden()
-    job = Job.query.get_or_404(application.job_id)
+    job = db.get_or_404(Job, application.job_id)
 
     rating, error = _submit_gig_rating(application, "worker_to_employer", job.employer_id, request.form)
     if error:
@@ -6165,7 +6165,7 @@ def portal_rate_employer(app_id):
 @portal_login_required
 def portal_flag_rating(rating_id):
     """Worker's half of the dispute path, web-portal session version -- mirrors flag_rating()."""
-    rating = Rating.query.get_or_404(rating_id)
+    rating = db.get_or_404(Rating, rating_id)
     uid = _current_portal_user_id()
     if rating.user_id != uid or rating.direction != "employer_to_worker":
         return _forbidden()
@@ -6220,7 +6220,7 @@ def portal_devices():
 @portal_login_required
 def portal_revoke_device(session_id):
     uid = _current_portal_user_id()
-    row = UserSession.query.get_or_404(session_id)
+    row = db.get_or_404(UserSession, session_id)
     # IDOR guard, same shape as every other "does this row belong to the
     # caller" check in this codebase (rate_employer, flag_rating, etc.).
     if row.user_id != uid:
@@ -6579,7 +6579,7 @@ def employer_dashboard():
             "category": job.category,
             "applicant_count": applicant_counts.get(job.id, 0)
         })
-    employer = Employer.query.get(eid)
+    employer = db.session.get(Employer, eid)
     trust = _employer_trust_summary(eid)
     return render_template("employer_dashboard.html", jobs=job_data, employer=employer, trust=trust, active_page="dashboard")
 
@@ -6604,7 +6604,7 @@ def employer_verification():
     document description and the resulting badge differ.
     """
     eid = _current_employer_id()
-    employer = Employer.query.get(eid)
+    employer = db.session.get(Employer, eid)
 
     if request.method == "POST":
         csrf.protect()
@@ -6677,7 +6677,7 @@ def admin_decide_employer_verification(employer_id):
     if decision not in ("verified", "rejected"):
         return _forbidden("Invalid decision")
 
-    employer = Employer.query.get_or_404(employer_id)
+    employer = db.get_or_404(Employer, employer_id)
     employer.verification_status = decision
     employer.verification_reviewed_at = datetime.utcnow()
     employer.verification_reviewed_by_admin_id = _current_admin_id()
@@ -6795,7 +6795,7 @@ def admin_scanner_update_source(source_id):
     """Toggle a source active/inactive, or update its scan frequency —
     the one PATCH-shaped action this admin panel needs, kept as a single
     POST route (no PUT/PATCH plumbing exists elsewhere in this app either)."""
-    source = JobSource.query.get_or_404(source_id)
+    source = db.get_or_404(JobSource, source_id)
     if "active" in request.form:
         source.active = request.form.get("active") == "1"
     if "scan_frequency_minutes" in request.form:
@@ -6824,7 +6824,7 @@ def admin_scanner_trigger_source(source_id):
     "already queued/running" check the pg_cron-side scheduling query uses
     for scheduled runs (see the enable_pg_cron_scan_scheduling migration).
     """
-    source = JobSource.query.get_or_404(source_id)
+    source = db.get_or_404(JobSource, source_id)
     already_pending = ScanRun.query.filter(
         ScanRun.source_id == source.id, ScanRun.status.in_(["queued", "running"]),
     ).first()
@@ -6857,7 +6857,7 @@ def admin_scanner_verify_company(company_id):
     """Same shape as admin_decide_employer_verification above — a
     separate action/table from Employer.verification_status on purpose
     (see ScrapedCompany's own docstring)."""
-    company = ScrapedCompany.query.get_or_404(company_id)
+    company = db.get_or_404(ScrapedCompany, company_id)
     company.verified = True
     company.verified_at = datetime.utcnow()
     company.verified_by_admin_id = _current_admin_id()
@@ -6975,7 +6975,7 @@ def admin_suspend_employer(employer_id):
     request revokes any already-open session for this employer, since
     _current_employer_id() re-checks Employer.active on every call.
     """
-    employer = Employer.query.get_or_404(employer_id)
+    employer = db.get_or_404(Employer, employer_id)
     employer.active = False
     db.session.commit()
     log_event("employer_suspended", employer_id=employer_id)
@@ -6993,7 +6993,7 @@ def admin_reinstate_employer(employer_id):
     with no recourse is a harsher default than this platform's evidence
     (a single admin's judgment call, not a court) actually supports.
     """
-    employer = Employer.query.get_or_404(employer_id)
+    employer = db.get_or_404(Employer, employer_id)
     employer.active = True
     db.session.commit()
     log_event("employer_reinstated", employer_id=employer_id)
@@ -7089,7 +7089,7 @@ def erase_own_employer_account():
     _erase_employer_data()'s own docstring. Requires re-entering the
     current password, same reasoning as erase_own_account()'s own
     docstring for the User side."""
-    employer = Employer.query.get_or_404(_current_employer_id())
+    employer = db.get_or_404(Employer, _current_employer_id())
     password = request.form.get("password") or (request.get_json(silent=True) or {}).get("password") or ""
 
     if _login_rate_limited(f"erase:employer:{employer.id}"):
@@ -7112,7 +7112,7 @@ def admin_erase_employer(employer_id):
     see admin_erase_user()'s own docstring for the identical reasoning on
     why the admin's own 2FA-gated login is the identity check a request
     reaching an admin this way still needs."""
-    employer = Employer.query.get_or_404(employer_id)
+    employer = db.get_or_404(Employer, employer_id)
     ok, error = _erase_employer_data(employer, reason=f"admin_requested:{_current_admin_id()}")
     if not ok:
         return jsonify({"success": False, "error": error}), 409
@@ -7308,7 +7308,7 @@ def erase_own_account():
     via XSS/malware) being sufficient on its own to trigger something
     this irreversible would be a real gap worth closing here regardless.
     """
-    user = User.query.get_or_404(_current_user_id())
+    user = db.get_or_404(User, _current_user_id())
     data = request.get_json(silent=True) or request.form
     password = data.get("password") or ""
 
@@ -7335,7 +7335,7 @@ def admin_erase_user(user_id):
     already being logged into the admin console (2FA-gated -- see
     admin_2fa_verify), which is the identity check a request reaching an
     admin this way still needs before acting on it."""
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     ok, error = _erase_user_data(user, reason=f"admin_requested:{_current_admin_id()}")
     if not ok:
         return jsonify({"success": False, "error": error}), 409
@@ -7350,7 +7350,7 @@ def admin_suspend_user(user_id):
     abusively" -- see User.active's docstring. Immediate: revokes every
     active session (both channels) and the account-level re-check on
     every subsequent request closes the rest of the gap."""
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     user.active = False
     db.session.commit()
     log_event("user_suspended", user_id=user_id)
@@ -7362,7 +7362,7 @@ def admin_suspend_user(user_id):
 @admin_role_required("admin")
 def admin_reinstate_user(user_id):
     """Reversible on purpose, same reasoning as admin_reinstate_employer()."""
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     user.active = True
     db.session.commit()
     log_event("user_reinstated", user_id=user_id)
@@ -7472,10 +7472,10 @@ def admin_resolve_report(report_id):
     if decision not in ("dismiss", "suspend"):
         return _forbidden("Invalid decision")
 
-    report = EmployerReport.query.get_or_404(report_id)
+    report = db.get_or_404(EmployerReport, report_id)
     suspended_employer = None
     if decision == "suspend":
-        employer = Employer.query.get(report.employer_id)
+        employer = db.session.get(Employer, report.employer_id)
         if employer:
             employer.active = False
             suspended_employer = employer
@@ -7569,9 +7569,9 @@ def admin_resolve_listing_report(report_id):
     if decision not in ("dismiss", "remove_listing"):
         return _forbidden("Invalid decision")
 
-    report = ScrapedListingReport.query.get_or_404(report_id)
+    report = db.get_or_404(ScrapedListingReport, report_id)
     if decision == "remove_listing":
-        job = Job.query.get(report.job_id)
+        job = db.session.get(Job, report.job_id)
         if job:
             SavedJob.query.filter_by(job_id=job.id).delete()
             ScrapedListingReport.query.filter_by(job_id=job.id).update({"job_id": None})
@@ -7658,9 +7658,9 @@ def admin_resolve_rating_flag(flag_id):
     if decision not in ("dismiss", "hide"):
         return _forbidden("Invalid decision")
 
-    flag = RatingFlag.query.get_or_404(flag_id)
+    flag = db.get_or_404(RatingFlag, flag_id)
     if decision == "hide":
-        rating = Rating.query.get(flag.rating_id)
+        rating = db.session.get(Rating, flag.rating_id)
         if rating:
             rating.hidden = True
             log_event("rating_hidden", rating_id=rating.id, via_flag_id=flag_id)
@@ -7711,9 +7711,9 @@ def admin_resolve_appeal(appeal_id):
     if decision not in ("reinstate", "deny"):
         return _forbidden("Invalid decision")
 
-    appeal = EmployerAppeal.query.get_or_404(appeal_id)
+    appeal = db.get_or_404(EmployerAppeal, appeal_id)
     if decision == "reinstate":
-        employer = Employer.query.get(appeal.employer_id)
+        employer = db.session.get(Employer, appeal.employer_id)
         if employer:
             employer.active = True
             log_event("employer_reinstated", employer_id=employer.id, via_appeal_id=appeal_id)
@@ -7758,9 +7758,9 @@ def admin_resolve_user_appeal(appeal_id):
     if decision not in ("reinstate", "deny"):
         return _forbidden("Invalid decision")
 
-    appeal = UserAppeal.query.get_or_404(appeal_id)
+    appeal = db.get_or_404(UserAppeal, appeal_id)
     if decision == "reinstate":
-        user = User.query.get(appeal.user_id)
+        user = db.session.get(User, appeal.user_id)
         if user:
             user.active = True
             log_event("user_reinstated", user_id=user.id, via_appeal_id=appeal_id)
@@ -7808,8 +7808,8 @@ def admin_duplicate_flags():
     )
     pairs = []
     for flag in flags:
-        user = User.query.get(flag.user_id)
-        matched_user = User.query.get(flag.matched_user_id)
+        user = db.session.get(User, flag.user_id)
+        matched_user = db.session.get(User, flag.matched_user_id)
         if user and matched_user:
             pairs.append((flag, user, matched_user))
     return render_template("admin_duplicate_flags.html", pairs=pairs, active_page="duplicate_flags")
@@ -7818,7 +7818,7 @@ def admin_duplicate_flags():
 @app.route("/admin/duplicate_flags/<int:flag_id>/resolve", methods=["POST"])
 @admin_role_required("admin")
 def admin_resolve_duplicate_flag(flag_id):
-    flag = DuplicateFlag.query.get_or_404(flag_id)
+    flag = db.get_or_404(DuplicateFlag, flag_id)
     flag.resolved = True
     flag.resolved_at = datetime.utcnow()
     flag.resolved_by_admin_id = _current_admin_id()
@@ -7853,7 +7853,7 @@ def admin_credentials():
 @app.route("/admin/credentials/<int:credential_id>/revoke", methods=["POST"])
 @admin_role_required("admin")
 def admin_revoke_credential(credential_id):
-    credential = Credential.query.get_or_404(credential_id)
+    credential = db.get_or_404(Credential, credential_id)
     if credential.revoked_at is not None:
         return _forbidden("This credential has already been revoked")
 
@@ -7957,7 +7957,7 @@ def post_job():
         location = request.form.get("location")
         duration = request.form.get("duration")
         if not title or not location or not duration:
-            employer = Employer.query.get(_current_employer_id())
+            employer = db.session.get(Employer, _current_employer_id())
             return render_template(
                 "post_job.html", active_page="post_job", gig_categories=sorted(_GIG_CATEGORY_CHOICES),
                 employer=employer, error="Title, location, and duration are required.",
@@ -7998,7 +7998,7 @@ def post_job():
 
         return redirect(url_for("employer_dashboard"))
 
-    employer = Employer.query.get(_current_employer_id())
+    employer = db.session.get(Employer, _current_employer_id())
     return render_template(
         "post_job.html", active_page="post_job", gig_categories=sorted(_GIG_CATEGORY_CHOICES), employer=employer,
     )
@@ -8040,7 +8040,7 @@ def verify():
 # third party at an employer login wall they have no reason to cross.
 @app.route("/verify/<int:cred_id>")
 def verify_by_id(cred_id):
-    cred = Credential.query.get(cred_id)
+    cred = db.session.get(Credential, cred_id)
     if not cred:
         return render_template("verify.html", result="not_found", onchain_status=None, public=True)
 
@@ -8061,10 +8061,10 @@ def _application_access(app_id):
     the mobile app and the employer web portal). Returns None if the
     application doesn't exist.
     """
-    application = Application.query.get(app_id)
+    application = db.session.get(Application, app_id)
     if not application:
         return None
-    job = Job.query.get(application.job_id)
+    job = db.session.get(Job, application.job_id)
 
     uid = _current_user_id()
     eid = _current_employer_id()
@@ -8139,8 +8139,8 @@ def _create_message(app_id, is_owner_user, is_owner_employer, body, attachment_f
     # Only the two real parties to this specific conversation may see it --
     # see _socketio_connect's docstring for why this used to broadcast
     # every message body to every connected client platform-wide.
-    application = Application.query.get(app_id)
-    job = Job.query.get(application.job_id) if application else None
+    application = db.session.get(Application, app_id)
+    job = db.session.get(Job, application.job_id) if application else None
     rooms = []
     if application:
         rooms.append(f"user:{application.user_id}")
@@ -8188,8 +8188,8 @@ def _mark_messages_read(app_id, viewer_is_employer: bool):
         msg.read_at = now
     db.session.commit()
 
-    application = Application.query.get(app_id)
-    job = Job.query.get(application.job_id) if application else None
+    application = db.session.get(Application, app_id)
+    job = db.session.get(Job, application.job_id) if application else None
     rooms = []
     if application:
         rooms.append(f"user:{application.user_id}")
@@ -8245,7 +8245,7 @@ def api_application_messages(app_id):
 
     employer_info = None
     if job is not None and job.employer_id is not None:
-        employer = Employer.query.get(job.employer_id)
+        employer = db.session.get(Employer, job.employer_id)
         if employer is not None:
             employer_info = _employer_summary(employer)
 
@@ -8379,7 +8379,7 @@ def employer_messages_page(job_id, app_id):
             return redirect(url_for("employer_messages_page", job_id=job_id, app_id=app_id))
 
     _mark_messages_read(app_id, viewer_is_employer=True)
-    applicant = User.query.get(application.user_id)
+    applicant = db.session.get(User, application.user_id)
     messages = Message.query.filter_by(application_id=app_id).order_by(Message.created_at.asc()).all()
     return render_template(
         "employer_messages.html",
@@ -8416,7 +8416,7 @@ def api_notifications():
 @jwt_required()
 def api_mark_notification_read(notification_id):
     uid = _current_user_id()
-    notification = Notification.query.get(notification_id)
+    notification = db.session.get(Notification, notification_id)
     if not notification or notification.user_id != uid:
         return _forbidden("Notification not found")
     notification.read = True
@@ -8447,7 +8447,7 @@ def api_register_push_token():
     another user's push notifications).
     """
     uid = _current_user_id()
-    user = User.query.get(uid)
+    user = db.session.get(User, uid)
     token = (request.get_json(silent=True) or {}).get("push_token") or None
     user.push_token = token
     db.session.commit()
@@ -8465,7 +8465,7 @@ def api_me():
     mobile app has to be able to read, not just blindly overwrite the
     way it already does for push_token.
     """
-    user = User.query.get(_current_user_id())
+    user = db.session.get(User, _current_user_id())
     return jsonify({"success": True, "user": user.to_dict()}), 200
 
 
@@ -8478,7 +8478,7 @@ def api_set_sms_alerts():
     _dispatch_job_alerts_for_scan) also go out as a real SMS via Twilio,
     on top of the in-app/push notification every alert already gets.
     """
-    user = User.query.get(_current_user_id())
+    user = db.session.get(User, _current_user_id())
     data = request.get_json(silent=True) or {}
     user.sms_alerts_enabled = bool(data.get("enabled"))
     db.session.commit()
@@ -8493,7 +8493,7 @@ def api_set_whatsapp_alerts():
     api_set_sms_alerts above exactly, just gating send_whatsapp() instead
     of send_sms() inside notify_user().
     """
-    user = User.query.get(_current_user_id())
+    user = db.session.get(User, _current_user_id())
     data = request.get_json(silent=True) or {}
     user.whatsapp_alerts_enabled = bool(data.get("enabled"))
     db.session.commit()
@@ -8579,7 +8579,7 @@ def api_report_employer():
             "error": f"employer_id and a category ({', '.join(sorted(_REPORT_CATEGORIES))}) are required",
         }), 400
 
-    employer = Employer.query.get(employer_id)
+    employer = db.session.get(Employer, employer_id)
     if not employer:
         return jsonify({"success": False, "error": "Employer not found"}), 404
 
@@ -8587,18 +8587,18 @@ def api_report_employer():
     # report referencing a job/message the reporter has no real
     # relationship to would mislead whoever reviews it.
     if job_id is not None:
-        job = Job.query.get(job_id)
+        job = db.session.get(Job, job_id)
         if not job or job.employer_id != employer.id:
             return jsonify({"success": False, "error": "job_id does not belong to this employer"}), 400
 
     if message_id is not None:
-        message = Message.query.get(message_id)
+        message = db.session.get(Message, message_id)
         if not message:
             return jsonify({"success": False, "error": "message_id not found"}), 400
-        application = Application.query.get(message.application_id)
+        application = db.session.get(Application, message.application_id)
         if not application or application.user_id != user_id:
             return _forbidden("You can only report a message from your own conversation")
-        job = Job.query.get(application.job_id)
+        job = db.session.get(Job, application.job_id)
         if not job or job.employer_id != employer.id:
             return jsonify({"success": False, "error": "message_id does not belong to this employer"}), 400
 
@@ -8665,7 +8665,7 @@ def api_report_listing():
             "error": f"job_id and a category ({', '.join(sorted(_REPORT_CATEGORIES))}) are required",
         }), 400
 
-    job = Job.query.get(job_id)
+    job = db.session.get(Job, job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     if job.source != "scraped":
@@ -8878,7 +8878,7 @@ def admin_2fa_verify():
     pending_id = session.get("admin_pending_2fa_id")
     if pending_id is None:
         return redirect(url_for("admin_login"))
-    admin = Admin.query.get(pending_id)
+    admin = db.session.get(Admin, pending_id)
     if admin is None or not admin.active or not admin.totp_enabled:
         session.pop("admin_pending_2fa_id", None)
         return redirect(url_for("admin_login"))
@@ -8913,7 +8913,7 @@ def admin_2fa_verify():
 @app.route("/admin/2fa/setup", methods=["GET", "POST"])
 @admin_login_required
 def admin_2fa_setup():
-    admin = Admin.query.get(_current_admin_id())
+    admin = db.session.get(Admin, _current_admin_id())
 
     if admin.totp_enabled:
         return render_template("admin_2fa_setup.html", already_enabled=True, qr_data_uri=None, secret=None, error=None, active_page="2fa")
@@ -8956,7 +8956,7 @@ def admin_2fa_setup():
 @app.route("/admin/2fa/disable", methods=["POST"])
 @admin_login_required
 def admin_2fa_disable():
-    admin = Admin.query.get(_current_admin_id())
+    admin = db.session.get(Admin, _current_admin_id())
     admin.totp_secret = None
     admin.totp_enabled = False
     db.session.commit()
@@ -9072,7 +9072,7 @@ def admin_accounts():
 def admin_deactivate_account(admin_id):
     if admin_id == _current_admin_id():
         return _forbidden("You cannot deactivate your own account while logged in as it.")
-    target = Admin.query.get_or_404(admin_id)
+    target = db.get_or_404(Admin, admin_id)
     target.active = False
     db.session.commit()
     log_event("admin_account_deactivated", target_admin_id=admin_id)
@@ -9257,7 +9257,7 @@ def _worker_trust_summary(user_id: int) -> dict:
 @app.route("/employer/applications/<int:job_id>", methods=["GET", "POST"])
 @employer_login_required
 def employer_applications(job_id):
-    job = Job.query.get_or_404(job_id)
+    job = db.get_or_404(Job, job_id)
     if not _employer_owns_job(job, _current_employer_id()):
         return _forbidden("This job belongs to another employer account")
 
@@ -9271,7 +9271,7 @@ def employer_applications(job_id):
             # old ternary and become "Rejected" -- now it's simply a no-op,
             # not a surprise rejection.
             action = None
-        application = Application.query.get(app_id) if action else None
+        application = db.session.get(Application, app_id) if action else None
         # Real, severe IDOR found via a full OWASP Top 10 (A01: Broken
         # Access Control) review and reproduced live before fixing: the
         # outer job_id (checked above via _employer_owns_job) and this
@@ -9301,7 +9301,7 @@ def employer_applications(job_id):
                 application_id=application.id,
                 status=application.status,
             )
-            job_for_notify = Job.query.get(application.job_id)
+            job_for_notify = db.session.get(Job, application.job_id)
             notify_user(
                 application.user_id,
                 "application_status_changed",
@@ -9422,8 +9422,8 @@ def employer_complete_application(app_id):
     through the SAME job_id -> application chain as accept/reject just
     above, closing the identical IDOR class that fix already documents.
     """
-    application = Application.query.get_or_404(app_id)
-    job = Job.query.get_or_404(application.job_id)
+    application = db.get_or_404(Application, app_id)
+    job = db.get_or_404(Job, application.job_id)
     if not _employer_owns_job(job, _current_employer_id()):
         return _forbidden("This application belongs to another employer account")
     if job.job_type != "gig":
@@ -9472,7 +9472,7 @@ def employer_flag_rating(rating_id):
     employer "disputing" a rating they themselves gave a worker isn't a
     real dispute, just noise in the admin queue.
     """
-    rating = Rating.query.get_or_404(rating_id)
+    rating = db.get_or_404(Rating, rating_id)
     eid = _current_employer_id()
     if rating.employer_id != eid or rating.direction != "worker_to_employer":
         return _forbidden("This rating belongs to another employer account")
@@ -9497,7 +9497,7 @@ def employer_flag_rating(rating_id):
     db.session.commit()
     log_event("rating_flagged", employer_id=eid, rating_id=rating.id)
     _notify_admins_of_new_rating_flag(flag, rating)
-    application = Application.query.get(rating.application_id)
+    application = db.session.get(Application, rating.application_id)
     if application:
         return redirect(url_for("employer_applications", job_id=application.job_id))
     return redirect(url_for("employer_dashboard"))
@@ -9507,8 +9507,8 @@ def employer_flag_rating(rating_id):
 @employer_login_required
 def employer_rate_worker(app_id):
     """Employer's half of the bidirectional gig rating -- see Rating's docstring for why both directions exist."""
-    application = Application.query.get_or_404(app_id)
-    job = Job.query.get_or_404(application.job_id)
+    application = db.get_or_404(Application, app_id)
+    job = db.get_or_404(Job, application.job_id)
     if not _employer_owns_job(job, _current_employer_id()):
         return _forbidden("This application belongs to another employer account")
 
@@ -9635,7 +9635,7 @@ def generate_cv(candidate_id):
     cv_html still renders — just from the candidate's own unpolished text
     — rather than the whole endpoint failing over an enhancement step.
     """
-    c = Candidate.query.get(candidate_id)
+    c = db.session.get(Candidate, candidate_id)
     if not c:
         return jsonify({"success": False, "error": "candidate not found"}), 404
     if c.user_id != _current_user_id():
@@ -9725,7 +9725,7 @@ def api_match_jobs(candidate_id):
     all jobs with score = 0 so the app still shows opportunities.
     """
     # Try to load candidate profile
-    candidate = Candidate.query.get(candidate_id)
+    candidate = db.session.get(Candidate, candidate_id)
     if candidate and candidate.user_id != _current_user_id():
         return _forbidden()
 

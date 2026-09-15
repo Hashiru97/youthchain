@@ -23,7 +23,7 @@ def test_push_token_can_be_registered_and_cleared(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        stored = app_module.User.query.get(user["user"]["id"])
+        stored = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert stored.push_token == "fcm-device-token-abc"
 
     # registering with no token (e.g. on logout) clears it
@@ -34,7 +34,7 @@ def test_push_token_can_be_registered_and_cleared(client):
     )
     assert resp.status_code == 200
     with app_module.app.app_context():
-        stored = app_module.User.query.get(user["user"]["id"])
+        stored = app_module.db.session.get(app_module.User, user["user"]["id"])
         assert stored.push_token is None
 
 
@@ -78,7 +78,7 @@ def test_send_push_notification_calls_fcm_when_configured_and_token_present(clie
 
     user = register_user(client)
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.push_token = "fcm-device-token-xyz"
         app_module.db.session.commit()
 
@@ -101,7 +101,7 @@ def test_send_push_notification_returns_false_on_fcm_error(client, monkeypatch):
 
     user = register_user(client)
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.push_token = "fcm-device-token-xyz"
         app_module.db.session.commit()
 
@@ -254,7 +254,7 @@ def test_notify_user_sends_sms_when_caller_requests_it_and_user_opted_in(client,
     monkeypatch.setattr(app_module, "_TWILIO_FROM_NUMBER", "+15005550006")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.sms_alerts_enabled = True
         app_module.db.session.commit()
 
@@ -279,7 +279,7 @@ def test_notify_user_skips_sms_when_caller_does_not_request_it(client, monkeypat
     monkeypatch.setattr(app_module, "_TWILIO_FROM_NUMBER", "+15005550006")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.sms_alerts_enabled = True
         app_module.db.session.commit()
 
@@ -418,7 +418,7 @@ def test_notify_user_sends_whatsapp_when_caller_requests_it_and_user_opted_in(cl
     monkeypatch.setattr(app_module, "_TWILIO_WHATSAPP_TEMPLATE_SID", "HXtestTemplateSid")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.whatsapp_alerts_enabled = True
         app_module.db.session.commit()
 
@@ -440,7 +440,7 @@ def test_notify_user_skips_whatsapp_when_caller_does_not_request_it(client, monk
     monkeypatch.setattr(app_module, "_TWILIO_WHATSAPP_TEMPLATE_SID", "HXtestTemplateSid")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.whatsapp_alerts_enabled = True
         app_module.db.session.commit()
 
@@ -479,7 +479,7 @@ def test_notify_user_sms_and_whatsapp_opt_ins_are_independent(client, monkeypatc
     monkeypatch.setattr(app_module, "_TWILIO_WHATSAPP_TEMPLATE_SID", "HXtestTemplateSid")
 
     with app_module.app.app_context():
-        u = app_module.User.query.get(user["user"]["id"])
+        u = app_module.db.session.get(app_module.User, user["user"]["id"])
         u.sms_alerts_enabled = True
         u.whatsapp_alerts_enabled = False
         app_module.db.session.commit()

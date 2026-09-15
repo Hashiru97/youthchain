@@ -97,7 +97,7 @@ def test_youth_can_report_an_employer(client):
     report_id = resp.get_json()["report_id"]
 
     with app_module.app.app_context():
-        report = app_module.EmployerReport.query.get(report_id)
+        report = app_module.db.session.get(app_module.EmployerReport, report_id)
         assert report.employer_id == employer_id
         assert report.job_id == job_id
         assert report.category == "fake_job"
@@ -219,11 +219,11 @@ def test_admin_can_view_and_dismiss_a_report(client):
     assert resp.status_code == 200
 
     with app_module.app.app_context():
-        report = app_module.EmployerReport.query.get(report_id)
+        report = app_module.db.session.get(app_module.EmployerReport, report_id)
         assert report.status == "dismissed"
         assert report.reviewed_by_admin_id is not None
         # Dismissing a report must not suspend the employer.
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.active is True
 
 
@@ -252,9 +252,9 @@ def test_admin_can_suspend_employer_directly_from_a_report(client):
     )
 
     with app_module.app.app_context():
-        report = app_module.EmployerReport.query.get(report_id)
+        report = app_module.db.session.get(app_module.EmployerReport, report_id)
         assert report.status == "actioned"
-        employer = app_module.Employer.query.get(employer_id)
+        employer = app_module.db.session.get(app_module.Employer, employer_id)
         assert employer.active is False
 
 
@@ -356,7 +356,7 @@ def test_employer_with_multiple_open_reports_is_surfaced_and_sorted_first(client
         headers=auth_headers(token_a),
     )
     with app_module.app.app_context():
-        first_employer_name = app_module.Employer.query.get(first_employer_id).name
+        first_employer_name = app_module.db.session.get(app_module.Employer, first_employer_id).name
 
     _register_employer(client, email="betacorp@test.com", name="BetaCorp")
     post_page = client.get("/employer/post")
