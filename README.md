@@ -5,6 +5,8 @@ YouthChain is digital employment infrastructure for Sierra Leone (and, over time
 
 It started as an entry for the DSTI Big 5 Hackathon. It is no longer scoped like one — the sections below describe what actually exists today: real authentication and authorization, rate limiting, RBAC, content-validated file uploads, employer verification and abuse reporting, containerized deployment with a load-tested Postgres backend, automated backups, and CI that runs the full test suite against both supported database engines on every change.
 
+**Live demo backend**: https://youthchain-backend.up.railway.app/healthz — a real deployment (Postgres with pg_cron, migrations applied, HTTPS, production security headers), not a localhost screen-share. Build the mobile app against it with `--dart-define=API_BASE_URL=https://youthchain-backend.up.railway.app` (see [`youthchain_app/README.md`](youthchain_app/README.md)). This is a demo instance for pitching — not hardened for sustained public traffic (no CDN/WAF, single small Postgres instance, in-memory rate limiting since no Redis is attached).
+
 ---
 
 ## 🚀 Features
@@ -160,17 +162,19 @@ Blockchain-side signer configuration (`ISSUER_PRIVATE_KEY`, optional `CONTRACT_A
 
 ## ✅ Testing
 
+926 automated tests across the stack, all passing: 713 backend, 179 mobile widget, 34 smart-contract.
+
 ```bash
-# Backend — 149 tests, runs against SQLite by default
+# Backend — 713 tests, runs against SQLite by default
 cd backend && python -m pytest tests/ -v
 
 # Backend against a real local Postgres instead (matches CI's second matrix leg):
 DATABASE_URL=postgresql://user:pass@localhost:5432/db python -m pytest tests/ -v
 
-# Blockchain contract tests
+# Blockchain contract tests — 34 tests
 cd blockchain && npx hardhat test
 
-# Mobile widget tests
+# Mobile widget tests — 179 tests
 cd youthchain_app && flutter test
 ```
 
