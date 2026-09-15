@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as sio;
@@ -205,33 +206,37 @@ class JobScreenState extends State<JobScreen> {
     _socket = sio.io(_base, socketOptions);
 
     _socket!.onConnect((_) {
-      debugPrint('[socket] connected to $_base');
+      if (kDebugMode) debugPrint('[socket] connected to $_base');
     });
 
     _socket!.onDisconnect((_) {
-      debugPrint('[socket] disconnected');
+      if (kDebugMode) debugPrint('[socket] disconnected');
     });
 
     _socket!.onConnectError((data) {
-      debugPrint('[socket] connect_error: $data');
+      if (kDebugMode) debugPrint('[socket] connect_error: $data');
     });
 
     _socket!.onError((data) {
-      debugPrint('[socket] error: $data');
+      if (kDebugMode) debugPrint('[socket] error: $data');
     });
 
     // When employer posts a new job, we just refetch the match list
     _socket!.on('job_created', (data) async {
-      debugPrint('[socket] job_created received → refreshing jobs');
+      if (kDebugMode) {
+        debugPrint('[socket] job_created received → refreshing jobs');
+      }
       if (!mounted) return;
       await fetchJobs();
     });
 
     // When an application is created (from any client), refresh applied list
     _socket!.on('application_created', (data) async {
-      debugPrint(
-        '[socket] application_created received → refreshing applications',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[socket] application_created received → refreshing applications',
+        );
+      }
       if (!mounted) return;
       await fetchAppliedJobs();
     });
@@ -240,7 +245,9 @@ class JobScreenState extends State<JobScreen> {
     // let the user know right away if the app happens to be open. This
     // handler used to be a no-op (BL-38 closes that gap).
     _socket!.on('application_status_changed', (data) async {
-      debugPrint('[socket] application_status_changed received');
+      if (kDebugMode) {
+        debugPrint('[socket] application_status_changed received');
+      }
       if (!mounted) return;
       await _fetchUnreadNotifications();
       if (!mounted) return;
